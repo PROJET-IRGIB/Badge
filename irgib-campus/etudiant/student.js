@@ -13,7 +13,30 @@
   };
   initSelects();
 
-  let profile = D.loadProfile();
+  let profile = D.loadProfile(sessionStorage.getItem("irgib-student-email") || undefined);
+  const loadAccounts = () => { try { return JSON.parse(localStorage.getItem("irgib-campus-accounts-v1") || "{}"); } catch { return {}; } };
+  const saveAccounts = accounts => localStorage.setItem("irgib-campus-accounts-v1", JSON.stringify(accounts));
+  const digestPassword = async (password, salt) => {
+    const bytes = new TextEncoder().encode(`${salt}:${password}`);
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+  };
+  const makeCredential = async password => {
+    const salt = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, "0")).join("");
+    return { salt, digest: await digestPassword(password, salt) };
+  };
+  const passwordsMatch = async (password, credential) => Boolean(credential && await digestPassword(password, credential.salt) === credential.digest);
+  const showAuthPage = page => {
+    const login = page === "login";
+    byId("login-panel").style.display = login ? "block" : "none";
+    byId("signup-panel").style.display = login ? "none" : "block";
+    byId("show-login").classList.toggle("active", login);
+    byId("show-signup").classList.toggle("active", !login);
+    byId("auth-title").textContent = login ? "Connexion" : "Inscription";
+    byId("auth-intro").textContent = login ? "Connectez-vous avec l’adresse e-mail et le mot de passe utilisés lors de votre inscription." : "Créez votre compte étudiant en renseignant vos informations et en confirmant votre adresse e-mail.";
+    byId("login-message").textContent = "";
+    byId("signup-message").textContent = "";
+  };
   let selectedPhoto = "";
   let selectedPhotoName = "";
   let scannedSession = "";
@@ -39,6 +62,7 @@
     byId("request-last").value = source.lastName || "";
     byId("request-sex").value = source.sex || "F";
     byId("request-phone").value = source.phone || "";
+    if (byId("request-birth")) byId("request-birth").value = source.birthDate || "";
     byId("request-program").value = source.program || D.programs[0].code;
     byId("request-level").value = source.level || D.levels[0];
     byId("request-site").value = source.site || D.sites[0].id;
@@ -64,7 +88,7 @@
     const report = app.status === "approved" ? `Matricule définitif : <b>${esc(app.finalMatricule)}</b>` : app.status === "rejected" ? esc(app.rejectionReason || "Contactez l’administration de votre site pour connaître la suite.") : `Matricule temporaire : <b>${esc(app.temporaryMatricule)}</b>`;
     byId("request-form-wrap").style.display = "none";
     byId("request-readonly").style.display = "block";
-    byId("request-readonly").innerHTML = `<div class="application-photo-row">${app.photo ? `<img class="identity-photo" src="${app.photo}" alt="Photo d’identité transmise">` : `<div class="identity-photo photo-missing">Photo<br>non fournie</div>`}<div><span class="status ${app.status === "approved" ? "active" : app.status === "rejected" ? "rejected" : "pending"}">${statusText}</span><h3 style="margin-top:10px">${esc(fullName(app))}</h3><p class="muted small">${report}</p></div></div><div class="readonly-grid"><div class="info-row"><span>Sexe</span><strong>${esc(app.sex)}</strong></div><div class="info-row"><span>E-mail</span><strong>${esc(app.email)}</strong></div><div class="info-row"><span>Filière</span><strong>${esc(program.name)}</strong></div><div class="info-row"><span>Niveau</span><strong>${esc(app.level)}</strong></div><div class="info-row"><span>Ville / site</span><strong>${esc(site.city)}</strong></div><div class="info-row"><span>Demande envoyée</span><strong>${new Date(app.submittedAt).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" })}</strong></div></div><div class="notice" style="margin-top:16px">Ces renseignements sont en lecture seule après l’envoi. Pour corriger une erreur avant approbation, contactez l’administration de votre site dans les 24 heures.</div>${app.status === "rejected" ? `<p class="small muted" style="margin-top:12px">Une nouvelle demande pourra être préparée après échange avec l’administration.</p><button class="btn secondary sm" id="new-request-after-rejection" type="button">Préparer une nouvelle demande</button>` : ""}`;
+    byId("request-readonly").innerHTML = `<div class="application-photo-row">${app.photo ? `<img class="identity-photo" src="${app.photo}" alt="Photo d’identité transmise">` : `<div class="identity-photo photo-missing">Photo<br>non fournie</div>`}<div><span class="status ${app.status === "approved" ? "active" : app.status === "rejected" ? "rejected" : "pending"}">${statusText}</span><h3 style="margin-top:10px">${esc(fullName(app))}</h3><p class="muted small">${report}</p></div></div><div class="readonly-grid"><div class="info-row"><span>Sexe</span><strong>${esc(app.sex)}</strong></div><div class="info-row"><span>Naissance</span><strong>${esc(app.birthDate || "—")}</strong></div><div class="info-row"><span>E-mail</span><strong>${esc(app.email)}</strong></div><div class="info-row"><span>Filière</span><strong>${esc(program.name)}</strong></div><div class="info-row"><span>Niveau</span><strong>${esc(app.level)}</strong></div><div class="info-row"><span>Ville / site</span><strong>${esc(site.city)}</strong></div><div class="info-row"><span>Demande envoyée</span><strong>${new Date(app.submittedAt).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" })}</strong></div></div><div class="notice" style="margin-top:16px">Ces renseignements sont en lecture seule après l’envoi. Pour corriger une erreur avant approbation, contactez l’administration de votre site dans les 24 heures.</div>${app.status === "rejected" ? `<p class="small muted" style="margin-top:12px">Une nouvelle demande pourra être préparée après échange avec l’administration.</p><button class="btn secondary sm" id="new-request-after-rejection" type="button">Préparer une nouvelle demande</button>` : ""}`;
     byId("request-status-box").innerHTML = `<span>Statut</span><strong>${statusText}</strong>`;
     if (app.status === "rejected") byId("new-request-after-rejection").addEventListener("click", () => {
       const apps = D.loadApplications();
@@ -82,12 +106,8 @@
   }
 
   function drawCard(app) {
-    const program = D.getProgram(app.program);
-    const site = D.getSite(app.site);
-    const matricule = app.finalMatricule || "À APPROUVER";
     const qrPayload = `IRGIB-CARTE:${app.finalMatricule}`;
-    const contacts = site.points.map(point => `<div class="card-v2-contact"><strong>${esc(point.name)}</strong><span>${esc(point.address)}</span><b>${esc(point.phone)}</b></div>`).join("");
-    byId("student-card-zone").innerHTML = `<article class="student-card id-card-front card-v2 card-v2-front"><header class="card-v2-header"><div class="card-v2-brand"><img src="../assets/blason.jpg" alt="Blason IRGIB AFRICA"><div><strong>IRGIB AFRICA</strong><span>UNIVERSITÉ POLYTECHNIQUE · BÉNIN</span><small>CARTE ÉTUDIANTE <i>/</i> STUDENT CARD</small></div></div><span class="card-v2-sex">${esc(app.sex)}</span></header><div class="card-v2-main"><div class="card-v2-portrait">${app.photo ? `<img src="${app.photo}" alt="Photo de ${esc(fullName(app))}">` : `<div class="card-v2-photo-placeholder">PHOTO</div>`}<div class="card-v2-matricule"><small>MATRICULE <i>/</i> STUDENT ID</small><strong>${esc(matricule)}</strong></div></div><div class="card-v2-details"><div class="card-v2-field"><small>NOM <i>/</i> SURNAME</small><strong>${esc(app.lastName)}</strong></div><div class="card-v2-field"><small>PRÉNOM(S) <i>/</i> FIRST NAME</small><strong>${esc(app.firstName)}</strong></div><div class="card-v2-field"><small>SEXE <i>/</i> SEX</small><strong>${esc(app.sex === "F" ? "Féminin / Female" : "Masculin / Male")}</strong></div><div class="card-v2-field"><small>FILIÈRE <i>/</i> PROGRAM</small><strong>${esc(program.shortName)}</strong></div><div class="card-v2-field"><small>NIVEAU <i>/</i> LEVEL</small><strong>${esc(app.level)}</strong></div></div><div class="card-v2-verification"><div class="card-v2-qr" id="card-qr"></div><strong>SCANNEZ POUR IDENTIFIER</strong><small>SCAN TO IDENTIFY</small><a href="https://www.irgibafrica.university/" target="_blank" rel="noopener noreferrer">www.irgibafrica.university</a></div></div><footer class="card-v2-footer"><strong>${esc(site.city.toUpperCase())} · BÉNIN</strong><span>CARTE PERSONNELLE · ${esc(app.level)}</span></footer></article><article class="student-card id-card-front card-back card-v2 card-v2-back"><header class="card-v2-back-head"><span>INFORMATIONS PRATIQUES</span><span>CONTACTS DU SITE</span></header><div class="card-v2-back-title">${esc(site.city)} <i>/</i> Votre centre de formation</div><div class="card-v2-contacts">${contacts}</div><div class="card-v2-back-note">Cette carte est strictement personnelle. En cas de perte, merci de la remettre à l’administration du site indiqué au recto.</div><footer class="card-v2-back-footer"><span>CONTACTER LE SITE INDIQUÉ AU RECTO</span><span>DOCUMENT PERSONNEL · BÉNIN</span></footer></article>`;
+    byId("student-card-zone").innerHTML = D.cardHtml(app, "card-qr");
     const qrHost = byId("card-qr");
     if (window.QRCode && app.finalMatricule) new QRCode(qrHost, { text: qrPayload, width: 128, height: 128, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
     else qrHost.innerHTML = `<div class="qr-fallback">${app.finalMatricule ? "QR indisponible" : "QR après approbation"}</div>`;
@@ -201,7 +221,7 @@
   }
 
   function activatePortal() {
-    profile = D.loadProfile();
+    profile = D.loadProfile(sessionStorage.getItem("irgib-student-email") || undefined);
     if (!profile) { setScreen("auth-screen"); return; }
     setScreen("portal-screen");
     byId("hello-name").textContent = profile.firstName;
@@ -215,14 +235,42 @@
     renderAttendance();
   }
 
-  byId("signup-form").addEventListener("submit", event => {
+  byId("show-login").addEventListener("click", () => showAuthPage("login"));
+  byId("show-signup").addEventListener("click", () => showAuthPage("signup"));
+  document.querySelectorAll("[data-open-signup]").forEach(button => button.addEventListener("click", () => showAuthPage("signup")));
+  document.querySelectorAll("[data-open-login]").forEach(button => button.addEventListener("click", () => showAuthPage("login")));
+  byId("login-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    const email = byId("login-email").value.trim().toLowerCase();
+    const password = byId("login-password").value;
+    const account = loadAccounts()[email];
+    if (!account || !await passwordsMatch(password, account.credential)) {
+      byId("login-message").textContent = "Adresse e-mail ou mot de passe incorrect.";
+      return;
+    }
+    profile = D.loadProfile(email);
+    if (!profile) {
+      byId("login-message").textContent = "Compte introuvable dans ce navigateur. Réinscrivez-vous sur cet appareil.";
+      return;
+    }
+    sessionStorage.setItem("irgib-student-email", email);
+    sessionStorage.setItem("irgib-student-session", "active");
+    byId("login-form").reset();
+    activatePortal();
+  });
+  byId("signup-form").addEventListener("submit", async event => {
     event.preventDefault();
     const values = new FormData(event.currentTarget);
     const password = String(values.get("password"));
     if (password.length < 8) return;
     const draft = { firstName: String(values.get("firstName")).trim(), lastName: String(values.get("lastName")).trim(), email: String(values.get("email")).trim().toLowerCase(), phone: String(values.get("phone")).trim(), sex: String(values.get("sex")), program: String(values.get("program")), level: String(values.get("level")), site: String(values.get("site")) };
+    if (loadAccounts()[draft.email]) {
+      byId("signup-message").textContent = "Un compte existe déjà avec cette adresse. Connectez-vous plutôt.";
+      return;
+    }
     const code = String(Math.floor(100000 + Math.random() * 900000));
-    sessionStorage.setItem("irgib-email-draft", JSON.stringify({ draft, code }));
+    const credential = await makeCredential(password);
+    sessionStorage.setItem("irgib-email-draft", JSON.stringify({ draft, code, credential }));
     byId("demo-code-note").innerHTML = `<strong>Code simulé de la maquette :</strong> <b>${code}</b><br>Aucun e-mail réel n’a été envoyé.`;
     setScreen("verify-screen");
   });
@@ -231,18 +279,38 @@
     const pending = JSON.parse(sessionStorage.getItem("irgib-email-draft") || "null");
     if (!pending || byId("verify-code").value.trim() !== pending.code) { byId("demo-code-note").innerHTML = `<strong>Code incorrect.</strong> Code de démonstration : <b>${esc(pending?.code || "—")}</b>`; return; }
     profile = pending.draft;
+    const accounts = loadAccounts();
+    accounts[profile.email] = { credential: pending.credential, createdAt: new Date().toISOString() };
+    saveAccounts(accounts);
     D.saveProfile(profile);
     sessionStorage.removeItem("irgib-email-draft");
+    sessionStorage.setItem("irgib-student-email", profile.email);
     sessionStorage.setItem("irgib-student-session", "active");
     activatePortal();
   });
-  byId("back-to-signup").addEventListener("click", () => setScreen("auth-screen"));
+  byId("back-to-signup").addEventListener("click", () => { setScreen("auth-screen"); showAuthPage("signup"); });
+  byId("password-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    const current = byId("current-password").value;
+    const next = byId("new-password").value;
+    const confirm = byId("confirm-password").value;
+    const accounts = loadAccounts();
+    const account = accounts[profile.email.toLowerCase()];
+    if (!await passwordsMatch(current, account?.credential)) { byId("password-message").textContent = "Le mot de passe actuel est incorrect."; return; }
+    if (next.length < 8) { byId("password-message").textContent = "Le nouveau mot de passe doit contenir au moins 8 caractères."; return; }
+    if (next !== confirm) { byId("password-message").textContent = "Les deux nouveaux mots de passe ne correspondent pas."; return; }
+    account.credential = await makeCredential(next);
+    saveAccounts(accounts);
+    event.currentTarget.reset();
+    byId("password-message").textContent = "Votre mot de passe a été mis à jour sur cet appareil.";
+  });
   byId("signout").addEventListener("click", () => {
     stopCamera();
     sessionStorage.removeItem("irgib-student-session");
-    localStorage.removeItem("irgib-campus-profile-v2");
+    sessionStorage.removeItem("irgib-student-email");
     profile = null;
     setScreen("auth-screen");
+    showAuthPage("login");
   });
 
   byId("request-photo").addEventListener("change", async event => {
@@ -277,7 +345,7 @@
     const applications = D.loadApplications();
     const active = applications.find(item => item.email.toLowerCase() === profile.email.toLowerCase() && !item.archived && item.status !== "rejected");
     if (active) { applicationSummary(active); return; }
-    const application = { id: `req-${crypto.randomUUID ? crypto.randomUUID() : Date.now()}`, firstName, lastName, email: profile.email, phone: String(values.get("phone")).trim(), sex: String(values.get("sex")), program: String(values.get("program")), level: String(values.get("level")), site: String(values.get("site")), status: "pending", temporaryMatricule: D.makeTemporaryMatricule(applications), finalMatricule: "", photo: selectedPhoto, photoFileName: selectedPhotoName, submittedAt: new Date().toISOString(), demo: false };
+    const application = { id: `req-${crypto.randomUUID ? crypto.randomUUID() : Date.now()}`, firstName, lastName, email: profile.email, phone: String(values.get("phone")).trim(), sex: String(values.get("sex")), birthDate: String(values.get("birthDate")), program: String(values.get("program")), level: String(values.get("level")), site: String(values.get("site")), status: "pending", temporaryMatricule: D.makeTemporaryMatricule(applications), finalMatricule: "", photo: selectedPhoto, photoFileName: selectedPhotoName, submittedAt: new Date().toISOString(), demo: false };
     applications.unshift(application);
     D.saveApplications(applications);
     profile = { ...profile, firstName, lastName, phone: application.phone, sex: application.sex, program: application.program, level: application.level, site: application.site };

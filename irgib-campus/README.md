@@ -9,8 +9,8 @@ Les écrans sont interactifs. Ils utilisent le stockage local du navigateur et d
 
 ## Parcours étudiant
 
-1. L’étudiant crée son espace avec son adresse e-mail, mot de passe, sexe (`M` ou `F`), filière, niveau, ville/site et téléphone.
-2. La maquette affiche un code à 6 chiffres à saisir pour simuler la confirmation par e-mail. Aucun e-mail n’est envoyé et le mot de passe n’est pas enregistré dans le navigateur.
+1. Un étudiant déjà inscrit se connecte avec son adresse e-mail et son mot de passe; un nouvel étudiant passe par l’écran « Inscription » avec sexe (`M` ou `F`), filière, niveau, ville/site et téléphone.
+2. La maquette affiche un code à 6 chiffres à saisir pour simuler la confirmation par e-mail. Aucun e-mail n’est envoyé. Les comptes et mots de passe (empreinte salée) restent uniquement dans ce navigateur.
 3. L’étudiant renseigne les champs de sa demande et joint une photo d’identité. Le texte exige une photo nette, en tenue de l’école, cheveux bien peignés.
 4. À l’envoi, la plateforme de démonstration attribue un matricule temporaire `TMP-…`. La demande et les champs sont ensuite en lecture seule côté étudiant.
 5. Si une erreur est remarquée, l’étudiant est invité à joindre l’administration de son site d’apprentissage dans les 24 heures, avant la décision.
@@ -28,12 +28,12 @@ Avec quatre chiffres et seulement deux lettres finales possibles, le format perm
 
 ## Carte et présences
 
-- Le recto contient le blason, la photo, les noms, le sexe, le matricule définitif, la filière/niveau, la ville, un QR proéminent et l’adresse du site officiel sous ce QR. Le QR encode l’identifiant `IRGIB-CARTE:<matricule>`; le texte de lien ouvre le site officiel.
-- Le verso reprend les mêmes couleurs et affiche les coordonnées du ou des centres du site, ainsi qu’une consigne en cas de perte. Il ne répète ni logo, ni nom d’université, ni filière.
-- Les deux faces sont prévisualisées et imprimées sur deux pages successives pour permettre une impression recto-verso. Dimensions : **85,60 × 53,98 mm**, épaisseur **0,76 mm**.
+- Le recto contient le blason, la photo, les noms, la date de naissance, le sexe, le matricule définitif, la filière en français et en anglais, le niveau, la ville, le QR et le site officiel. Le QR encode `IRGIB-CARTE:<matricule>`.
+- Le verso utilise les mêmes couleurs. Il indique l’adresse de référence, les téléphones et la filière, en français et en anglais, plus la mention « carte personnelle ».
+- L’écran montre le recto et le verso. L’impression les sépare sur deux pages. Dimensions : **85,60 × 53,98 mm**, épaisseur **0,76 mm**.
 - Dans « Présences », le lecteur caméra lit un QR de séance. Les informations de l’étudiant sont préremplies; il confirme ensuite sa présence. Aucun identifiant de professeur n’est demandé. Un même étudiant ne peut pas valider deux fois le même code de séance le même jour dans la maquette.
 - Le lecteur de démonstration accepte un code simple, un JSON avec `sessionId`, `session` ou `code`, ou une URL qui contient l’un de ces paramètres. Il faudra ajuster ce décodage au format exact du QR utilisé par l’établissement.
-- Les palettes du recto et du verso sont prévues dans les mêmes tons bleu marine et vert canard; le verso n’est pas affiché comme une seconde carte dans cette version.
+- Les palettes du recto et du verso sont les mêmes tons bleu marine et vert canard.
 - La génération du QR de carte utilise QRCode.js depuis jsDelivr. Pour une mise en production, il faudra intégrer la bibliothèque localement et passer la validation de présence par une fonction serveur.
 
 ## Catalogue et sites retenus
@@ -49,7 +49,7 @@ Les noms complets des huit formations proviennent du [catalogue officiel des for
 
 ## Limites avant une vraie mise en service
 
-Cette version ne fournit pas d’authentification, d’envoi d’e-mail, de notification distante, de serveur de matricules ou de base partagée. Ne saisis pas de vraies données étudiantes dans cette maquette. Les approbations et présences locales servent à montrer les écrans et le flux, pas à tenir un registre officiel.
+Cette version ne fournit pas d’authentification serveur, d’envoi d’e-mail, de notification distante, de serveur de matricules ou de base partagée. La connexion de démonstration ne fonctionne que dans le navigateur où le compte a été créé. Ne saisis pas de vraies données étudiantes dans cette maquette. Les approbations et présences locales servent à montrer les écrans et le flux, pas à tenir un registre officiel.
 
 Le fichier `firestore.rules` illustre la séparation des accès : custom claim Firebase `admin`, lecture étudiant limitée à son dossier, demandes/décisions/matricules/présences réservées à des fonctions de confiance, règles refusées par défaut. Il n’est pas déployé.
 
@@ -57,7 +57,8 @@ Avant le lancement, il restera à connecter Firebase Auth avec vérification ré
 
 ## Fichiers
 
-- `assets/blason.jpg` : blason fourni dans la conversation (144 × 144 px).
+- `assets/blason.jpg` : écusson seul, utilisé sur la carte et dans l’en-tête.
+- `assets/irgib-africa-university.svg` et `.png` : blason avec le nom, fourni pour l’équipe.
 - `assets/catalog.js` : filières, sites, niveaux et stockage local de démonstration.
 - `assets/styles.css` : affichage responsive, dimensions et impression du recto.
 - `start-demo.ps1` : serveur local Windows pour partager les données de démonstration et autoriser l’accès caméra sur localhost.
