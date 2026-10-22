@@ -1,9 +1,24 @@
 <!doctype html>
 <html lang="fr">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#102a39"><title>Administration · IRGIB AFRICA</title><link rel="stylesheet" href="../assets/styles.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#102a39"><title>Administration · IRGIB AFRICA</title><link rel="stylesheet" href="/assets/styles.css"></head>
 <body>
-  <div class="admin-layout">
-    <aside class="sidebar"><a class="brand" href="./"><img src="../assets/blason.jpg" alt=""><span class="brand-copy">IRGIB AFRICA<small>Administration</small></span></a><div class="side-label">Gestion du campus</div>
+  <main class="admin-auth-screen" id="admin-auth-screen">
+    <section class="panel admin-auth-card" aria-labelledby="admin-auth-title">
+      <img class="admin-auth-mark" src="/assets/blason.jpg" alt="Blason IRGIB AFRICA">
+      <div class="eyebrow">Accès réservé à l’administration</div>
+      <h1 id="admin-auth-title">Espace administration</h1>
+      <p class="subhead">Connectez-vous avec un compte administrateur autorisé.</p>
+      <form id="admin-login-form" novalidate>
+        <div class="field"><label for="admin-email">Adresse e-mail</label><input id="admin-email" name="email" type="email" autocomplete="username" required></div>
+        <div class="field"><label for="admin-password">Mot de passe</label><input id="admin-password" name="password" type="password" autocomplete="current-password" required></div>
+        <div class="form-actions"><button class="btn" id="admin-login-submit" type="submit">Se connecter</button></div>
+      </form>
+      <p class="form-message" id="admin-auth-message" role="status" aria-live="polite"></p>
+      <p class="field-help">Les comptes administrateurs sont créés et autorisés par l’établissement. Il n’y a pas d’inscription publique.</p>
+    </section>
+  </main>
+  <div class="admin-layout" id="admin-app" hidden>
+    <aside class="sidebar"><a class="brand" href="./"><img src="/assets/blason.jpg" alt=""><span class="brand-copy">IRGIB AFRICA<small>Administration</small></span></a><div class="side-label">Gestion du campus</div>
       <nav class="side-nav" aria-label="Navigation administration">
         <button class="active" data-view="dashboard"><span class="nav-icon">⌂</span><span class="nav-text">Vue d’ensemble</span></button>
         <button data-view="requests"><span class="nav-icon">✉</span><span class="nav-text">Demandes badges</span></button>
@@ -14,7 +29,7 @@
         <button data-view="cards"><span class="nav-icon">▧</span><span class="nav-text">Cartes</span></button>
       </nav><div class="side-bottom">IRGIB AFRICA<br>Gestion des dossiers et présences</div>
     </aside>
-    <div class="admin-main"><header class="admin-top no-print"><div class="crumb" id="breadcrumb">Campus / Vue d’ensemble</div><div class="profile"><span class="pill"><span class="dot"></span> Maquette locale</span><span class="profile-icon">A</span><strong>Administration</strong></div></header>
+    <div class="admin-main"><header class="admin-top no-print"><div class="crumb" id="breadcrumb">Campus / Vue d’ensemble</div><div class="profile"><span class="pill"><span class="dot"></span> Compte autorisé</span><span class="profile-icon">A</span><strong id="admin-user-label">Administration</strong><button class="btn ghost sm" id="admin-logout" type="button">Déconnexion</button></div></header>
       <main class="admin-content">
         <div class="notice no-print" style="margin-bottom:18px"><strong>Maquette locale.</strong> Les demandes et présences sont stockées dans le navigateur. Les notifications et e-mails ne sont pas transmis réellement.</div>
         <section class="view active" id="view-dashboard"><div class="admin-heading"><div><div class="eyebrow">Campus · Administration</div><h1>Vue d’ensemble</h1><p>Examinez les demandes, approuvez les cartes et suivez les présences du jour.</p></div><button class="btn" data-go="requests">Voir les demandes →</button></div>
@@ -34,5 +49,5 @@
   </div>
   <div class="modal-backdrop no-print" id="review-modal" role="dialog" aria-modal="true" aria-labelledby="review-title"><div class="modal review-modal"><div class="modal-head"><div><div class="eyebrow">Contrôle de demande</div><h2 id="review-title">Demande de badge</h2><p id="review-subtitle" class="muted small"></p></div><button class="modal-close" type="button" data-close-review aria-label="Fermer">×</button></div><div id="review-content"></div><div class="review-actions" id="review-actions"></div></div></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="../assets/catalog.js"></script><script async src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script><script src="admin.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="/assets/supabase-config.js"></script><script src="/assets/catalog.js"></script><script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script><script src="/gestion-campus-irga82/admin.js"></script>
 </body></html>

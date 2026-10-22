@@ -19,6 +19,7 @@
   let scannedSession = "";
   let cameraStream = null;
   let scanFrame = 0;
+  let lastScanTime = 0;
 
   const getApplication = () => profile ? D.loadApplications().filter(item => item.email.toLowerCase() === profile.email.toLowerCase()).sort((a, b) => (b.submittedAt || "").localeCompare(a.submittedAt || ""))[0] || null : null;
   const loadAccounts = () => { try { return JSON.parse(localStorage.getItem("irgib-campus-accounts-v1") || "{}"); } catch { return {}; } };
@@ -171,7 +172,7 @@
   }
   function decodeSession(raw) {
     let value = String(raw || "").trim();
-    try { const parsed = JSON.parse(value); value = parsed.sessionId || parsed.session || parsed.code || value; } catch {}
+    try { const parsed = JSON.parse(value); value = String(parsed.sessionId || parsed.session || parsed.code || value); } catch {}
     if (/^https?:\/\//i.test(value)) {
       try { const url = new URL(value); value = url.searchParams.get("sessionId") || url.searchParams.get("session") || url.searchParams.get("code") || url.pathname.split("/").filter(Boolean).at(-1) || value; } catch {}
     }
@@ -190,13 +191,27 @@
     byId("stop-scan").style.display = "none";
     byId("start-scan").style.display = "inline-flex";
   }
+  function cameraErrorMessage(error) {
+    if (error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError") return "L’accès à la caméra est refusé. Autorisez la caméra pour ce site dans les réglages du navigateur, puis réessayez.";
+    if (error?.name === "NotFoundError" || error?.name === "DevicesNotFoundError") return "Aucune caméra n’a été détectée sur cet appareil.";
+    if (error?.name === "NotReadableError" || error?.name === "TrackStartError") return "La caméra est utilisée par une autre application. Fermez cette application puis réessayez.";
+    if (error?.name === "SecurityError" || !window.isSecureContext) return "La caméra exige une connexion sécurisée HTTPS. Ouvrez le site avec son adresse https://.";
+    return "La caméra n’a pas pu démarrer. Vérifiez les autorisations et réessayez, ou saisissez le code manuellement.";
+  }
   async function startCamera() {
-    if (!navigator.mediaDevices?.getUserMedia || !("BarcodeDetector" in window)) {
-      byId("attendance-message").textContent = "La lecture caméra nécessite un navigateur compatible et un site sécurisé (HTTPS ou localhost). Saisissez le code de séance manuellement.";
+    byId("attendance-message").textContent = "";
+    if (!navigator.mediaDevices?.getUserMedia) {
+      byId("attendance-message").textContent = window.isSecureContext
+        ? "Ce navigateur ne permet pas d’ouvrir la caméra. Essayez un navigateur récent ou saisissez le code de séance manuellement."
+        : cameraErrorMessage({ name: "SecurityError" });
+      return;
+    }
+    if (!("BarcodeDetector" in window) && typeof window.jsQR !== "function") {
+      byId("attendance-message").textContent = "Le lecteur QR n’a pas pu se charger. Vérifiez votre connexion, puis saisissez le code de séance manuellement.";
       return;
     }
     try {
-      cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+      cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
       const video = byId("camera-video");
       video.srcObject = cameraStream;
       video.style.display = "block";
@@ -204,23 +219,49 @@
       byId("scanner-placeholder").style.display = "none";
       byId("start-scan").style.display = "none";
       byId("stop-scan").style.display = "inline-flex";
-      const detector = new BarcodeDetector({ formats: ["qr_code"] });
-      const scan = async () => {
+      let detector = null;
+      if ("BarcodeDetector" in window) {
+        try { detector = new BarcodeDetector({ formats: ["qr_code"] }); } catch { detector = null; }
+      }
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      lastScanTime = 0;
+      const scan = async timestamp => {
         if (!cameraStream) return;
-        try {
-          const codes = await detector.detect(video);
-          if (codes.length && codes[0].rawValue) {
-            showAttendancePreview(decodeSession(codes[0].rawValue));
-            byId("attendance-message").textContent = "QR détecté. Vérifiez les informations, puis validez.";
-            stopCamera();
-            return;
+        const now = timestamp || performance.now();
+        if (now - lastScanTime >= 180 && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0) {
+          lastScanTime = now;
+          let rawValue = "";
+          if (detector) {
+            try { rawValue = (await detector.detect(video)).find(code => code.rawValue)?.rawValue || ""; }
+            catch { detector = null; }
           }
-        } catch {}
+          if (!rawValue && typeof window.jsQR === "function") {
+            try {
+              const scale = Math.min(1, 900 / video.videoWidth);
+              canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+              canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+              context.drawImage(video, 0, 0, canvas.width, canvas.height);
+              const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+              rawValue = window.jsQR(frame.data, frame.width, frame.height, { inversionAttempts: "attemptBoth" })?.data || "";
+            } catch { /* La vidéo peut ne pas encore fournir d’image décodable. */ }
+          }
+          if (rawValue) {
+            try {
+              showAttendancePreview(decodeSession(rawValue));
+              byId("attendance-message").textContent = "QR de séance détecté. Vérifiez les informations, puis validez votre présence.";
+              stopCamera();
+              return;
+            } catch (error) {
+              byId("attendance-message").textContent = error.message || "Ce QR ne contient pas un code de séance reconnu. Présentez le QR de présence.";
+            }
+          }
+        }
         scanFrame = requestAnimationFrame(scan);
       };
       scanFrame = requestAnimationFrame(scan);
-    } catch {
-      byId("attendance-message").textContent = "La caméra n’a pas pu s’ouvrir. Autorisez son accès ou saisissez le code de séance manuellement.";
+    } catch (error) {
+      byId("attendance-message").textContent = cameraErrorMessage(error);
       stopCamera();
     }
   }

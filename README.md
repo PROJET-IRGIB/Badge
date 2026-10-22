@@ -3,9 +3,9 @@
 Cette maquette propose deux entrées séparées, sans lien entre l’espace étudiant et l’administration :
 
 - `etudiant/index.html` : inscription, demande de badge, profil, carte et présence par QR.
-- `admin/index.html` : examen des demandes, décisions, registre des étudiants, groupes et présences du jour.
+- `gestion-campus-irga82/index.html` : espace administratif avec authentification Supabase.
 
-Les écrans sont interactifs. Ils utilisent le stockage local du navigateur et des dossiers fictifs. Sur Windows, lance `start-demo.ps1` pour ouvrir l’espace étudiant sur `http://localhost:8765/etudiant/`; l’administration se trouve séparément sur `http://localhost:8765/admin/`. Garde la fenêtre du serveur ouverte pendant la démonstration. Les deux entrées partagent ainsi le même stockage local et le scanner caméra fonctionne sur `localhost`. La caméra peut être refusée ou non prise en charge; le champ du code de séance reste disponible en saisie manuelle.
+Les écrans sont interactifs. Les données d’étudiant et les demandes sont encore stockées localement dans le navigateur pour la démonstration. Sur Windows, lance `start-demo.ps1` pour ouvrir l’espace étudiant sur `http://localhost:8765/etudiant/`; l’administration se trouve sur `http://localhost:8765/gestion-campus-irga82/`. Garde la fenêtre du serveur ouverte pendant la démonstration. Les deux entrées partagent ainsi le même stockage local et le scanner peut utiliser `localhost`. Le lecteur caméra utilise `BarcodeDetector` quand il est disponible et `jsQR` en secours pour décoder un QR depuis l’image vidéo. La caméra nécessite HTTPS ou localhost et l’autorisation du navigateur; le code peut également être saisi manuellement.
 
 ## Parcours étudiant
 
@@ -49,11 +49,11 @@ Les noms complets des huit formations proviennent du [catalogue officiel des for
 
 ## Limites avant une vraie mise en service
 
-Cette version ne fournit pas d’authentification serveur, d’envoi d’e-mail, de notification distante, de serveur de matricules ou de base partagée. La connexion de démonstration ne fonctionne que dans le navigateur où le compte a été créé; le changement de mot de passe est également local. Ne saisis pas de vraies données étudiantes dans cette maquette. Les approbations et présences locales servent à montrer les écrans et le flux, pas à tenir un registre officiel.
+Le parcours et les données étudiants restent une maquette locale : l’inscription, le changement de mot de passe, les notifications, les matricules, les demandes et les présences ne sont pas encore centralisés côté serveur. La connexion admin Supabase est prête à configurer mais ne peut pas fonctionner avant l’ajout des paramètres du projet et des comptes autorisés. Ne saisis pas de vraies données étudiantes dans cette maquette; les listes locales ne constituent pas un registre officiel.
 
-Le fichier `firestore.rules` illustre la séparation des accès : custom claim Firebase `admin`, lecture étudiant limitée à son dossier, demandes/décisions/matricules/présences réservées à des fonctions de confiance, règles refusées par défaut. Il n’est pas déployé.
+La connexion de l’espace administratif passe par Supabase Auth et vérifie l’appartenance à `public.admin_members`. Le script `supabase/admin_members.sql` crée cette liste avec RLS : un utilisateur peut lire uniquement sa propre appartenance et ne peut pas s’ajouter lui-même. Les opérations sur les demandes et présences restent des données de démonstration locales; elles ne sont pas encore connectées à Supabase.
 
-Avant le lancement, il restera à connecter Firebase Auth avec vérification réelle d’e-mail, créer les projets dev/prod et les deux hébergements, configurer le custom claim côté serveur, implémenter la réservation transactionnelle des matricules et valider le QR de séance côté serveur.
+Pour activer la connexion admin, renseigner l’URL du projet Supabase et sa clé publique dans `assets/supabase-config.js`, exécuter `supabase/admin_members.sql`, créer le compte dans Supabase Auth puis ajouter son identifiant à `admin_members`. Ne jamais placer la clé `service_role` dans le navigateur. Pour un usage réel, il faudra ensuite connecter toutes les demandes, photos et présences à des tables et à un stockage Supabase protégés par RLS.
 
 ## Fichiers
 
@@ -61,4 +61,8 @@ Avant le lancement, il restera à connecter Firebase Auth avec vérification ré
 - `assets/catalog.js` : filières, sites, niveaux et stockage local de démonstration.
 - `assets/styles.css` : affichage responsive, dimensions et impression du recto.
 - `start-demo.ps1` : serveur local Windows pour partager les données de démonstration et autoriser l’accès caméra sur localhost.
-- `firestore.rules` : règles préparatoires Firebase, non déployées.
+- `assets/supabase-config.js` : URL Supabase et clé publique à renseigner. `supabase/admin_members.sql` : liste d’autorisation des comptes administrateurs. `archive/legacy-firebase/` conserve les anciens fichiers Firebase à titre d’archive; ils sont exclus du déploiement Vercel.
+
+## Accès administratif
+
+La route de démonstration est `/gestion-campus-irga82/`. Le nom de route n’est pas un mécanisme de sécurité : l’accès est contrôlé par Supabase Auth et la liste RLS `admin_members`. Sans URL/clé Supabase et sans compte autorisé, l’espace reste verrouillé. L’interface de données demeure une maquette locale jusqu’à l’intégration du backend.

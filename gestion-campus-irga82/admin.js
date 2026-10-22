@@ -159,7 +159,7 @@
     const program = D.getProgram(item.program);
     const site = D.getSite(item.site);
     const contacts = site.points.map(point => `<div class="card-v2-contact"><strong>${esc(point.name)}</strong><span>${esc(point.address)}</span><b>${esc(point.phone)}</b></div>`).join("");
-    byId("admin-card-zone").innerHTML = `<article class="student-card id-card-front card-v2 card-v2-front"><header class="card-v2-header"><div class="card-v2-brand"><img src="../assets/blason.jpg" alt="Blason IRGIB AFRICA"><div><strong>IRGIB AFRICA</strong><span>UNIVERSITÉ POLYTECHNIQUE · BÉNIN</span><small>CARTE ÉTUDIANTE <i>/</i> STUDENT CARD</small></div></div><span class="card-v2-sex">${esc(item.sex)}</span></header><div class="card-v2-main"><div class="card-v2-portrait">${item.photo ? `<img src="${item.photo}" alt="Photo de ${esc(fullName(item))}">` : `<div class="card-v2-photo-placeholder">PHOTO</div>`}<div class="card-v2-matricule"><small>MATRICULE <i>/</i> STUDENT ID</small><strong>${esc(item.finalMatricule)}</strong></div></div><div class="card-v2-details"><div class="card-v2-field"><small>NOM <i>/</i> SURNAME</small><strong>${esc(item.lastName)}</strong></div><div class="card-v2-field"><small>PRÉNOM(S) <i>/</i> FIRST NAME</small><strong>${esc(item.firstName)}</strong></div><div class="card-v2-field"><small>SEXE <i>/</i> SEX</small><strong>${esc(item.sex === "F" ? "Féminin / Female" : "Masculin / Male")}</strong></div><div class="card-v2-field"><small>FILIÈRE <i>/</i> PROGRAM</small><strong>${esc(program.shortName)}</strong></div><div class="card-v2-field"><small>NIVEAU <i>/</i> LEVEL</small><strong>${esc(item.level)}</strong></div></div><div class="card-v2-verification"><div class="card-v2-qr" id="admin-card-qr"></div><strong>SCANNEZ POUR IDENTIFIER</strong><small>SCAN TO IDENTIFY</small><a href="https://www.irgibafrica.university/" target="_blank" rel="noopener noreferrer">www.irgibafrica.university</a></div></div><footer class="card-v2-footer"><strong>${esc(site.city.toUpperCase())} · BÉNIN</strong><span>CARTE PERSONNELLE · ${esc(item.level)}</span></footer></article><article class="student-card id-card-front card-back card-v2 card-v2-back"><header class="card-v2-back-head"><span>INFORMATIONS PRATIQUES</span><span>CONTACTS DU SITE</span></header><div class="card-v2-back-title">${esc(site.city)} <i>/</i> Votre centre de formation</div><div class="card-v2-contacts">${contacts}</div><div class="card-v2-back-note">Cette carte est strictement personnelle. En cas de perte, merci de la remettre à l’administration du site indiqué au recto.</div><footer class="card-v2-back-footer"><span>CONTACTER LE SITE INDIQUÉ AU RECTO</span><span>DOCUMENT PERSONNEL · BÉNIN</span></footer></article>`;
+    byId("admin-card-zone").innerHTML = `<article class="student-card id-card-front card-v2 card-v2-front"><header class="card-v2-header"><div class="card-v2-brand"><img src="/assets/blason.jpg" alt="Blason IRGIB AFRICA"><div><strong>IRGIB AFRICA</strong><span>UNIVERSITÉ POLYTECHNIQUE · BÉNIN</span><small>CARTE ÉTUDIANTE <i>/</i> STUDENT CARD</small></div></div><span class="card-v2-sex">${esc(item.sex)}</span></header><div class="card-v2-main"><div class="card-v2-portrait">${item.photo ? `<img src="${item.photo}" alt="Photo de ${esc(fullName(item))}">` : `<div class="card-v2-photo-placeholder">PHOTO</div>`}<div class="card-v2-matricule"><small>MATRICULE <i>/</i> STUDENT ID</small><strong>${esc(item.finalMatricule)}</strong></div></div><div class="card-v2-details"><div class="card-v2-field"><small>NOM <i>/</i> SURNAME</small><strong>${esc(item.lastName)}</strong></div><div class="card-v2-field"><small>PRÉNOM(S) <i>/</i> FIRST NAME</small><strong>${esc(item.firstName)}</strong></div><div class="card-v2-field"><small>SEXE <i>/</i> SEX</small><strong>${esc(item.sex === "F" ? "Féminin / Female" : "Masculin / Male")}</strong></div><div class="card-v2-field"><small>FILIÈRE <i>/</i> PROGRAM</small><strong>${esc(program.shortName)}</strong></div><div class="card-v2-field"><small>NIVEAU <i>/</i> LEVEL</small><strong>${esc(item.level)}</strong></div></div><div class="card-v2-verification"><div class="card-v2-qr" id="admin-card-qr"></div><strong>SCANNEZ POUR IDENTIFIER</strong><small>SCAN TO IDENTIFY</small><a href="https://www.irgibafrica.university/" target="_blank" rel="noopener noreferrer">www.irgibafrica.university</a></div></div><footer class="card-v2-footer"><strong>${esc(site.city.toUpperCase())} · BÉNIN</strong><span>CARTE PERSONNELLE · ${esc(item.level)}</span></footer></article><article class="student-card id-card-front card-back card-v2 card-v2-back"><header class="card-v2-back-head"><span>INFORMATIONS PRATIQUES</span><span>CONTACTS DU SITE</span></header><div class="card-v2-back-title">${esc(site.city)} <i>/</i> Votre centre de formation</div><div class="card-v2-contacts">${contacts}</div><div class="card-v2-back-note">Cette carte est strictement personnelle. En cas de perte, merci de la remettre à l’administration du site indiqué au recto.</div><footer class="card-v2-back-footer"><span>CONTACTER LE SITE INDIQUÉ AU RECTO</span><span>DOCUMENT PERSONNEL · BÉNIN</span></footer></article>`;
     if (window.QRCode) new QRCode(byId("admin-card-qr"), { text: `IRGIB-CARTE:${item.finalMatricule}`, width: 128, height: 128, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
     else byId("admin-card-qr").innerHTML = `<div class="qr-fallback">QR indisponible</div>`;
     byId("card-preview-title").textContent = `${fullName(item)} · ${item.finalMatricule}`;
@@ -181,26 +181,98 @@
     const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); toast("Export CSV préparé.");
   }
 
-  document.querySelectorAll(".side-nav [data-view]").forEach(button => button.addEventListener("click", () => setView(button.dataset.view)));
-  document.querySelectorAll("[data-go]").forEach(button => button.addEventListener("click", () => setView(button.dataset.go)));
-  document.querySelectorAll("[data-close-review]").forEach(button => button.addEventListener("click", closeReview));
-  byId("review-modal").addEventListener("click", event => { if (event.target === byId("review-modal")) closeReview(); });
-  byId("request-search").addEventListener("input", renderRequests);
-  byId("request-filter").addEventListener("change", renderRequests);
-  byId("student-search").addEventListener("input", renderStudents);
-  byId("attendance-search").addEventListener("input", renderAttendance);
-  byId("card-search").addEventListener("input", renderCards);
-  ["group-site", "group-program", "group-level"].forEach(id => byId(id).addEventListener("change", renderGroups));
-  byId("group-search").addEventListener("input", renderGroups);
-  document.addEventListener("click", event => {
-    const review = event.target.closest("[data-review]");
-    if (review) openReview(review.dataset.review);
-    const preview = event.target.closest("[data-preview-card]");
-    if (preview) { const item = approved().find(application => application.id === preview.dataset.previewCard); if (item) drawAdminCard(item); }
-    const exportButton = event.target.closest("[data-export]");
-    if (exportButton) exportCsv(exportButton.dataset.export);
+  let adminClient = null;
+  let appInitialized = false;
+  function showAdminGate(message = "") {
+    byId("admin-app").hidden = true;
+    byId("admin-auth-screen").hidden = false;
+    byId("admin-auth-message").textContent = message;
+  }
+  function initAdminApp() {
+    if (appInitialized) return;
+    appInitialized = true;
+    document.querySelectorAll(".side-nav [data-view]").forEach(button => button.addEventListener("click", () => setView(button.dataset.view)));
+    document.querySelectorAll("[data-go]").forEach(button => button.addEventListener("click", () => setView(button.dataset.go)));
+    document.querySelectorAll("[data-close-review]").forEach(button => button.addEventListener("click", closeReview));
+    byId("review-modal").addEventListener("click", event => { if (event.target === byId("review-modal")) closeReview(); });
+    byId("request-search").addEventListener("input", renderRequests);
+    byId("request-filter").addEventListener("change", renderRequests);
+    byId("student-search").addEventListener("input", renderStudents);
+    byId("attendance-search").addEventListener("input", renderAttendance);
+    byId("card-search").addEventListener("input", renderCards);
+    ["group-site", "group-program", "group-level"].forEach(id => byId(id).addEventListener("change", renderGroups));
+    byId("group-search").addEventListener("input", renderGroups);
+    document.addEventListener("click", event => {
+      const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+      const review = target?.closest("[data-review]");
+      if (review) openReview(review.dataset.review);
+      const preview = target?.closest("[data-preview-card]");
+      if (preview) { const item = approved().find(application => application.id === preview.dataset.previewCard); if (item) drawAdminCard(item); }
+      const exportButton = target?.closest("[data-export]");
+      if (exportButton) exportCsv(exportButton.dataset.export);
+    });
+    byId("print-admin-card").addEventListener("click", () => { document.body.classList.add("print-card-mode", "admin-print-mode"); window.print(); setTimeout(() => document.body.classList.remove("print-card-mode", "admin-print-mode"), 900); });
+    byId("admin-logout").addEventListener("click", async () => {
+      const { error } = await adminClient.auth.signOut();
+      showAdminGate(error ? "La déconnexion a échoué. Réessayez." : "Vous êtes déconnecté.");
+    });
+    window.addEventListener("storage", event => {
+      if (["irgib-campus-applications-v2", "irgib-campus-attendance-v2"].includes(event.key)) refreshCurrent();
+    });
+    initGroupFilters();
+    renderDashboard();
+  }
+  async function authorizeAdmin(session) {
+    if (!session) { showAdminGate("Connectez-vous avec votre compte administrateur."); return false; }
+    const { data: membership, error } = await adminClient.from("admin_members").select("user_id").eq("user_id", session.user.id).maybeSingle();
+    if (error) { showAdminGate("La vérification du rôle admin Supabase a échoué. Vérifiez la configuration de la table admin_members."); return false; }
+    if (!membership) {
+      await adminClient.auth.signOut();
+      showAdminGate("Ce compte n’est pas autorisé à accéder à l’administration.");
+      return false;
+    }
+    byId("admin-user-label").textContent = session.user.email || "Administration";
+    byId("admin-auth-screen").hidden = true;
+    byId("admin-app").hidden = false;
+    initAdminApp();
+    return true;
+  }
+  async function bootAdminAuth() {
+    const config = window.IRGIB_SUPABASE_CONFIG;
+    if (!config?.url || !config?.anonKey) {
+      showAdminGate("L’accès admin est verrouillé. Configurez l’URL Supabase et la clé publique dans assets/supabase-config.js, puis ajoutez le compte à admin_members.");
+      return;
+    }
+    if (!window.supabase?.createClient) { showAdminGate("Le service d’authentification n’a pas pu se charger. Vérifiez la connexion Internet puis rechargez la page."); return; }
+    try {
+      adminClient = window.supabase.createClient(config.url, config.anonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+      const { data, error } = await adminClient.auth.getSession();
+      if (error) throw error;
+      await authorizeAdmin(data.session);
+      adminClient.auth.onAuthStateChange(event => {
+        if (event === "SIGNED_OUT") showAdminGate("Vous êtes déconnecté.");
+      });
+    } catch {
+      showAdminGate("Impossible de vérifier la session Supabase. Vérifiez l’URL et la clé publique configurées.");
+    }
+  }
+  byId("admin-login-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    const email = byId("admin-email").value.trim();
+    const password = byId("admin-password").value;
+    const button = byId("admin-login-submit");
+    if (!email || !password) { byId("admin-auth-message").textContent = "Saisissez votre adresse e-mail et votre mot de passe."; return; }
+    if (!adminClient) { byId("admin-auth-message").textContent = "L’authentification Supabase n’est pas configurée pour ce site."; return; }
+    button.disabled = true;
+    byId("admin-auth-message").textContent = "Vérification du compte…";
+    try {
+      const { data, error } = await adminClient.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      const authorized = await authorizeAdmin(data.session);
+      if (!authorized) byId("admin-password").value = "";
+    } catch {
+      byId("admin-auth-message").textContent = "Connexion refusée. Vérifiez vos identifiants ou contactez l’administrateur du projet.";
+    } finally { button.disabled = false; }
   });
-  byId("print-admin-card").addEventListener("click", () => { document.body.classList.add("print-card-mode", "admin-print-mode"); window.print(); setTimeout(() => document.body.classList.remove("print-card-mode", "admin-print-mode"), 900); });
-  initGroupFilters();
-  renderDashboard();
+  bootAdminAuth();
 })();
