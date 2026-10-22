@@ -1,0 +1,26 @@
+project_id = "irgib-africa-badge"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:8765"
+additional_redirect_urls = ["http://localhost:8765/etudiant/", "https://irgib-africa-badge.vercel.app/etudiant/"]
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = true

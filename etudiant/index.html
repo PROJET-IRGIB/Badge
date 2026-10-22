@@ -5,10 +5,10 @@
   <title>Espace étudiant · IRGIB AFRICA</title><link rel="stylesheet" href="../assets/styles.css?v=20261022c">
 </head>
 <body>
-  <header class="topbar"><a class="brand" href="./"><img src="../assets/blason.jpg" alt="Blason IRGIB AFRICA"><span>IRGIB AFRICA<small>Portail étudiant</small></span></a><div class="top-actions"><span class="pill"><span class="dot"></span> Maquette locale</span><button id="signout" class="btn ghost sm" style="display:none">Déconnexion</button></div></header>
+  <header class="topbar"><a class="brand" href="./"><img src="../assets/blason.jpg" alt="Blason IRGIB AFRICA"><span>IRGIB AFRICA<small>Portail étudiant</small></span></a><div class="top-actions"><span class="pill"><span class="dot"></span> Espace sécurisé</span><button id="signout" class="btn ghost sm" style="display:none">Déconnexion</button></div></header>
 
   <main class="content">
-    <div class="notice" style="margin-bottom:18px"><strong>Version de démonstration.</strong> L’envoi de courriel, la connexion, la photo et la présence restent dans ce navigateur; aucun message ni dossier n’est transmis à IRGIB AFRICA.</div>
+    <div class="notice" style="margin-bottom:18px"><strong>Protection des données.</strong> Votre compte, votre demande et votre photo sont transmis de façon sécurisée et accessibles uniquement selon les autorisations de votre compte.</div>
 
     <section id="auth-screen" class="panel auth-panel">
       <div class="eyebrow">Portail étudiant</div><h1 id="auth-title">Connexion</h1><p id="auth-intro" class="subhead">Connectez-vous avec l’adresse e-mail et le mot de passe utilisés lors de votre inscription.</p>
@@ -38,8 +38,8 @@
     </section>
 
     <section id="verify-screen" class="panel auth-panel" style="display:none;max-width:620px;margin:auto">
-      <div class="eyebrow">Confirmation de l’adresse</div><h1>Vérifier mon e-mail</h1><p class="subhead">Saisissez le code de confirmation. En production, il sera envoyé dans votre boîte mail.</p>
-      <form id="verify-form"><div class="field"><label for="verify-code">Code à 6 chiffres</label><input id="verify-code" inputmode="numeric" maxlength="6" required placeholder="000000"></div><p id="demo-code-note" class="notice" style="margin:14px 0"></p><div class="form-actions"><button class="btn" type="submit">Confirmer mon adresse</button><button class="btn secondary" type="button" id="back-to-signup">Retour</button></div></form>
+      <div class="eyebrow">Confirmation de l’adresse</div><h1>Vérifier mon e-mail</h1><p class="subhead">Ouvrez le lien de confirmation reçu dans votre boîte mail pour activer votre compte.</p>
+      <form id="verify-form"><input id="verify-code" type="hidden"><p id="demo-code-note" class="notice" style="margin:14px 0"></p><div class="form-actions"><button class="btn secondary" type="button" id="back-to-signup">Retour à la connexion</button></div></form>
     </section>
 
     <section id="portal-screen" style="display:none">
@@ -80,9 +80,10 @@
     </section>
   </main>
   <footer class="footer"><span>IRGIB AFRICA · Espace étudiant</span><a href="https://irgibafrica.university/catalogue-formations.html" target="_blank" rel="noreferrer">Catalogue officiel des formations ↗</a></footer>
-  <script src="../assets/catalog.js?v=20261022c"></script>
+  <script src="../assets/catalog.js?v=20261022d"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-  <script src="../etudiant/student.js?v=20261022c"></script>
+  <script src="/assets/bootstrap.js?v=backend2" data-entry="/etudiant/student.js?v=backend2" data-error-target="login-message"></script>
 </body>
 </html>

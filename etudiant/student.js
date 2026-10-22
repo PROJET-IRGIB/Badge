@@ -1,5 +1,7 @@
 (() => {
   const D = window.IRGIB_DATA;
+  const cfg = window.IRGIB_SUPABASE_CONFIG;
+  const db = window.supabase.createClient(cfg.url, cfg.anonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
   const byId = id => document.getElementById(id);
   const esc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
   const fullName = person => `${person.firstName || ""} ${person.lastName || ""}`.trim();
@@ -13,27 +15,37 @@
   };
   initSelects();
 
-  let profile = D.loadProfile(sessionStorage.getItem("irgib-student-email") || undefined);
+  let profile = null;
+  let currentUser = null;
+  let application = null;
+  let attendanceRows = [];
+  let studentChannel = null;
   let selectedPhoto = "";
   let selectedPhotoName = "";
+  let selectedPhotoBlob = null;
   let scannedSession = "";
   let cameraStream = null;
   let scanFrame = 0;
   let lastScanTime = 0;
 
-  const getApplication = () => profile ? D.loadApplications().filter(item => item.email.toLowerCase() === profile.email.toLowerCase()).sort((a, b) => (b.submittedAt || "").localeCompare(a.submittedAt || ""))[0] || null : null;
-  const loadAccounts = () => { try { return JSON.parse(localStorage.getItem("irgib-campus-accounts-v1") || "{}"); } catch { return {}; } };
-  const saveAccounts = accounts => localStorage.setItem("irgib-campus-accounts-v1", JSON.stringify(accounts));
-  const digestPassword = async (password, salt) => {
-    const bytes = new TextEncoder().encode(`${salt}:${password}`);
-    const digest = await crypto.subtle.digest("SHA-256", bytes);
-    return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
-  };
-  const makeCredential = async password => {
-    const salt = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, "0")).join("");
-    return { salt, digest: await digestPassword(password, salt) };
-  };
-  const passwordsMatch = async (password, credential) => Boolean(credential && await digestPassword(password, credential.salt) === credential.digest);
+  const getApplication = () => application;
+  const fromProfileRow = row => row && ({ userId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date });
+  const fromApplicationRow = row => row && ({ id: row.id, studentId: row.student_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, birthDate: row.birth_date, program: row.program, level: row.level, site: row.site, status: row.status, temporaryMatricule: row.temporary_matricule, finalMatricule: row.final_matricule, photoPath: row.photo_path, rejectionReason: row.rejection_reason, submittedAt: row.submitted_at, decidedAt: row.decided_at });
+  async function loadStudentData() {
+    const { data: profileRow, error: profileError } = await db.from("student_profiles").select("*").eq("user_id", currentUser.id).single();
+    if (profileError) throw profileError;
+    profile = fromProfileRow(profileRow);
+    const { data: apps, error: appError } = await db.from("badge_applications").select("*").eq("student_id", currentUser.id).order("submitted_at", { ascending: false }).limit(1);
+    if (appError) throw appError;
+    application = fromApplicationRow(apps?.[0]);
+    if (application?.photoPath) {
+      const { data } = await db.storage.from("student-photos").createSignedUrl(application.photoPath, 600);
+      application.photo = data?.signedUrl || "";
+    }
+    const { data: records, error: attendanceError } = await db.from("attendance_records").select("attended_at,session_id,attendance_sessions!inner(site,program,level)").eq("student_id", currentUser.id).order("attended_at", { ascending: false });
+    if (attendanceError) throw attendanceError;
+    attendanceRows = (records || []).map(row => ({ createdAt: row.attended_at, sessionCode: row.session_id.slice(0, 8), site: row.attendance_sessions.site, program: row.attendance_sessions.program, level: row.attendance_sessions.level, day: row.attended_at.slice(0, 10) }));
+  }
   const showAuthPage = page => {
     const login = page === "login";
     byId("login-panel").style.display = login ? "block" : "none";
@@ -89,13 +101,10 @@
     const report = app.status === "approved" ? `Matricule définitif : <b>${esc(app.finalMatricule)}</b>` : app.status === "rejected" ? esc(app.rejectionReason || "Contactez l’administration de votre site pour connaître la suite.") : `Matricule temporaire : <b>${esc(app.temporaryMatricule)}</b>`;
     byId("request-form-wrap").style.display = "none";
     byId("request-readonly").style.display = "block";
-    byId("request-readonly").innerHTML = `<div class="application-photo-row">${app.photo ? `<img class="identity-photo" src="${app.photo}" alt="Photo d’identité transmise">` : `<div class="identity-photo photo-missing">Photo<br>non fournie</div>`}<div><span class="status ${app.status === "approved" ? "active" : app.status === "rejected" ? "rejected" : "pending"}">${statusText}</span><h3 style="margin-top:10px">${esc(fullName(app))}</h3><p class="muted small">${report}</p></div></div><div class="readonly-grid"><div class="info-row"><span>Sexe</span><strong>${esc(app.sex)}</strong></div><div class="info-row"><span>Naissance</span><strong>${esc(app.birthDate || "—")}</strong></div><div class="info-row"><span>E-mail</span><strong>${esc(app.email)}</strong></div><div class="info-row"><span>Filière</span><strong>${esc(program.name)}</strong></div><div class="info-row"><span>Niveau</span><strong>${esc(app.level)}</strong></div><div class="info-row"><span>Ville / site</span><strong>${esc(site.city)}</strong></div><div class="info-row"><span>Demande envoyée</span><strong>${new Date(app.submittedAt).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" })}</strong></div></div><div class="notice" style="margin-top:16px">Ces renseignements sont en lecture seule après l’envoi. Pour corriger une erreur avant approbation, contactez l’administration de votre site dans les 24 heures.</div>${app.status === "rejected" ? `<p class="small muted" style="margin-top:12px">Une nouvelle demande pourra être préparée après échange avec l’administration.</p><button class="btn secondary sm" id="new-request-after-rejection" type="button">Préparer une nouvelle demande</button>` : ""}`;
+    byId("request-readonly").innerHTML = `<div class="application-photo-row">${app.photo ? `<img class="identity-photo" src="${esc(app.photo)}" alt="Photo d’identité transmise">` : `<div class="identity-photo photo-missing">Photo<br>non fournie</div>`}<div><span class="status ${app.status === "approved" ? "active" : app.status === "rejected" ? "rejected" : "pending"}">${statusText}</span><h3 style="margin-top:10px">${esc(fullName(app))}</h3><p class="muted small">${report}</p></div></div><div class="readonly-grid"><div class="info-row"><span>Sexe</span><strong>${esc(app.sex)}</strong></div><div class="info-row"><span>Naissance</span><strong>${esc(app.birthDate || "—")}</strong></div><div class="info-row"><span>E-mail</span><strong>${esc(app.email)}</strong></div><div class="info-row"><span>Filière</span><strong>${esc(program.name)}</strong></div><div class="info-row"><span>Niveau</span><strong>${esc(app.level)}</strong></div><div class="info-row"><span>Ville / site</span><strong>${esc(site.city)}</strong></div><div class="info-row"><span>Demande envoyée</span><strong>${new Date(app.submittedAt).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" })}</strong></div></div><div class="notice" style="margin-top:16px">Ces renseignements sont en lecture seule après l’envoi. Pour corriger une erreur avant approbation, contactez l’administration de votre site dans les 24 heures.</div>${app.status === "rejected" ? `<p class="small muted" style="margin-top:12px">Une nouvelle demande pourra être préparée après échange avec l’administration.</p><button class="btn secondary sm" id="new-request-after-rejection" type="button">Préparer une nouvelle demande</button>` : ""}`;
     byId("request-status-box").innerHTML = `<span>Statut</span><strong>${statusText}</strong>`;
     if (app.status === "rejected") byId("new-request-after-rejection").addEventListener("click", () => {
-      const apps = D.loadApplications();
-      const latest = apps.find(item => item.id === app.id);
-      if (latest) latest.archived = true;
-      D.saveApplications(apps);
+      application = null;
       byId("request-form-wrap").style.display = "block";
       byId("request-readonly").style.display = "none";
       populateRequestForm();
@@ -149,7 +158,7 @@
 
   function todayAttendance() {
     const date = D.todayKey();
-    return D.loadAttendance().filter(item => item.day === date && item.email.toLowerCase() === profile.email.toLowerCase());
+    return attendanceRows.filter(item => item.day === date);
   }
   function renderAttendance() {
     const app = getApplication();
@@ -173,7 +182,6 @@
     if (/^https?:\/\//i.test(value)) {
       try { const url = new URL(value); value = url.searchParams.get("sessionId") || url.searchParams.get("session") || url.searchParams.get("code") || url.pathname.split("/").filter(Boolean).at(-1) || value; } catch {}
     }
-    value = value.replace(/^(IRGIB-PRESENCE|SEANCE):/i, "");
     if (!value || value.startsWith("IRGIB-CARTE:")) throw new Error("Ce QR n’est pas un code de séance de présence.");
     return value.slice(0, 180);
   }
@@ -263,10 +271,16 @@
     }
   }
 
-  function activatePortal() {
-    profile = D.loadProfile(sessionStorage.getItem("irgib-student-email") || undefined);
-    if (!profile) { setScreen("auth-screen"); return; }
+  async function activatePortal() {
+    if (!currentUser) { setScreen("auth-screen"); return; }
+    try { await loadStudentData(); }
+    catch (error) { setScreen("auth-screen"); byId("login-message").textContent = error.message || "Impossible de charger votre dossier. Réessayez."; return; }
     setScreen("portal-screen");
+    if (!studentChannel) studentChannel = db.channel(`student-${currentUser.id}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "badge_applications", filter: `student_id=eq.${currentUser.id}` }, async () => {
+        try { await loadStudentData(); if (application) applicationSummary(application); renderNotification(application); renderMyCard(); }
+        catch { byId("login-message").textContent = "La mise à jour de votre dossier est temporairement indisponible."; }
+      }).subscribe();
     byId("hello-name").textContent = profile.firstName;
     renderNotification(getApplication());
     renderSiteInfo();
@@ -286,71 +300,52 @@
     event.preventDefault();
     const email = byId("login-email").value.trim().toLowerCase();
     const password = byId("login-password").value;
-    const account = loadAccounts()[email];
-    if (!account || !await passwordsMatch(password, account.credential)) {
-      byId("login-message").textContent = "Adresse e-mail ou mot de passe incorrect.";
-      return;
-    }
-    profile = D.loadProfile(email);
-    if (!profile) {
-      byId("login-message").textContent = "Compte introuvable dans ce navigateur. Réinscrivez-vous sur cet appareil.";
-      return;
-    }
-    sessionStorage.setItem("irgib-student-email", email);
-    sessionStorage.setItem("irgib-student-session", "active");
-    byId("login-form").reset();
-    activatePortal();
+    const button = event.currentTarget.querySelector('[type="submit"]'); button.disabled = true;
+    try {
+      const { data, error } = await db.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      currentUser = data.user;
+      byId("login-form").reset();
+      await activatePortal();
+    } catch { byId("login-message").textContent = "Connexion impossible. Vérifiez vos identifiants et confirmez votre e-mail."; }
+    finally { button.disabled = false; }
   });
   byId("signup-form").addEventListener("submit", async event => {
     event.preventDefault();
     const values = new FormData(event.currentTarget);
     const password = String(values.get("password"));
-    if (password.length < 8) return;
     const draft = { firstName: String(values.get("firstName")).trim(), lastName: String(values.get("lastName")).trim(), email: String(values.get("email")).trim().toLowerCase(), phone: String(values.get("phone")).trim(), sex: String(values.get("sex")), program: String(values.get("program")), level: String(values.get("level")), site: String(values.get("site")) };
-    if (loadAccounts()[draft.email]) {
-      byId("signup-message").textContent = "Un compte existe déjà avec cette adresse. Connectez-vous plutôt.";
-      return;
-    }
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    const credential = await makeCredential(password);
-    sessionStorage.setItem("irgib-email-draft", JSON.stringify({ draft, code, credential }));
-    byId("demo-code-note").innerHTML = `<strong>Code simulé de la maquette :</strong> <b>${code}</b><br>Aucun e-mail réel n’a été envoyé.`;
-    setScreen("verify-screen");
+    if (password.length < 8 || !draft.phone) { byId("signup-message").textContent = "Renseignez le téléphone et un mot de passe d’au moins 8 caractères."; return; }
+    const button = event.currentTarget.querySelector('[type="submit"]'); button.disabled = true;
+    try {
+      const { data, error } = await db.auth.signUp({ email: draft.email, password, options: { emailRedirectTo: `${window.location.origin}/etudiant/`, data: { account_type: "student", first_name: draft.firstName, last_name: draft.lastName, phone: draft.phone, sex: draft.sex, program: draft.program, level: draft.level, site: draft.site } } });
+      if (error) throw error;
+      if (data.session) { currentUser = data.user; byId("signup-form").reset(); await activatePortal(); }
+      else {
+        byId("demo-code-note").textContent = `Un message de confirmation a été envoyé à ${draft.email}. Ouvrez-le pour activer votre compte, puis revenez vous connecter.`;
+        setScreen("verify-screen");
+      }
+    } catch (error) { byId("signup-message").textContent = error.message || "Création du compte impossible. Vérifiez les informations puis réessayez."; }
+    finally { button.disabled = false; }
   });
-  byId("verify-form").addEventListener("submit", event => {
-    event.preventDefault();
-    const pending = JSON.parse(sessionStorage.getItem("irgib-email-draft") || "null");
-    if (!pending || byId("verify-code").value.trim() !== pending.code) { byId("demo-code-note").innerHTML = `<strong>Code incorrect.</strong> Code de démonstration : <b>${esc(pending?.code || "—")}</b>`; return; }
-    profile = pending.draft;
-    const accounts = loadAccounts();
-    accounts[profile.email] = { credential: pending.credential, createdAt: new Date().toISOString() };
-    saveAccounts(accounts);
-    D.saveProfile(profile);
-    sessionStorage.removeItem("irgib-email-draft");
-    sessionStorage.setItem("irgib-student-email", profile.email);
-    sessionStorage.setItem("irgib-student-session", "active");
-    activatePortal();
-  });
-  byId("back-to-signup").addEventListener("click", () => { setScreen("auth-screen"); showAuthPage("signup"); });
+  byId("verify-form").addEventListener("submit", event => event.preventDefault());
+  byId("back-to-signup").addEventListener("click", () => { setScreen("auth-screen"); showAuthPage("login"); });
   byId("password-form").addEventListener("submit", async event => {
     event.preventDefault();
     const current = byId("current-password").value;
     const next = byId("new-password").value;
     const confirm = byId("confirm-password").value;
-    const accounts = loadAccounts();
-    const account = accounts[profile.email.toLowerCase()];
-    if (!await passwordsMatch(current, account?.credential)) { byId("password-message").textContent = "Le mot de passe actuel est incorrect."; return; }
     if (next.length < 8) { byId("password-message").textContent = "Le nouveau mot de passe doit contenir au moins 8 caractères."; return; }
     if (next !== confirm) { byId("password-message").textContent = "Les deux nouveaux mots de passe ne correspondent pas."; return; }
-    account.credential = await makeCredential(next);
-    saveAccounts(accounts);
-    event.currentTarget.reset();
-    byId("password-message").textContent = "Votre mot de passe a été mis à jour sur cet appareil.";
+    const { error } = await db.auth.updateUser({ password: next });
+    byId("password-message").textContent = error ? "Le mot de passe n’a pas pu être mis à jour." : "Votre mot de passe a été mis à jour.";
+    if (!error) event.currentTarget.reset();
   });
-  byId("signout").addEventListener("click", () => {
+  byId("signout").addEventListener("click", async () => {
     stopCamera();
-    sessionStorage.removeItem("irgib-student-session");
-    sessionStorage.removeItem("irgib-student-email");
+    if (studentChannel) { await db.removeChannel(studentChannel); studentChannel = null; }
+    await db.auth.signOut();
+    currentUser = null; profile = null; application = null; attendanceRows = [];
     profile = null;
     setScreen("auth-screen");
     showAuthPage("login");
@@ -360,8 +355,9 @@
     const file = event.target.files?.[0];
     selectedPhoto = "";
     selectedPhotoName = "";
+    selectedPhotoBlob = null;
     if (!file) { byId("photo-preview").innerHTML = "<span>Aucune photo sélectionnée</span>"; return; }
-    if (!file.type.startsWith("image/")) { event.target.value = ""; byId("photo-preview").innerHTML = "<span>Choisissez un fichier image.</span>"; return; }
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024) { event.target.value = ""; byId("photo-preview").innerHTML = "<span>Choisissez une photo JPG, PNG ou WebP de 5 Mo maximum.</span>"; return; }
     selectedPhotoName = file.name;
     try {
       const bitmap = await createImageBitmap(file);
@@ -370,14 +366,19 @@
       canvas.width = Math.round(bitmap.width * scale);
       canvas.height = Math.round(bitmap.height * scale);
       canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close?.();
       selectedPhoto = canvas.toDataURL("image/jpeg", 0.82);
+      selectedPhotoBlob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.82));
     } catch {
-      selectedPhoto = await new Promise(resolve => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.readAsDataURL(file); });
+      try {
+        selectedPhoto = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error("Lecture de la photo impossible.")); reader.readAsDataURL(file); });
+        selectedPhotoBlob = file;
+      } catch (error) { selectedPhoto = ""; selectedPhotoBlob = null; byId("photo-preview").innerHTML = `<span>${esc(error.message)}</span>`; return; }
     }
     byId("photo-preview").innerHTML = `<img src="${selectedPhoto}" alt="Aperçu de la photo d’identité"><span>${esc(selectedPhotoName)}</span>`;
   });
 
-  byId("request-form").addEventListener("submit", event => {
+  byId("request-form").addEventListener("submit", async event => {
     event.preventDefault();
     if (!selectedPhoto) { byId("request-message").textContent = "Ajoutez une photo d’identité en tenue de l’école."; return; }
     const values = new FormData(event.currentTarget);
@@ -385,20 +386,32 @@
     const lastName = String(values.get("lastName")).trim();
     const safeName = /^[\p{L}\p{M} .’'-]+$/u;
     if (!safeName.test(firstName) || !safeName.test(lastName)) { byId("request-message").textContent = "Vérifiez le nom et le prénom : lettres, espaces, apostrophe ou trait d’union uniquement."; return; }
-    const applications = D.loadApplications();
-    const active = applications.find(item => item.email.toLowerCase() === profile.email.toLowerCase() && !item.archived && item.status !== "rejected");
-    if (active) { applicationSummary(active); return; }
-    const application = { id: `req-${crypto.randomUUID ? crypto.randomUUID() : Date.now()}`, firstName, lastName, email: profile.email, phone: String(values.get("phone")).trim(), sex: String(values.get("sex")), birthDate: String(values.get("birthDate")), program: String(values.get("program")), level: String(values.get("level")), site: String(values.get("site")), status: "pending", temporaryMatricule: D.makeTemporaryMatricule(applications), finalMatricule: "", photo: selectedPhoto, photoFileName: selectedPhotoName, submittedAt: new Date().toISOString(), demo: false };
-    applications.unshift(application);
-    D.saveApplications(applications);
-    profile = { ...profile, firstName, lastName, phone: application.phone, sex: application.sex, program: application.program, level: application.level, site: application.site };
-    D.saveProfile(profile);
-    selectedPhoto = "";
-    applicationSummary(application);
-    renderNotification(application);
-    renderProfile();
-    renderMyCard();
-    byId("request-status-box").innerHTML = `<span>Statut</span><strong>En attente</strong>`;
+    const button = event.currentTarget.querySelector('[type="submit"]'); button.disabled = true;
+    let photoPath = "";
+    try {
+      const details = { first_name: firstName, last_name: lastName, phone: String(values.get("phone")).trim(), sex: String(values.get("sex")), program: String(values.get("program")), level: String(values.get("level")), site: String(values.get("site")), birth_date: String(values.get("birthDate")) };
+      const { data: updatedProfile, error: profileError } = await db.rpc("student_update_profile", { p_first_name: details.first_name, p_last_name: details.last_name, p_phone: details.phone, p_sex: details.sex, p_program: details.program, p_level: details.level, p_site: details.site, p_birth_date: details.birth_date });
+      if (profileError) throw profileError;
+      profile = fromProfileRow(Array.isArray(updatedProfile) ? updatedProfile[0] : updatedProfile);
+      if (!selectedPhotoBlob) throw new Error("La photo n’a pas pu être préparée. Choisissez une autre image.");
+      const photoMime = selectedPhotoBlob.type || "image/jpeg";
+      const photoExtension = photoMime === "image/png" ? "png" : photoMime === "image/webp" ? "webp" : "jpg";
+      photoPath = `${currentUser.id}/${crypto.randomUUID()}.${photoExtension}`;
+      const { error: uploadError } = await db.storage.from("student-photos").upload(photoPath, selectedPhotoBlob, { contentType: photoMime, upsert: false });
+      if (uploadError) throw uploadError;
+      const payload = { student_id: currentUser.id, ...details, email: profile.email, photo_path: photoPath };
+      const { data: inserted, error: insertError } = await db.from("badge_applications").insert(payload).select("*").single();
+      if (insertError) throw insertError;
+      application = fromApplicationRow(inserted);
+      const { data: signed } = await db.storage.from("student-photos").createSignedUrl(photoPath, 600);
+      application.photo = signed?.signedUrl || "";
+      selectedPhoto = ""; selectedPhotoBlob = null;
+      applicationSummary(application); renderNotification(application); renderProfile(); renderMyCard(); renderAttendance();
+      byId("request-status-box").innerHTML = `<span>Statut</span><strong>En attente · ${esc(application.temporaryMatricule)}</strong>`;
+    } catch (error) {
+      if (photoPath) await db.storage.from("student-photos").remove([photoPath]);
+      byId("request-message").textContent = error.message || "La demande n’a pas pu être enregistrée. Vérifiez votre connexion puis réessayez.";
+    } finally { button.disabled = false; }
   });
 
   document.querySelectorAll(".student-tabs [data-student-view]").forEach(button => button.addEventListener("click", () => selectStudentView(button.dataset.studentView)));
@@ -408,17 +421,22 @@
     try { showAttendancePreview(decodeSession(byId("session-code").value)); byId("attendance-message").textContent = "Séance chargée. Vérifiez vos informations avant validation."; }
     catch (error) { byId("attendance-message").textContent = error.message; }
   });
-  byId("submit-attendance").addEventListener("click", () => {
+  byId("submit-attendance").addEventListener("click", async () => {
     if (!scannedSession) return;
-    const duplicate = D.loadAttendance().some(item => item.email.toLowerCase() === profile.email.toLowerCase() && item.day === D.todayKey() && item.sessionCode === scannedSession);
-    if (duplicate) { byId("attendance-message").textContent = "Votre présence à cette séance est déjà enregistrée aujourd’hui."; return; }
-    const app = getApplication();
-    const person = app || profile;
-    const item = { id: `attendance-${Date.now()}`, sessionCode: scannedSession, email: profile.email, firstName: person.firstName, lastName: person.lastName, matricule: app?.finalMatricule || app?.temporaryMatricule || "", program: person.program, level: person.level, site: person.site, day: D.todayKey(), createdAt: new Date().toISOString() };
-    D.saveAttendance([item, ...D.loadAttendance()]);
-    byId("attendance-message").textContent = "Présence validée et ajoutée à la liste du jour.";
-    byId("submit-attendance").disabled = true;
+    const button = byId("submit-attendance"); button.disabled = true;
+    byId("attendance-message").textContent = "Enregistrement sécurisé de votre présence…";
+    const { error } = await db.rpc("submit_attendance", { p_token: scannedSession });
+    if (error) {
+      byId("attendance-message").textContent = /déjà enregistrée/i.test(error.message) ? "Votre présence à cette séance est déjà enregistrée." : error.message || "Présence non enregistrée. Vérifiez que le QR est actif et correspond à votre groupe.";
+      button.disabled = false;
+      return;
+    }
+    byId("attendance-message").textContent = "Présence enregistrée dans la liste du jour.";
+    await loadStudentData();
+    scannedSession = "";
+    byId("attendance-preview").innerHTML = `<div class="muted small">Votre présence est enregistrée. Scannez le prochain QR de séance si nécessaire.</div>`;
     renderAttendance();
+    button.disabled = true;
   });
   byId("print-my-card").addEventListener("click", () => {
     document.body.classList.add("print-card-mode");
@@ -426,10 +444,19 @@
     setTimeout(() => document.body.classList.remove("print-card-mode"), 900);
   });
 
-  window.addEventListener("storage", event => {
-    if (event.key === "irgib-campus-applications-v2" && profile) activatePortal();
+  byId("back-to-signup").textContent = "Retour à la connexion";
+  db.auth.onAuthStateChange((event, session) => {
+    if (event === "SIGNED_OUT") { currentUser = null; profile = null; application = null; attendanceRows = []; setScreen("auth-screen"); showAuthPage("login"); }
+    else if (event === "SIGNED_IN" && session?.user && !currentUser) { currentUser = session.user; void activatePortal(); }
   });
-
-  if (profile && sessionStorage.getItem("irgib-student-session") === "active") activatePortal();
-  else setScreen("auth-screen");
+  db.auth.getSession().then(({ data, error }) => {
+    if (error) throw error;
+    currentUser = data.session?.user || null;
+    if (currentUser) void activatePortal(); else setScreen("auth-screen");
+  }).catch(() => { setScreen("auth-screen"); byId("login-message").textContent = "Connexion au service impossible. Rechargez la page ou contactez l’administration."; });
+  window.setInterval(async () => {
+    if (!currentUser || byId("portal-screen").style.display === "none") return;
+    try { await loadStudentData(); if (application) applicationSummary(application); renderNotification(application); renderMyCard(); }
+    catch { /* a short network interruption does not invalidate the signed-in session */ }
+  }, 30000);
 })();

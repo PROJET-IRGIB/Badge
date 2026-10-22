@@ -7,14 +7,44 @@
   let currentView = "dashboard";
   let reviewedId = "";
   let toastTimer;
-  const applications = () => D.loadApplications();
+  let applicationsCache = [];
+  let attendanceCache = [];
+  const applications = () => applicationsCache;
   const approved = () => applications().filter(item => item.status === "approved");
   const siteName = id => D.getSite(id).city;
   const programName = code => D.getProgram(code).shortName;
   const keyFor = item => D.groupKey(item.site, item.program, item.level);
+  const mapApplication = row => ({ id: row.id, studentId: row.student_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, birthDate: row.birth_date, program: row.program, level: row.level, site: row.site, status: row.status, temporaryMatricule: row.temporary_matricule, finalMatricule: row.final_matricule, photoPath: row.photo_path, photoFileName: row.photo_path.split("/").at(-1), rejectionReason: row.rejection_reason, submittedAt: row.submitted_at, approvedAt: row.decided_at });
+  async function loadAdminData() {
+    const rows = [];
+    for (let from = 0; ; from += 500) {
+      const { data, error } = await adminClient.from("badge_applications").select("*")
+        .order("submitted_at", { ascending: false }).order("id", { ascending: false }).range(from, from + 499);
+      if (error) throw error;
+      rows.push(...(data || []));
+      if (!data || data.length < 500) break;
+    }
+    const start = new Date(`${D.todayKey()}T00:00:00+01:00`).toISOString();
+    const end = new Date(`${D.todayKey()}T00:00:00+01:00`); end.setUTCDate(end.getUTCDate() + 1);
+    const records = [];
+    for (let from = 0; ; from += 500) {
+      const { data, error } = await adminClient.from("attendance_records")
+        .select("attended_at,session_id,student_profiles!inner(user_id,first_name,last_name,email,program,level,site),attendance_sessions!inner(site,program,level)")
+        .gte("attended_at", start).lt("attended_at", end.toISOString())
+        .order("attended_at", { ascending: false }).order("id", { ascending: false }).range(from, from + 499);
+      if (error) throw error;
+      records.push(...(data || []));
+      if (!data || data.length < 500) break;
+    }
+    const byStudent = new Map(applicationsCache.map(item => [item.studentId, item]));
+    attendanceCache = (records || []).map(row => {
+      const person = row.student_profiles; const app = byStudent.get(person.user_id);
+      return { createdAt: row.attended_at, day: D.todayKey(), sessionCode: row.session_id.slice(0, 8), firstName: person.first_name, lastName: person.last_name, email: person.email, matricule: app?.finalMatricule || app?.temporaryMatricule || "", program: person.program, level: person.level, site: person.site };
+    });
+  }
   const statusText = status => ({ pending: "En attente", approved: "Approuvée", rejected: "Rejetée" }[status] || status);
   const statusHtml = status => `<span class="status ${status === "approved" ? "active" : status === "rejected" ? "rejected" : "pending"}">${statusText(status)}</span>`;
-  const photoCell = item => item.photo ? `<img class="table-photo" src="${item.photo}" alt="Photo de ${esc(fullName(item))}">` : `<span class="table-photo photo-empty">—</span>`;
+  const photoCell = item => item.photo ? `<img class="table-photo" src="${esc(item.photo)}" alt="Photo de ${esc(fullName(item))}">` : `<span class="table-photo photo-empty">${item.photoPath ? "Photo" : "—"}</span>`;
 
   function toast(message) {
     const element = byId("toast");
@@ -41,7 +71,7 @@
     const pending = list.filter(item => item.status === "pending");
     const active = list.filter(item => item.status === "approved");
     const rejected = list.filter(item => item.status === "rejected");
-    const today = D.loadAttendance().filter(item => item.day === D.todayKey());
+    const today = attendanceCache.filter(item => item.day === D.todayKey());
     byId("dashboard-stats").innerHTML = [["Demandes en attente", pending.length, "À vérifier par l’administration", "◷"], ["Cartes approuvées", active.length, "Matricules définitifs attribués", "✓"], ["Demandes rejetées", rejected.length, "Décisions enregistrées", "×"], ["Présences aujourd’hui", today.length, D.todayKey(), "▦"]].map(([label, value, note, icon]) => `<article class="stat-card"><div class="stat-top"><span>${label}</span><span class="stat-icon">${icon}</span></div><div class="stat-value">${value}</div><div class="stat-note">${note}</div></article>`).join("");
     byId("today-attendance-summary").innerHTML = `<div class="attendance-count-big">${today.length}</div><p class="muted small">présence${today.length === 1 ? "" : "s"} validée${today.length === 1 ? "" : "s"} aujourd’hui</p>`;
     byId("pending-summary").innerHTML = pending.slice(0, 3).map(item => `<button class="quick-item" data-review="${esc(item.id)}" style="width:100%;text-align:left;background:#fff"><span class="q-icon">${photoCell(item)}</span><span><strong>${esc(fullName(item))}</strong><span>${esc(item.temporaryMatricule)} · ${esc(siteName(item.site))}</span></span></button>`).join("") || `<div class="muted small">Aucune demande en attente.</div>`;
@@ -62,7 +92,7 @@
   }
   function renderAttendance() {
     const query = (byId("attendance-search").value || "").trim().toLowerCase();
-    const all = D.loadAttendance().filter(item => item.day === D.todayKey());
+    const all = attendanceCache.filter(item => item.day === D.todayKey());
     const list = all.filter(item => [item.firstName, item.lastName, item.matricule, item.sessionCode, programName(item.program), siteName(item.site)].join(" ").toLowerCase().includes(query));
     byId("attendance-title").textContent = `Liste du ${D.todayKey()}`;
     byId("attendance-count").textContent = `${list.length} présence${list.length === 1 ? "" : "s"}`;
@@ -72,6 +102,38 @@
     byId("group-site").innerHTML = `<option value="">Toutes les villes</option>${D.sites.map(item => `<option value="${item.id}">${esc(item.city)}</option>`).join("")}`;
     byId("group-program").innerHTML = `<option value="">Toutes les filières</option>${D.programs.map(item => `<option value="${item.code}">${item.code} · ${esc(item.shortName)}</option>`).join("")}`;
     byId("group-level").innerHTML = `<option value="">Tous les niveaux</option>${D.levels.map(level => `<option value="${level}">${level}</option>`).join("")}`;
+  }
+  let activeSessionToken = "";
+  function initSessionForm() {
+    byId("session-site").innerHTML = D.sites.map(site => `<option value="${esc(site.id)}">${esc(site.city)}</option>`).join("");
+    byId("session-program").innerHTML = D.programs.map(program => `<option value="${esc(program.code)}">${esc(program.code)} · ${esc(program.shortName)}</option>`).join("");
+    byId("session-level").innerHTML = D.levels.map(level => `<option value="${esc(level)}">${esc(level)}</option>`).join("");
+    byId("session-create-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const button = byId("session-create-button"); button.disabled = true;
+      byId("session-create-message").textContent = "Création du code…";
+      try {
+        const { data, error } = await adminClient.rpc("admin_create_attendance_session", {
+          p_site: byId("session-site").value, p_program: byId("session-program").value,
+          p_level: byId("session-level").value, p_duration_minutes: Number(byId("session-duration").value)
+        });
+        if (error) throw error;
+        const session = Array.isArray(data) ? data[0] : data;
+        activeSessionToken = session.token;
+        const host = byId("session-qr-code"); host.replaceChildren();
+        if (!window.QRCode) throw new Error("Le générateur QR n’est pas chargé. Rechargez la page.");
+        new QRCode(host, { text: activeSessionToken, width: 220, height: 220, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+        byId("session-qr-info").textContent = `${siteName(session.site)} · ${programName(session.program)} · ${session.level} · expire à ${new Date(session.ends_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}. Gardez ce QR réservé au groupe sélectionné.`;
+        byId("session-qr-panel").hidden = false;
+        byId("session-create-message").textContent = "QR créé. Le code complet n’est affiché qu’ici.";
+      } catch (error) { byId("session-create-message").textContent = error.message || "La séance n’a pas pu être créée."; }
+      finally { button.disabled = false; }
+    });
+    byId("copy-session-token").addEventListener("click", async () => {
+      if (!activeSessionToken) return;
+      try { await navigator.clipboard.writeText(activeSessionToken); toast("Code de secours copié."); }
+      catch { toast("La copie automatique est bloquée par le navigateur."); }
+    });
   }
   function renderGroups() {
     const site = byId("group-site").value;
@@ -102,21 +164,24 @@
       { name: "Sexe M ou F", ok: ["M", "F"].includes(item.sex) },
       { name: "Filière et niveau renseignés", ok: Boolean(item.program && D.levels.includes(item.level)) },
       { name: "Site renseigné", ok: D.sites.some(site => site.id === item.site) },
-      { name: "Photo d’identité présente", ok: Boolean(item.photo) }
+      { name: "Photo d’identité présente", ok: Boolean(item.photoPath) }
     ];
     return { checks, ok: required.every(Boolean) && checks.every(check => check.ok) };
   }
-  function openReview(id) {
+  async function openReview(id) {
     const item = applications().find(application => application.id === id);
     if (!item) return;
+    const { data: signedPhoto, error: photoError } = await adminClient.storage.from("student-photos").createSignedUrl(item.photoPath, 600);
+    if (photoError || !signedPhoto?.signedUrl) { toast("La photo privée n’a pas pu être ouverte. Vérifiez l’accès au bucket student-photos."); return; }
+    item.photo = signedPhoto.signedUrl;
     reviewedId = id;
     const site = D.getSite(item.site);
     const report = auditReport(item);
     byId("review-title").textContent = fullName(item) || "Demande de badge";
     byId("review-subtitle").textContent = `Matricule temporaire ${item.temporaryMatricule} · reçue ${new Date(item.submittedAt).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" })}`;
-    byId("review-content").innerHTML = `<div class="review-grid"><div class="review-photo-wrap">${item.photo ? `<img class="review-photo" src="${item.photo}" alt="Photo d’identité de ${esc(fullName(item))}">` : `<div class="review-photo photo-missing">Photo d’identité<br>non fournie</div>`}<span class="field-help">${esc(item.photoFileName || "Aucun nom de fichier")}</span></div><div><h3>Renseignements soumis</h3><div class="review-info"><div><span>Nom</span><strong>${esc(item.lastName)}</strong></div><div><span>Prénom(s)</span><strong>${esc(item.firstName)}</strong></div><div><span>E-mail</span><strong>${esc(item.email)}</strong></div><div><span>Téléphone</span><strong>${esc(item.phone)}</strong></div><div><span>Sexe</span><strong>${esc(item.sex)}</strong></div><div><span>Naissance</span><strong>${esc(item.birthDate || "—")}</strong></div><div><span>Filière</span><strong>${esc(D.getProgram(item.program).name)}</strong></div><div><span>Niveau</span><strong>${esc(item.level)}</strong></div><div><span>Ville / site</span><strong>${esc(site.city)}</strong></div><div><span>Clé du groupe</span><strong>${esc(keyFor(item))}</strong></div><div><span>Matricule temporaire</span><strong>${esc(item.temporaryMatricule)}</strong></div></div></div></div><div class="audit-box"><div class="audit-heading"><div><div class="eyebrow">Rapport de vérification</div><h3>Contrôles du dossier</h3></div><span class="status ${report.ok ? "active" : "pending"}">${report.ok ? "Prêt à valider" : "À corriger"}</span></div><div class="audit-list">${report.checks.map(check => `<div class="audit-check ${check.ok ? "pass" : "fail"}"><span>${check.ok ? "✓" : "!"}</span>${esc(check.name)}</div>`).join("")}</div><p class="small muted" style="margin:10px 0 0">Le rapport aide au contrôle : l’approbation reste une décision de l’administration. Le matricule final doit être unique, tous sites et promotions confondus.</p></div>${item.status === "rejected" ? `<div class="notice" style="margin-top:12px"><strong>Motif enregistré :</strong> ${esc(item.rejectionReason || "—")}</div>` : ""}`;
+    byId("review-content").innerHTML = `<div class="review-grid"><div class="review-photo-wrap">${item.photo ? `<img class="review-photo" src="${esc(item.photo)}" alt="Photo d’identité de ${esc(fullName(item))}">` : `<div class="review-photo photo-missing">Photo d’identité<br>non fournie</div>`}<span class="field-help">${esc(item.photoFileName || "Aucun nom de fichier")}</span></div><div><h3>Renseignements soumis</h3><div class="review-info"><div><span>Nom</span><strong>${esc(item.lastName)}</strong></div><div><span>Prénom(s)</span><strong>${esc(item.firstName)}</strong></div><div><span>E-mail</span><strong>${esc(item.email)}</strong></div><div><span>Téléphone</span><strong>${esc(item.phone)}</strong></div><div><span>Sexe</span><strong>${esc(item.sex)}</strong></div><div><span>Naissance</span><strong>${esc(item.birthDate || "—")}</strong></div><div><span>Filière</span><strong>${esc(D.getProgram(item.program).name)}</strong></div><div><span>Niveau</span><strong>${esc(item.level)}</strong></div><div><span>Ville / site</span><strong>${esc(site.city)}</strong></div><div><span>Clé du groupe</span><strong>${esc(keyFor(item))}</strong></div><div><span>Matricule temporaire</span><strong>${esc(item.temporaryMatricule)}</strong></div></div></div></div><div class="audit-box"><div class="audit-heading"><div><div class="eyebrow">Rapport de vérification</div><h3>Contrôles du dossier</h3></div><span class="status ${report.ok ? "active" : "pending"}">${report.ok ? "Prêt à valider" : "À corriger"}</span></div><div class="audit-list">${report.checks.map(check => `<div class="audit-check ${check.ok ? "pass" : "fail"}"><span>${check.ok ? "✓" : "!"}</span>${esc(check.name)}</div>`).join("")}</div><p class="small muted" style="margin:10px 0 0">Le rapport aide au contrôle : l’approbation reste une décision de l’administration. Le matricule final doit être unique, tous sites et promotions confondus.</p></div>${item.status === "rejected" ? `<div class="notice" style="margin-top:12px"><strong>Motif enregistré :</strong> ${esc(item.rejectionReason || "—")}</div>` : ""}`;
     if (item.status === "pending") {
-      byId("review-actions").innerHTML = `<label class="manual-photo-check"><input type="checkbox" id="photo-check" ${report.ok ? "" : "disabled"}><span>J’ai vérifié visuellement la tenue de l’école, la netteté de la photo, le visage visible et les cheveux bien peignés.</span></label><div class="field full"><label for="reject-reason">Motif de rejet (facultatif)</label><textarea id="reject-reason" rows="2" placeholder="Expliquez brièvement la décision afin que l’étudiant sache quoi faire."></textarea></div><div class="review-buttons"><button class="btn danger" id="reject-request" type="button">Rejeter la demande</button><button class="btn" id="approve-request" type="button" disabled>Valider et attribuer le matricule</button></div><span class="field-help">Après approbation ou rejet, la demande ne revient pas à l’état « en attente ».</span>`;
+      byId("review-actions").innerHTML = `<label class="manual-photo-check"><input type="checkbox" id="photo-check" ${report.ok ? "" : "disabled"}><span>J’ai vérifié visuellement la tenue de l’école, la netteté de la photo, le visage visible et les cheveux bien peignés.</span></label><div class="field full"><label for="reject-reason">Motif de rejet (obligatoire pour rejeter)</label><textarea id="reject-reason" rows="2" placeholder="Expliquez brièvement la décision afin que l’étudiant sache quoi faire."></textarea></div><div class="review-buttons"><button class="btn danger" id="reject-request" type="button">Rejeter la demande</button><button class="btn" id="approve-request" type="button" disabled>Valider et attribuer le matricule</button></div><span class="field-help">Après approbation ou rejet, la demande ne revient pas à l’état « en attente ».</span>`;
       byId("photo-check").addEventListener("change", event => { byId("approve-request").disabled = !event.target.checked || !report.ok; });
       byId("approve-request").addEventListener("click", approveRequest);
       byId("reject-request").addEventListener("click", rejectRequest);
@@ -126,36 +191,43 @@
     }
     byId("review-modal").classList.add("open");
   }
-  function approveRequest() {
+  async function approveRequest() {
     const list = applications();
     const item = list.find(application => application.id === reviewedId);
     if (!item || item.status !== "pending") return;
     const report = auditReport(item);
     if (!report.ok || !byId("photo-check")?.checked) { toast("Terminez les contrôles et confirmez la vérification visuelle de la photo."); return; }
-    try { item.finalMatricule = D.makeFinalMatricule(list); }
-    catch { toast("Plus de matricules disponibles dans le format actuel."); return; }
-    item.status = "approved";
-    item.approvedAt = new Date().toISOString();
-    D.saveApplications(list);
+    const button = byId("approve-request"); button.disabled = true;
+    const { data, error } = await adminClient.rpc("admin_decide_application", { p_application_id: item.id, p_decision: "approved", p_reason: null });
+    if (error) { button.disabled = false; toast(error.message || "La décision n’a pas pu être enregistrée."); return; }
     closeReview();
-    refreshCurrent();
-    toast(`Demande approuvée · ${item.finalMatricule}. Notification étudiante créée.`);
+    await refreshCurrent();
+    const decided = Array.isArray(data) ? data[0] : data;
+    toast(`Demande approuvée · ${decided.final_matricule}.`);
   }
-  function rejectRequest() {
+  async function rejectRequest() {
     const list = applications();
     const item = list.find(application => application.id === reviewedId);
     if (!item || item.status !== "pending") return;
-    item.status = "rejected";
-    item.rejectionReason = byId("reject-reason").value.trim() || "Demande rejetée. Contactez l’administration de votre site d’apprentissage pour connaître la suite.";
-    item.rejectedAt = new Date().toISOString();
-    D.saveApplications(list);
+    const reason = byId("reject-reason").value.trim();
+    if (!reason) { toast("Indiquez un motif de rejet pour informer l’étudiant."); byId("reject-reason").focus(); return; }
+    const button = byId("reject-request"); button.disabled = true;
+    const { error } = await adminClient.rpc("admin_decide_application", { p_application_id: item.id, p_decision: "rejected", p_reason: reason });
+    if (error) { button.disabled = false; toast(error.message || "Le rejet n’a pas pu être enregistré."); return; }
     closeReview();
-    refreshCurrent();
+    await refreshCurrent();
     toast(`Demande rejetée · ${item.temporaryMatricule}.`);
   }
   function closeReview() { byId("review-modal").classList.remove("open"); reviewedId = ""; }
-  function refreshCurrent() { renderDashboard(); if (currentView === "requests") renderRequests(); if (currentView === "students") renderStudents(); if (currentView === "attendance") renderAttendance(); if (currentView === "groups") renderGroups(); if (currentView === "cards") renderCards(); }
-  function drawAdminCard(item) {
+  async function refreshCurrent() {
+    try { await loadAdminData(); }
+    catch (error) { toast(error.message || "Les données ne sont pas joignables. Réessayez."); return; }
+    renderDashboard(); if (currentView === "requests") renderRequests(); if (currentView === "students") renderStudents(); if (currentView === "attendance") renderAttendance(); if (currentView === "groups") renderGroups(); if (currentView === "cards") renderCards();
+  }
+  async function drawAdminCard(item) {
+    const { data: signedPhoto, error } = await adminClient.storage.from("student-photos").createSignedUrl(item.photoPath, 600);
+    if (error || !signedPhoto?.signedUrl) { toast("La photo privée ne peut pas être chargée pour cette carte."); return; }
+    item.photo = signedPhoto.signedUrl;
     byId("admin-card-zone").innerHTML = D.cardHtml(item, "admin-card-qr");
     if (window.QRCode) new QRCode(byId("admin-card-qr"), { text: `IRGIB-CARTE:${item.finalMatricule}`, width: 128, height: 128, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
     else byId("admin-card-qr").innerHTML = '<div class="qr-fallback">QR indisponible</div>';
@@ -170,7 +242,7 @@
       const counts = approved().reduce((memo, item) => { const key = keyFor(item); memo[key] = (memo[key] || 0) + 1; return memo; }, {});
       rows = [["cle_groupe", "ville", "code_filiere", "filiere", "niveau", "effectif"], ...D.allGroups().map(group => [group.key, siteName(group.site), group.program, programName(group.program), group.level, counts[group.key] || 0])]; filename = "groupes-irgib.csv";
     } else if (kind === "attendance") {
-      rows = [["date", "heure", "etudiant", "matricule", "seance_qr", "filiere", "niveau", "ville"], ...D.loadAttendance().filter(item => item.day === D.todayKey()).map(item => [item.day, new Date(item.createdAt).toLocaleTimeString("fr-FR"), `${item.firstName} ${item.lastName}`, item.matricule, item.sessionCode, programName(item.program), item.level, siteName(item.site)])]; filename = "presences-jour.csv";
+      rows = [["date", "heure", "etudiant", "matricule", "seance_qr", "filiere", "niveau", "site"], ...attendanceCache.map(item => [item.day, new Date(item.createdAt).toLocaleTimeString("fr-FR"), `${item.firstName} ${item.lastName}`, item.matricule, item.sessionCode, programName(item.program), item.level, siteName(item.site)])]; filename = "presences-jour.csv";
     } else {
       rows = [["matricule_final", "matricule_temporaire", "nom", "prenom", "email", "sexe", "code_filiere", "filiere", "niveau", "ville", "groupe"], ...approved().map(item => [item.finalMatricule, item.temporaryMatricule, item.lastName, item.firstName, item.email, item.sex, item.program, programName(item.program), item.level, siteName(item.site), keyFor(item)])]; filename = "etudiants-irgib.csv";
     }
@@ -202,9 +274,9 @@
     document.addEventListener("click", event => {
       const target = event.target instanceof Element ? event.target : event.target?.parentElement;
       const review = target?.closest("[data-review]");
-      if (review) openReview(review.dataset.review);
+      if (review) void openReview(review.dataset.review);
       const preview = target?.closest("[data-preview-card]");
-      if (preview) { const item = approved().find(application => application.id === preview.dataset.previewCard); if (item) drawAdminCard(item); }
+      if (preview) { const item = approved().find(application => application.id === preview.dataset.previewCard); if (item) void drawAdminCard(item); }
       const exportButton = target?.closest("[data-export]");
       if (exportButton) exportCsv(exportButton.dataset.export);
     });
@@ -217,6 +289,7 @@
       if (["irgib-campus-applications-v2", "irgib-campus-attendance-v2"].includes(event.key)) refreshCurrent();
     });
     initGroupFilters();
+    initSessionForm();
     renderDashboard();
   }
   async function authorizeAdmin(session) {
@@ -228,16 +301,25 @@
       showAdminGate("Ce compte n’est pas autorisé à accéder à l’administration.");
       return false;
     }
+    try { await loadAdminData(); }
+    catch (error) {
+      showAdminGate("Base de données indisponible. Appliquez les migrations Supabase et vérifiez les autorisations RLS avant de réessayer.");
+      return false;
+    }
     byId("admin-user-label").textContent = session.user.email || "Administration";
     byId("admin-auth-screen").hidden = true;
     byId("admin-app").hidden = false;
     initAdminApp();
+    adminClient.channel("irgib-admin-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "badge_applications" }, () => { void refreshCurrent(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "attendance_records" }, () => { void refreshCurrent(); })
+      .subscribe();
     return true;
   }
   async function bootAdminAuth() {
     const config = window.IRGIB_SUPABASE_CONFIG;
     if (!config?.url || !config?.anonKey) {
-      showAdminGate("L’accès admin est verrouillé. Configurez l’URL Supabase et la clé publique dans assets/supabase-config.js, puis ajoutez le compte à admin_members.");
+      showAdminGate("L’accès admin est verrouillé. Configurez les variables Supabase du projet Vercel et autorisez le compte dans admin_members.");
       return;
     }
     if (!window.supabase?.createClient) { showAdminGate("Le service d’authentification n’a pas pu se charger. Vérifiez la connexion Internet puis rechargez la page."); return; }
