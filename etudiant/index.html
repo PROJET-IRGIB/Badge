@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#17394b">
-  <title>Espace étudiant · IRGIB AFRICA</title><link rel="stylesheet" href="../assets/styles.css">
+  <title>Espace étudiant · IRGIB AFRICA</title><link rel="stylesheet" href="../assets/styles.css?v=20261022c">
 </head>
 <body>
   <header class="topbar"><a class="brand" href="./"><img src="../assets/blason.jpg" alt="Blason IRGIB AFRICA"><span>IRGIB AFRICA<small>Portail étudiant</small></span></a><div class="top-actions"><span class="pill"><span class="dot"></span> Maquette locale</span><button id="signout" class="btn ghost sm" style="display:none">Déconnexion</button></div></header>
@@ -54,6 +54,7 @@
               <div class="field"><label for="request-first">Prénom(s)</label><input id="request-first" name="firstName" required maxlength="50"></div>
               <div class="field"><label for="request-last">Nom</label><input id="request-last" name="lastName" required maxlength="50"></div>
               <div class="field"><label for="request-sex">Sexe</label><select id="request-sex" name="sex" required><option value="F">F</option><option value="M">M</option></select></div>
+              <div class="field"><label for="request-birth">Date de naissance</label><input id="request-birth" name="birthDate" type="date" required></div>
               <div class="field"><label for="request-phone">Téléphone</label><input id="request-phone" name="phone" inputmode="tel" required></div>
               <div class="field"><label for="request-program">Filière</label><select id="request-program" name="program" required></select></div>
               <div class="field"><label for="request-level">Niveau d’étude</label><select id="request-level" name="level" required></select></div>
@@ -79,9 +80,9 @@
     </section>
   </main>
   <footer class="footer"><span>IRGIB AFRICA · Espace étudiant</span><a href="https://irgibafrica.university/catalogue-formations.html" target="_blank" rel="noreferrer">Catalogue officiel des formations ↗</a></footer>
-  <script src="../assets/catalog.js"></script>
+  <script src="../assets/catalog.js?v=20261022c"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-  <script src="../etudiant/student.js"></script>
+  <script src="../etudiant/student.js?v=20261022c"></script>
 </body>
 </html>
