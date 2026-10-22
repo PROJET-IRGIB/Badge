@@ -215,6 +215,7 @@ drop policy if exists "read own attendance or admin" on public.attendance_record
 create policy "read own attendance or admin" on public.attendance_records for select to authenticated
   using(student_id=(select auth.uid()) or (select public.is_admin()));
 drop policy if exists "admins read sessions" on public.attendance_sessions;
+drop policy if exists "admins or attending students read sessions" on public.attendance_sessions;
 create policy "admins or attending students read sessions" on public.attendance_sessions for select to authenticated
   using((select public.is_admin()) or exists(
     select 1 from public.attendance_records r where r.session_id=id and r.student_id=(select auth.uid())
