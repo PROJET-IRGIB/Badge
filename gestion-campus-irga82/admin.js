@@ -349,8 +349,18 @@
       if (error) throw error;
       const authorized = await authorizeAdmin(data.session);
       if (!authorized) byId("admin-password").value = "";
-    } catch {
-      byId("admin-auth-message").textContent = "Connexion refusée. Vérifiez vos identifiants ou contactez l’administrateur du projet.";
+    } catch (error) {
+      const code = String(error?.code || "");
+      const message = String(error?.message || "").toLowerCase();
+      if (code === "email_not_confirmed" || message.includes("email not confirmed")) {
+        byId("admin-auth-message").textContent = "Cette adresse e-mail n’est pas encore confirmée dans Supabase.";
+      } else if (code === "invalid_credentials" || message.includes("invalid login credentials")) {
+        byId("admin-auth-message").textContent = "Adresse e-mail ou mot de passe incorrect. Vérifiez le compte créé dans Supabase.";
+      } else if (code === "user_not_found" || message.includes("user not found")) {
+        byId("admin-auth-message").textContent = "Aucun compte Supabase ne correspond à cette adresse e-mail.";
+      } else {
+        byId("admin-auth-message").textContent = "Connexion refusée : " + (error?.message || "erreur Supabase inconnue");
+      }
     } finally { button.disabled = false; }
   });
   bootAdminAuth();
