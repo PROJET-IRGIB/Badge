@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#17394b">
+  <title>Espace étudiant · IRGIB AFRICA</title><link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="./"><img src="../assets/blason.jpg" alt="Blason IRGIB AFRICA"><span>IRGIB AFRICA<small>Portail étudiant</small></span></a><div class="top-actions"><span class="pill"><span class="dot"></span> Maquette locale</span><button id="signout" class="btn ghost sm" style="display:none">Déconnexion</button></div></header>
+
+  <main class="content">
+    <div class="notice" style="margin-bottom:18px"><strong>Version de démonstration.</strong> L’envoi de courriel, la connexion, la photo et la présence restent dans ce navigateur; aucun message ni dossier n’est transmis à IRGIB AFRICA.</div>
+
+    <section id="auth-screen" class="panel auth-panel">
+      <div class="eyebrow">Portail étudiant</div><h1 id="auth-title">Connexion</h1><p id="auth-intro" class="subhead">Connectez-vous avec l’adresse e-mail et le mot de passe utilisés lors de votre inscription.</p>
+      <nav class="auth-switch" aria-label="Connexion ou inscription"><button id="show-login" class="active" type="button">Connexion</button><button id="show-signup" type="button">Inscription</button></nav>
+      <section id="login-panel" class="auth-page">
+        <form id="login-form"><div class="form-grid auth-single-column">
+          <div class="field"><label for="login-email">Adresse e-mail</label><input id="login-email" name="email" type="email" required autocomplete="email"></div>
+          <div class="field"><label for="login-password">Mot de passe</label><input id="login-password" name="password" type="password" required autocomplete="current-password"></div>
+        </div><div class="form-actions"><button class="btn" type="submit">Me connecter</button><span id="login-message" class="form-message" aria-live="polite"></span></div></form>
+        <p class="field-help auth-switch-hint">Vous n’avez pas encore de compte ? <button class="text-button" type="button" data-open-signup>Créer un compte</button></p>
+      </section>
+      <section id="signup-panel" class="auth-page" style="display:none">
+      <div class="eyebrow">Nouvel étudiant</div><h2>Créer mon compte</h2><p class="subhead">Renseignez vos informations, puis confirmez votre adresse e-mail.</p>
+      <form id="signup-form"><div class="form-grid">
+        <div class="field"><label for="signup-first">Prénom(s)</label><input id="signup-first" name="firstName" required maxlength="50" autocomplete="given-name"></div>
+        <div class="field"><label for="signup-last">Nom</label><input id="signup-last" name="lastName" required maxlength="50" autocomplete="family-name"></div>
+        <div class="field"><label for="signup-email">Adresse e-mail</label><input id="signup-email" name="email" type="email" required autocomplete="email"></div>
+        <div class="field"><label for="signup-password">Mot de passe</label><input id="signup-password" name="password" type="password" required minlength="8" autocomplete="new-password"><span class="field-help">8 caractères minimum pour la maquette.</span></div>
+        <div class="field"><label for="signup-sex">Sexe</label><select id="signup-sex" name="sex" required><option value="">Choisir</option><option value="F">F</option><option value="M">M</option></select></div>
+        <div class="field"><label for="signup-phone">Téléphone</label><input id="signup-phone" name="phone" inputmode="tel" placeholder="+229 01 …"></div>
+        <div class="field"><label for="signup-program">Filière</label><select id="signup-program" name="program" required></select></div>
+        <div class="field"><label for="signup-level">Niveau d’étude</label><select id="signup-level" name="level" required></select></div>
+        <div class="field"><label for="signup-site">Ville / site d’apprentissage</label><select id="signup-site" name="site" required></select></div>
+      </div><div class="form-actions"><button class="btn" type="submit">Continuer l’inscription</button><span id="signup-message" class="form-message" aria-live="polite"></span></div></form>
+      <p class="field-help auth-switch-hint">Vous avez déjà un compte ? <button class="text-button" type="button" data-open-login>Me connecter</button></p>
+      </section>
+    </section>
+
+    <section id="verify-screen" class="panel auth-panel" style="display:none;max-width:620px;margin:auto">
+      <div class="eyebrow">Confirmation de l’adresse</div><h1>Vérifier mon e-mail</h1><p class="subhead">Saisissez le code de confirmation. En production, il sera envoyé dans votre boîte mail.</p>
+      <form id="verify-form"><div class="field"><label for="verify-code">Code à 6 chiffres</label><input id="verify-code" inputmode="numeric" maxlength="6" required placeholder="000000"></div><p id="demo-code-note" class="notice" style="margin:14px 0"></p><div class="form-actions"><button class="btn" type="submit">Confirmer mon adresse</button><button class="btn secondary" type="button" id="back-to-signup">Retour</button></div></form>
+    </section>
+
+    <section id="portal-screen" style="display:none">
+      <div class="portal-hero compact-hero"><div><div class="eyebrow">Espace étudiant</div><h1>Bonjour <span id="hello-name">Étudiant</span></h1><p>Suivez votre demande de carte, votre profil et vos présences depuis le même espace.</p></div><div class="hero-mark"><img src="../assets/blason.jpg" alt="Blason de l’université"></div></div>
+      <div id="notification-banner" class="notice notification-banner" style="display:none;margin-top:15px"></div>
+      <nav class="student-tabs" aria-label="Espace étudiant"><button class="active" data-student-view="request">Ma demande</button><button data-student-view="attendance">Présences</button><button data-student-view="card">Ma carte</button><button data-student-view="profile">Profil</button></nav>
+
+      <section class="student-view active" id="student-view-request"><div class="portal-grid student-main-grid">
+        <div class="panel"><div class="panel-head"><div><div class="eyebrow">Carte étudiant</div><h2>Ma demande de badge</h2><p>Vérifiez soigneusement les champs avant l’envoi.</p></div></div>
+          <div id="request-form-wrap"><div class="notice quality-notice"><strong>À respecter :</strong> utilisez vos vrais noms et prénoms sans caractères décoratifs; relisez chaque information avant l’envoi. La photo doit être une photo d’identité nette, prise en tenue de l’école, avec les cheveux bien peignés et le visage visible.</div>
+            <form id="request-form" style="margin-top:16px"><div class="form-grid">
+              <div class="field"><label for="request-first">Prénom(s)</label><input id="request-first" name="firstName" required maxlength="50"></div>
+              <div class="field"><label for="request-last">Nom</label><input id="request-last" name="lastName" required maxlength="50"></div>
+              <div class="field"><label for="request-sex">Sexe</label><select id="request-sex" name="sex" required><option value="F">F</option><option value="M">M</option></select></div>
+              <div class="field"><label for="request-phone">Téléphone</label><input id="request-phone" name="phone" inputmode="tel" required></div>
+              <div class="field"><label for="request-program">Filière</label><select id="request-program" name="program" required></select></div>
+              <div class="field"><label for="request-level">Niveau d’étude</label><select id="request-level" name="level" required></select></div>
+              <div class="field"><label for="request-site">Ville / site</label><select id="request-site" name="site" required></select></div>
+              <div class="field full"><label for="request-photo">Photo d’identité en tenue de l’école</label><input id="request-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" required><span class="field-help">Photo nette, de face, en tenue de l’école; cheveux bien peignés. Formats JPG, PNG ou WebP.</span><div class="photo-preview" id="photo-preview"><span>Aucune photo sélectionnée</span></div></div>
+            </div><div class="form-actions"><button class="btn" type="submit">Envoyer ma demande</button><span id="request-message" class="form-message" aria-live="polite"></span></div></form>
+          </div>
+          <div id="request-readonly" style="display:none"></div>
+        </div>
+        <aside class="panel"><div class="eyebrow">Avant l’envoi</div><h2>Relisez tout</h2><p class="muted small" style="line-height:1.6">Après l’envoi, les informations deviennent en lecture seule. Si vous remarquez une erreur, contactez l’administration de votre site d’apprentissage dans les 24 heures, avant l’approbation, pour demander une correction.</p><div id="request-status-box" class="info-row"><span>Statut</span><strong>Pas encore envoyée</strong></div><div class="info-row"><span>Matricule</span><strong>Attribué à l’envoi</strong></div><div class="info-row"><span>Validation</span><strong>Par l’administration</strong></div></aside>
+      </div></section>
+
+      <section class="student-view" id="student-view-attendance"><div class="panel"><div class="panel-head"><div><div class="eyebrow">Présence du jour</div><h2>Scanner le QR de présence</h2><p>Scannez le code de la séance, vérifiez les informations préremplies, puis validez votre présence.</p></div></div>
+        <div class="notice"><strong>Votre identité est préremplie.</strong> Aucune identification d’enseignant n’est demandée dans l’espace étudiant.</div>
+        <div class="attendance-grid"><div><div class="scanner-frame"><video id="camera-video" playsinline muted></video><div class="scanner-placeholder" id="scanner-placeholder"><div class="scan-icon">▦</div><strong>Lecteur QR</strong><span>Autorisez la caméra pour scanner le code de la séance.</span></div></div><div class="form-actions"><button class="btn" id="start-scan" type="button">Ouvrir le scanner</button><button class="btn secondary" id="stop-scan" type="button" style="display:none">Fermer la caméra</button></div><p class="field-help">Si la caméra n’est pas disponible, saisissez le code inscrit dans le QR ci-dessous.</p><div class="field"><label for="session-code">Code de séance (solution de secours)</label><input id="session-code" placeholder="Ex. SEANCE-2026-10-22-AB12"></div><button class="btn secondary sm" id="load-session" type="button" style="margin-top:10px">Charger le code</button></div>
+          <div><div class="eyebrow">Informations de présence</div><div class="attendance-preview" id="attendance-preview"><div class="muted small">Scannez ou saisissez un QR de séance pour préremplir cette fiche.</div></div><button class="btn" id="submit-attendance" type="button" disabled style="margin-top:14px">Valider ma présence</button><p id="attendance-message" class="form-message" aria-live="polite"></p></div></div>
+        <div class="section-title"><div><div class="eyebrow">Aujourd’hui</div><h2>Mes présences validées</h2></div><span class="pill" id="today-label"></span></div><div class="table-panel"><div class="table-scroll"><table><thead><tr><th>Heure</th><th>Séance</th><th>Filière · niveau</th><th>Ville / site</th><th>Statut</th></tr></thead><tbody id="my-attendance-rows"></tbody></table></div></div>
+      </div></section>
+
+      <section class="student-view" id="student-view-card"><div class="portal-grid student-main-grid"><div class="panel"><div class="panel-head"><div><div class="eyebrow">Carte étudiante</div><h2>Ma carte</h2><p>Votre carte recto-verso s’affiche après approbation par l’administration.</p></div></div><div id="my-card-status"></div><div class="student-card-wrap print-zone" id="student-card-zone" style="display:none"></div><div class="print-actions no-print" id="card-print-actions" style="display:none;margin-top:14px"><span class="small muted">85,60 × 53,98 mm · épaisseur 0,76 mm · impression recto-verso</span><button class="btn secondary sm" id="print-my-card" type="button">Imprimer recto-verso</button></div></div><aside class="panel"><div class="eyebrow">Informations complémentaires</div><h2>Contacts de mon site</h2><div id="my-site-info"></div><p class="field-help" style="margin-top:12px">Les coordonnées du site figurent aussi au verso de la carte.</p><div class="info-row"><span>Dimensions</span><strong>85,60 × 53,98 mm</strong></div><div class="info-row"><span>Épaisseur</span><strong>0,76 mm</strong></div></aside></div></section>
+
+      <section class="student-view" id="student-view-profile"><div class="panel profile-panel"><div class="panel-head"><div><div class="eyebrow">Mon compte</div><h2>Profil</h2><p>Vos renseignements personnels et votre inscription.</p></div></div><div id="profile-details"></div><div class="notice" style="margin-top:16px">Après l’envoi de la demande de badge, ces informations sont en lecture seule. Pour demander une correction avant approbation, rapprochez-vous de l’administration de votre site dans les 24 heures.</div><div class="account-security"><div class="eyebrow">Sécurité du compte</div><h3>Changer mon mot de passe</h3><form id="password-form"><div class="form-grid"><div class="field"><label for="current-password">Mot de passe actuel</label><input id="current-password" type="password" required autocomplete="current-password"></div><div class="field"><label for="new-password">Nouveau mot de passe</label><input id="new-password" type="password" required minlength="8" autocomplete="new-password"><span class="field-help">8 caractères minimum.</span></div><div class="field"><label for="confirm-password">Confirmer le nouveau mot de passe</label><input id="confirm-password" type="password" required minlength="8" autocomplete="new-password"></div></div><div class="form-actions"><button class="btn secondary" type="submit">Mettre à jour mon mot de passe</button><span id="password-message" class="form-message" aria-live="polite"></span></div></form></div></div></section>
+    </section>
+  </main>
+  <footer class="footer"><span>IRGIB AFRICA · Espace étudiant</span><a href="https://irgibafrica.university/catalogue-formations.html" target="_blank" rel="noreferrer">Catalogue officiel des formations ↗</a></footer>
+  <script src="../assets/catalog.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <script src="../etudiant/student.js"></script>
+</body>
+</html>
