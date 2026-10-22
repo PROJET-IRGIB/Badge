@@ -24,6 +24,7 @@
       rows.push(...(data || []));
       if (!data || data.length < 500) break;
     }
+    applicationsCache = rows.map(mapApplication);
     const start = new Date(`${D.todayKey()}T00:00:00+01:00`).toISOString();
     const end = new Date(`${D.todayKey()}T00:00:00+01:00`); end.setUTCDate(end.getUTCDate() + 1);
     const records = [];
@@ -39,7 +40,7 @@
     const byStudent = new Map(applicationsCache.map(item => [item.studentId, item]));
     attendanceCache = (records || []).map(row => {
       const person = row.student_profiles; const app = byStudent.get(person.user_id);
-      return { createdAt: row.attended_at, day: D.todayKey(), sessionCode: row.session_id.slice(0, 8), firstName: person.first_name, lastName: person.last_name, email: person.email, matricule: app?.finalMatricule || app?.temporaryMatricule || "", program: person.program, level: person.level, site: person.site };
+      return { studentId: person.user_id, createdAt: row.attended_at, day: D.todayKey(), sessionCode: row.session_id.slice(0, 8), firstName: person.first_name, lastName: person.last_name, email: person.email, matricule: app?.finalMatricule || app?.temporaryMatricule || "", program: person.program, level: person.level, site: person.site };
     });
   }
   const statusText = status => ({ pending: "En attente", approved: "Approuvée", rejected: "Rejetée" }[status] || status);
@@ -72,7 +73,7 @@
     const active = list.filter(item => item.status === "approved");
     const rejected = list.filter(item => item.status === "rejected");
     const today = attendanceCache.filter(item => item.day === D.todayKey());
-    byId("dashboard-stats").innerHTML = [["Demandes en attente", pending.length, "À vérifier par l’administration", "◷"], ["Cartes approuvées", active.length, "Matricules définitifs attribués", "✓"], ["Demandes rejetées", rejected.length, "Décisions enregistrées", "×"], ["Présences aujourd’hui", today.length, D.todayKey(), "▦"]].map(([label, value, note, icon]) => `<article class="stat-card"><div class="stat-top"><span>${label}</span><span class="stat-icon">${icon}</span></div><div class="stat-value">${value}</div><div class="stat-note">${note}</div></article>`).join("");
+    byId("dashboard-stats").innerHTML = [["Demandes en attente", pending.length, "À vérifier par l’administration"], ["Cartes approuvées", active.length, "Matricules définitifs attribués"], ["Demandes rejetées", rejected.length, "Décisions enregistrées"], ["Présences aujourd’hui", today.length, D.todayKey()]].map(([label, value, note]) => `<article class="stat-card"><div class="stat-top"><span>${label}</span></div><div class="stat-value">${value}</div><div class="stat-note">${note}</div></article>`).join("");
     byId("today-attendance-summary").innerHTML = `<div class="attendance-count-big">${today.length}</div><p class="muted small">présence${today.length === 1 ? "" : "s"} validée${today.length === 1 ? "" : "s"} aujourd’hui</p>`;
     byId("pending-summary").innerHTML = pending.slice(0, 3).map(item => `<button class="quick-item" data-review="${esc(item.id)}" style="width:100%;text-align:left;background:#fff"><span class="q-icon">${photoCell(item)}</span><span><strong>${esc(fullName(item))}</strong><span>${esc(item.temporaryMatricule)} · ${esc(siteName(item.site))}</span></span></button>`).join("") || `<div class="muted small">Aucune demande en attente.</div>`;
     byId("recent-rows").innerHTML = requestTableRows(list.slice(0, 5), true);
@@ -90,18 +91,72 @@
     byId("student-count").textContent = `${list.length} étudiant${list.length === 1 ? "" : "s"}`;
     byId("student-rows").innerHTML = list.map(item => `<tr><td>${photoCell(item)}</td><td><strong>${esc(fullName(item))}</strong><span class="sub">${esc(item.email)}</span></td><td><strong>${esc(item.finalMatricule)}</strong></td><td>${esc(item.sex)}</td><td>${esc(programName(item.program))}<span class="sub">${esc(item.level)}</span></td><td>${esc(siteName(item.site))}</td><td>${esc(keyFor(item))}</td></tr>`).join("") || `<tr><td colspan="7" class="table-empty">Aucun étudiant approuvé trouvé.</td></tr>`;
   }
+  const careerCycles = [
+    { name: "Licence", levels: ["LP1", "LP2", "LP3"] },
+    { name: "Master", levels: ["M1", "M2"] }
+  ];
+  const careerYear = { LP1: "1re année", LP2: "2e année", LP3: "3e année", M1: "1re année", M2: "2e année" };
+  function attendanceRoster() {
+    const today = attendanceCache.filter(item => item.day === D.todayKey());
+    const presentByStudent = new Map(today.map(item => [item.studentId, item]));
+    const rows = approved().map(student => {
+      const mark = presentByStudent.get(student.studentId);
+      return { studentId: student.studentId, firstName: student.firstName, lastName: student.lastName, email: student.email, matricule: student.finalMatricule || "", program: student.program, level: student.level, site: student.site, present: Boolean(mark), attendedAt: mark?.createdAt || "" };
+    });
+    const known = new Set(rows.map(row => row.studentId));
+    today.forEach(item => {
+      if (known.has(item.studentId)) return;
+      rows.push({ studentId: item.studentId, firstName: item.firstName, lastName: item.lastName, email: item.email, matricule: item.matricule || "", program: item.program, level: item.level, site: item.site, present: true, attendedAt: item.createdAt });
+    });
+    return rows;
+  }
   function renderAttendance() {
     const query = (byId("attendance-search").value || "").trim().toLowerCase();
-    const all = attendanceCache.filter(item => item.day === D.todayKey());
-    const list = all.filter(item => [item.firstName, item.lastName, item.matricule, item.sessionCode, programName(item.program), siteName(item.site)].join(" ").toLowerCase().includes(query));
-    byId("attendance-title").textContent = `Liste du ${D.todayKey()}`;
-    byId("attendance-count").textContent = `${list.length} présence${list.length === 1 ? "" : "s"}`;
-    byId("attendance-rows").innerHTML = list.map(item => `<tr><td>${new Date(item.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</td><td><strong>${esc(`${item.firstName} ${item.lastName}`)}</strong><span class="sub">${esc(item.email)}</span></td><td>${esc(item.matricule || "—")}</td><td>${esc(item.sessionCode)}</td><td>${esc(programName(item.program))}<span class="sub">${esc(item.level)}</span></td><td>${esc(siteName(item.site))}</td><td><span class="status active">Présent</span></td></tr>`).join("") || `<tr><td colspan="7" class="table-empty">Aucune présence enregistrée aujourd’hui.</td></tr>`;
+    const site = byId("attendance-site").value;
+    const program = byId("attendance-program").value;
+    const level = byId("attendance-level").value;
+    const status = byId("attendance-status").value;
+    const people = attendanceRoster().filter(item => {
+      if (site && item.site !== site) return false;
+      if (program && item.program !== program) return false;
+      if (level && item.level !== level) return false;
+      if (status === "present" && !item.present) return false;
+      if (status === "absent" && item.present) return false;
+      return [fullName(item), item.matricule, item.email, programName(item.program), item.level, siteName(item.site)].join(" ").toLowerCase().includes(query);
+    });
+    const presentCount = people.filter(item => item.present).length;
+    const absentCount = people.length - presentCount;
+    byId("attendance-title").textContent = `Appel du ${D.todayKey()} · ${D.academicYear}`;
+    byId("attendance-count").textContent = `${presentCount} présent${presentCount === 1 ? "" : "s"} · ${absentCount} absent${absentCount === 1 ? "" : "s"}`;
+    const blocks = [];
+    careerCycles.forEach(cycle => {
+      const levels = cycle.levels.filter(code => people.some(item => item.level === code));
+      if (!levels.length) return;
+      blocks.push(`<h2 class="roll-cycle">${esc(cycle.name)} · ${esc(D.academicYear)}</h2>`);
+      levels.forEach(code => {
+        const atLevel = people.filter(item => item.level === code);
+        blocks.push(`<h3 class="roll-level">${esc(code)} · ${esc(careerYear[code] || code)}</h3>`);
+        const programs = [...new Set(atLevel.map(item => item.program))].sort();
+        programs.forEach(programCode => {
+          const sites = [...new Set(atLevel.filter(item => item.program === programCode).map(item => item.site))];
+          sites.forEach(siteId => {
+            const rows = atLevel.filter(item => item.program === programCode && item.site === siteId).sort((a, b) => fullName(a).localeCompare(fullName(b), "fr"));
+            const here = rows.filter(item => item.present).length;
+            const body = rows.map(item => `<tr><td><strong>${esc(fullName(item))}</strong><span class="sub">${esc(item.email)}</span></td><td>${esc(item.matricule || "—")}</td><td>${item.present && item.attendedAt ? new Date(item.attendedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—"}</td><td><span class="status ${item.present ? "active" : "absent"}">${item.present ? "Présent" : "Absent"}</span></td></tr>`).join("");
+            blocks.push(`<section class="roll-section"><header><strong>${esc(programName(programCode))}</strong><span>${esc(siteName(siteId))}</span><span>${here} / ${rows.length}</span></header><div class="table-scroll"><table><thead><tr><th>Étudiant</th><th>Matricule</th><th>Heure</th><th>Statut</th></tr></thead><tbody>${body}</tbody></table></div></section>`);
+          });
+        });
+      });
+    });
+    byId("attendance-board").innerHTML = blocks.join("") || `<p class="table-empty">Aucun étudiant pour ces critères. L’appel compte les cartes approuvées.</p>`;
   }
   function initGroupFilters() {
     byId("group-site").innerHTML = `<option value="">Toutes les villes</option>${D.sites.map(item => `<option value="${item.id}">${esc(item.city)}</option>`).join("")}`;
     byId("group-program").innerHTML = `<option value="">Toutes les filières</option>${D.programs.map(item => `<option value="${item.code}">${item.code} · ${esc(item.shortName)}</option>`).join("")}`;
-    byId("group-level").innerHTML = `<option value="">Tous les niveaux</option>${D.levels.map(level => `<option value="${level}">${level}</option>`).join("")}`;
+    byId("group-level").innerHTML = `<option value="">Tous les niveaux</option>${D.levels.map(level => `<option value="${level}">${level} · ${careerYear[level] || level}</option>`).join("")}`;
+    byId("attendance-site").innerHTML = `<option value="">Tous les sites</option>${D.sites.map(item => `<option value="${item.id}">${esc(item.city)}</option>`).join("")}`;
+    byId("attendance-program").innerHTML = `<option value="">Toutes les filières</option>${D.programs.map(item => `<option value="${item.code}">${item.code} · ${esc(item.shortName)}</option>`).join("")}`;
+    byId("attendance-level").innerHTML = `<option value="">Toutes les années</option>${D.levels.map(level => `<option value="${level}">${level} · ${careerYear[level] || level}</option>`).join("")}`;
   }
   let activeSessionToken = "";
   function initSessionForm() {
@@ -179,7 +234,7 @@
     const report = auditReport(item);
     byId("review-title").textContent = fullName(item) || "Demande de badge";
     byId("review-subtitle").textContent = `Matricule temporaire ${item.temporaryMatricule} · reçue ${new Date(item.submittedAt).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" })}`;
-    byId("review-content").innerHTML = `<div class="review-grid"><div class="review-photo-wrap">${item.photo ? `<img class="review-photo" src="${esc(item.photo)}" alt="Photo d’identité de ${esc(fullName(item))}">` : `<div class="review-photo photo-missing">Photo d’identité<br>non fournie</div>`}<span class="field-help">${esc(item.photoFileName || "Aucun nom de fichier")}</span></div><div><h3>Renseignements soumis</h3><div class="review-info"><div><span>Nom</span><strong>${esc(item.lastName)}</strong></div><div><span>Prénom(s)</span><strong>${esc(item.firstName)}</strong></div><div><span>E-mail</span><strong>${esc(item.email)}</strong></div><div><span>Téléphone</span><strong>${esc(item.phone)}</strong></div><div><span>Sexe</span><strong>${esc(item.sex)}</strong></div><div><span>Naissance</span><strong>${esc(item.birthDate || "—")}</strong></div><div><span>Filière</span><strong>${esc(D.getProgram(item.program).name)}</strong></div><div><span>Niveau</span><strong>${esc(item.level)}</strong></div><div><span>Ville / site</span><strong>${esc(site.city)}</strong></div><div><span>Clé du groupe</span><strong>${esc(keyFor(item))}</strong></div><div><span>Matricule temporaire</span><strong>${esc(item.temporaryMatricule)}</strong></div></div></div></div><div class="audit-box"><div class="audit-heading"><div><div class="eyebrow">Rapport de vérification</div><h3>Contrôles du dossier</h3></div><span class="status ${report.ok ? "active" : "pending"}">${report.ok ? "Prêt à valider" : "À corriger"}</span></div><div class="audit-list">${report.checks.map(check => `<div class="audit-check ${check.ok ? "pass" : "fail"}"><span>${check.ok ? "✓" : "!"}</span>${esc(check.name)}</div>`).join("")}</div><p class="small muted" style="margin:10px 0 0">Le rapport aide au contrôle : l’approbation reste une décision de l’administration. Le matricule final doit être unique, tous sites et promotions confondus.</p></div>${item.status === "rejected" ? `<div class="notice" style="margin-top:12px"><strong>Motif enregistré :</strong> ${esc(item.rejectionReason || "—")}</div>` : ""}`;
+    byId("review-content").innerHTML = `<div class="review-grid"><div class="review-photo-wrap">${item.photo ? `<img class="review-photo" src="${esc(item.photo)}" alt="Photo d’identité de ${esc(fullName(item))}">` : `<div class="review-photo photo-missing">Photo d’identité<br>non fournie</div>`}<span class="field-help">${esc(item.photoFileName || "Aucun nom de fichier")}</span></div><div><h3>Renseignements soumis</h3><div class="review-info"><div><span>Nom</span><strong>${esc(item.lastName)}</strong></div><div><span>Prénom(s)</span><strong>${esc(item.firstName)}</strong></div><div><span>E-mail</span><strong>${esc(item.email)}</strong></div><div><span>Téléphone</span><strong>${esc(item.phone)}</strong></div><div><span>Sexe</span><strong>${esc(item.sex)}</strong></div><div><span>Naissance</span><strong>${esc(item.birthDate || "—")}</strong></div><div><span>Filière</span><strong>${esc(D.getProgram(item.program).name)}</strong></div><div><span>Niveau</span><strong>${esc(item.level)}</strong></div><div><span>Ville / site</span><strong>${esc(site.city)}</strong></div><div><span>Clé du groupe</span><strong>${esc(keyFor(item))}</strong></div><div><span>Matricule temporaire</span><strong>${esc(item.temporaryMatricule)}</strong></div></div></div></div><div class="audit-box"><div class="audit-heading"><div><div class="eyebrow">Rapport de vérification</div><h3>Contrôles du dossier</h3></div><span class="status ${report.ok ? "active" : "pending"}">${report.ok ? "Prêt à valider" : "À corriger"}</span></div><div class="audit-list">${report.checks.map(check => `<div class="audit-check ${check.ok ? "pass" : "fail"}"><span>${check.ok ? "OK" : "Non"}</span>${esc(check.name)}</div>`).join("")}</div><p class="small muted" style="margin:10px 0 0">Le rapport aide au contrôle : l’approbation reste une décision de l’administration. Le matricule final doit être unique, tous sites et promotions confondus.</p></div>${item.status === "rejected" ? `<div class="notice" style="margin-top:12px"><strong>Motif enregistré :</strong> ${esc(item.rejectionReason || "—")}</div>` : ""}`;
     if (item.status === "pending") {
       byId("review-actions").innerHTML = `<label class="manual-photo-check"><input type="checkbox" id="photo-check" ${report.ok ? "" : "disabled"}><span>J’ai vérifié visuellement la tenue de l’école, la netteté de la photo, le visage visible et les cheveux bien peignés.</span></label><div class="field full"><label for="reject-reason">Motif de rejet (obligatoire pour rejeter)</label><textarea id="reject-reason" rows="2" placeholder="Expliquez brièvement la décision afin que l’étudiant sache quoi faire."></textarea></div><div class="review-buttons"><button class="btn danger" id="reject-request" type="button">Rejeter la demande</button><button class="btn" id="approve-request" type="button" disabled>Valider et attribuer le matricule</button></div><span class="field-help">Après approbation ou rejet, la demande ne revient pas à l’état « en attente ».</span>`;
       byId("photo-check").addEventListener("change", event => { byId("approve-request").disabled = !event.target.checked || !report.ok; });
@@ -242,7 +297,7 @@
       const counts = approved().reduce((memo, item) => { const key = keyFor(item); memo[key] = (memo[key] || 0) + 1; return memo; }, {});
       rows = [["cle_groupe", "ville", "code_filiere", "filiere", "niveau", "effectif"], ...D.allGroups().map(group => [group.key, siteName(group.site), group.program, programName(group.program), group.level, counts[group.key] || 0])]; filename = "groupes-irgib.csv";
     } else if (kind === "attendance") {
-      rows = [["date", "heure", "etudiant", "matricule", "seance_qr", "filiere", "niveau", "site"], ...attendanceCache.map(item => [item.day, new Date(item.createdAt).toLocaleTimeString("fr-FR"), `${item.firstName} ${item.lastName}`, item.matricule, item.sessionCode, programName(item.program), item.level, siteName(item.site)])]; filename = "presences-jour.csv";
+      rows = [["date", "heure", "etudiant", "matricule", "statut", "cycle", "annee", "code_filiere", "filiere", "niveau", "site"], ...attendanceRoster().map(item => [D.todayKey(), item.attendedAt ? new Date(item.attendedAt).toLocaleTimeString("fr-FR") : "", fullName(item), item.matricule, item.present ? "present" : "absent", item.level.startsWith("M") ? "Master" : "Licence", careerYear[item.level] || item.level, item.program, programName(item.program), item.level, siteName(item.site)])]; filename = "presences-jour.csv";
     } else {
       rows = [["matricule_final", "matricule_temporaire", "nom", "prenom", "email", "sexe", "code_filiere", "filiere", "niveau", "ville", "groupe"], ...approved().map(item => [item.finalMatricule, item.temporaryMatricule, item.lastName, item.firstName, item.email, item.sex, item.program, programName(item.program), item.level, siteName(item.site), keyFor(item)])]; filename = "etudiants-irgib.csv";
     }
@@ -268,6 +323,7 @@
     byId("request-filter").addEventListener("change", renderRequests);
     byId("student-search").addEventListener("input", renderStudents);
     byId("attendance-search").addEventListener("input", renderAttendance);
+    ["attendance-site", "attendance-program", "attendance-level", "attendance-status"].forEach(id => byId(id).addEventListener("change", renderAttendance));
     byId("card-search").addEventListener("input", renderCards);
     ["group-site", "group-program", "group-level"].forEach(id => byId(id).addEventListener("change", renderGroups));
     byId("group-search").addEventListener("input", renderGroups);
@@ -284,9 +340,6 @@
     byId("admin-logout").addEventListener("click", async () => {
       const { error } = await adminClient.auth.signOut();
       showAdminGate(error ? "La déconnexion a échoué. Réessayez." : "Vous êtes déconnecté.");
-    });
-    window.addEventListener("storage", event => {
-      if (["irgib-campus-applications-v2", "irgib-campus-attendance-v2"].includes(event.key)) refreshCurrent();
     });
     initGroupFilters();
     initSessionForm();
@@ -307,6 +360,7 @@
       return false;
     }
     byId("admin-user-label").textContent = session.user.email || "Administration";
+    byId("admin-profile-mark").textContent = (session.user.email || "A").trim().charAt(0).toUpperCase();
     byId("admin-auth-screen").hidden = true;
     byId("admin-app").hidden = false;
     initAdminApp();

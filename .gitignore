@@ -1,4 +1,4 @@
 .vercel
 .env*
 /assets/supabase-config.js
-/docs/
+supabase/.temp/

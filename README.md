@@ -32,6 +32,10 @@ Niveaux : LP1, LP2, LP3, M1, M2. Les huit filières et les six sites sont propos
 
 Carte au format 85,60 × 53,98 mm (épaisseur 0,76 mm), recto avec QR d’identification, verso avec les contacts du site. Le scanner accepte le QR de séance créé dans l’administration; la présence est confirmée après affichage des renseignements de l’étudiant. HTTPS et autorisation caméra sont nécessaires.
 
+## Documentation
+
+Le mode d’emploi du portail est ce fichier. Le cadrage, l’état du portail et le projet séparé de cours sont rangés dans [docs/README.md](docs/README.md). Vercel ne publie pas ce dossier.
+
 ## Vérifications
 
 Vérifier avant publication : syntaxe JavaScript, absence de .env suivi par Git, migration appliquée sans erreur, inscription avec confirmation e-mail, connexion étudiant/admin, demande avec photo, consultation de la photo en session signée, approbation et rejet, unicité du matricule, présence QR active/invalide/expirée/en double, et RLS avec deux comptes étudiants différents.

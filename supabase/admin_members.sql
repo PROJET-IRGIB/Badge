@@ -1,6 +1,7 @@
 -- Run supabase/migrations/20261022000000_initial_backend.sql first.
--- Create the admin account in Supabase Auth, copy its UUID, then run:
--- insert into public.admin_members(user_id) values ('ADMIN-AUTH-USER-UUID');
+-- Create the admin account in Supabase Auth, then run
+-- supabase/migrations/20261022235200_authorize_admin_jesusesono.sql
+-- in the SQL Editor. That statement authorizes the account by email.
 --
 -- Only a trusted project owner should run this statement in the SQL Editor.
 -- Authenticated users have read access to their own row only; they cannot grant themselves admin.

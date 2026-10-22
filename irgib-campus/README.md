@@ -1,3 +1,5 @@
+> Ancienne maquette au stockage local du navigateur. Le site publié est à la racine du dépôt : `etudiant/` et `gestion-campus-irga82/`. Vercel ignore ce dossier.
+
 # IRGIB AFRICA · Portail étudiant et cartes
 
 Cette maquette propose deux entrées séparées, sans lien entre l’espace étudiant et l’administration :

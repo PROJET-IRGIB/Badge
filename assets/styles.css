@@ -73,7 +73,7 @@
 @media(max-width:700px){.card-v2{border-radius:8px}}
 @media print{.card-v2{width:85.60mm!important;height:53.98mm!important;max-width:none!important;aspect-ratio:auto!important;border-radius:0!important;box-shadow:none!important;print-color-adjust:exact;-webkit-print-color-adjust:exact;break-inside:avoid;page-break-inside:avoid}.card-v2.card-back{display:grid!important;break-before:page;page-break-before:always}}
 [hidden] { display: none !important; }
-.admin-auth-screen { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(circle at 85% 15%, rgba(72,145,128,.18), transparent 32%), linear-gradient(145deg, #edf3f0, #f7f8f5); }
+.admin-auth-screen { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: var(--paper); }
 .admin-auth-card { width: min(460px, 100%); padding: 30px; }
 .admin-auth-mark { width: 76px; height: 76px; object-fit: contain; border-radius: 50%; background: #fff; padding: 4px; box-shadow: 0 4px 15px rgba(16,42,57,.12); margin-bottom: 20px; }
 .admin-auth-card h1 { margin: 8px 0; font-size: 28px; }
@@ -83,3 +83,16 @@
 .admin-auth-card .form-message { min-height: 20px; line-height: 1.5; }
 #admin-logout { margin-left: 8px; }
 @media(max-width:600px) { .admin-auth-screen { padding: 14px; } .admin-auth-card { padding: 22px 18px; } .admin-top .profile { gap: 6px; } #admin-logout { margin-left: 0; padding: 7px; } }
+.nav-icon, .scan-icon { display: grid; place-items: center; }
+.nav-icon svg, .scan-icon svg { width: 18px; height: 18px; display: block; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.side-nav button .nav-icon { width: 20px; height: 20px; }
+.scan-icon { width: 42px; height: 42px; margin: 0 auto 8px; color: #d7ebe4; }
+.scan-icon svg { width: 28px; height: 28px; }
+.roll-board { display: grid; gap: 14px; padding: 16px; }
+.roll-cycle { margin: 8px 0 0; font-size: 18px; }
+.roll-level { margin: 0; font-size: 14px; color: var(--teal); }
+.roll-section { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; }
+.roll-section header { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; padding: 12px 14px; background: #f7f9f8; border-bottom: 1px solid var(--line); font-size: 13px; }
+.roll-section header span { color: var(--muted); font-size: 12px; }
+.status.absent { background: #f8ecea; color: var(--red); }
+
