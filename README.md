@@ -34,7 +34,7 @@ Carte au format 85,60 × 53,98 mm (épaisseur 0,76 mm), recto avec QR d’identi
 
 ## Documentation
 
-Le mode d’emploi du portail est ce fichier. Le cadrage, l’état du portail et le projet séparé de cours sont rangés dans [docs/README.md](docs/README.md). Vercel ne publie pas ce dossier.
+Le mode d’emploi du portail est ce fichier. Le cadrage, l’état du portail et le projet séparé de cours sont dans [docs/smartbadge.md](docs/smartbadge.md). Vercel ne publie pas ce dossier.
 
 ## Vérifications
 
