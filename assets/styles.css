@@ -429,3 +429,28 @@ body:has(#portal-screen[style*="display: block"])>.notice{max-width:1100px;margi
 .representative-current>div{flex:1 1 180px;min-width:120px}
 .representative-current>.btn{flex:0 0 auto}
 @media(max-width:700px){.representative-current>.btn{flex:1 1 100%;width:100%}}
+.student-admin-actions{display:flex;flex-wrap:wrap;gap:6px;min-width:230px}
+.student-admin-actions .btn{white-space:nowrap}
+.account-blocked-panel{max-width:680px;margin:7vh auto;border-top:4px solid #b42318}
+.account-blocked-panel h1{color:#9f1c13}
+
+/* Card artwork matched to the supplied teal reference; do not substitute the portal navy palette. */
+.card-v2,.card-v2.card-back{background:linear-gradient(112deg,#08394a 0%,#064e5a 56%,#08706c 100%)!important;color:#f7fbfc!important;border-color:rgba(235,250,248,.18)!important}
+.card-v2 .card-v2-logo{border-radius:50%!important}
+.card-v2:before,.card-v2:after{content:""!important;display:block;position:absolute;z-index:-1;pointer-events:none;border-radius:50%}
+.card-v2:before{width:66%;aspect-ratio:1;right:-17%;top:-59%;border:1px solid rgba(221,247,243,.14);box-shadow:0 0 0 3.2cqw rgba(221,247,243,.035),0 0 0 7cqw rgba(221,247,243,.025)}
+.card-v2:after{width:44%;aspect-ratio:1;right:14%;bottom:-39%;border:1px solid rgba(207,238,234,.12);background:rgba(19,127,119,.12)}
+.card-v2-back-head{padding-bottom:2.1cqw;border-bottom:1px solid rgba(235,250,248,.25)}
+.card-v2-back-body{align-content:start;gap:2.1cqw;padding:3.3cqw 0 2.4cqw}
+.card-v2-back-block small{color:#d8efec}
+.card-v2-back-block strong{color:#fff}
+.card-v2-back-footer{border-top-color:rgba(235,250,248,.3)}
+.card-v2-back-mark img{border-radius:50%;background:#fff}
+.student-loading{display:grid;justify-items:center;gap:11px;min-height:270px;text-align:center;padding:40px 22px}
+.student-loading h1{margin:5px 0 0;font-size:24px}
+.student-loading .subhead{margin:0;font-size:13px}
+.student-loading-mark{display:grid;width:64px;height:64px;place-items:center;border:1px solid var(--line);border-radius:18px;background:#fff}
+.student-loading-mark img{width:48px;height:48px;object-fit:contain}
+.student-loading-spinner{width:24px;height:24px;border:3px solid #dce5ed;border-top-color:var(--navy);border-radius:50%;animation:student-space-spin .8s linear infinite}
+@keyframes student-space-spin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.student-loading-spinner{animation-duration:2s}}

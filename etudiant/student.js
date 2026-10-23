@@ -39,14 +39,19 @@
   let representativeLastScanTime = 0;
   let representativeLastQr = "";
   let representativeHasPin = false;
+  let blockedAccountNotice = "";
 
   const getApplication = () => application;
-  const fromProfileRow = row => row && ({ userId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date });
+  const fromProfileRow = row => row && ({ userId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, bannedAt: row.banned_at || null, banReason: row.ban_reason || "" });
   const fromApplicationRow = row => row && ({ id: row.id, studentId: row.student_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, birthDate: row.birth_date, program: row.program, level: row.level, site: row.site, status: row.status, temporaryMatricule: row.temporary_matricule, finalMatricule: row.final_matricule, photoPath: row.photo_path, rejectionReason: row.rejection_reason, submittedAt: row.submitted_at, decidedAt: row.decided_at });
   async function loadStudentData() {
     const { data: profileRow, error: profileError } = await db.from("student_profiles").select("*").eq("user_id", currentUser.id).single();
     if (profileError) throw profileError;
     profile = fromProfileRow(profileRow);
+    if (profile.bannedAt) {
+      const site = D.getSite(profile.site)?.city || "votre site";
+      throw Object.assign(new Error(profile.banReason || `Votre compte a été banni par l’administration de ${site}.`), { name: "AccountBannedError" });
+    }
     const { data: apps, error: appError } = await db.from("badge_applications").select("*").eq("student_id", currentUser.id).order("submitted_at", { ascending: false }).limit(1);
     if (appError) throw appError;
     application = fromApplicationRow(apps?.[0]);
@@ -70,9 +75,18 @@
     byId("signup-message").textContent = "";
   };
   const setScreen = screen => {
-    ["auth-screen", "verify-screen", "portal-screen"].forEach(id => byId(id).style.display = id === screen ? "block" : "none");
+    ["loading-screen", "auth-screen", "verify-screen", "portal-screen", "banned-screen"].forEach(id => byId(id).style.display = id === screen ? "block" : "none");
     byId("signout").style.display = screen === "portal-screen" ? "inline-flex" : "none";
   };
+  function showBlockedAccount(message) {
+    blockedAccountNotice = message || "Votre compte a été banni par l’administration de votre établissement. Contactez l’administration de votre site.";
+    try { localStorage.setItem("irgib-banned-account-notice", blockedAccountNotice); } catch {}
+    setScreen("banned-screen");
+    byId("banned-account-message").textContent = blockedAccountNotice;
+    currentUser = null;
+    profile = null;
+    void db.auth.signOut();
+  }
   const selectStudentView = view => {
     hideRepresentativeDailyQr();
     document.querySelectorAll(".student-view").forEach(section => section.classList.toggle("active", section.id === `student-view-${view}`));
@@ -184,8 +198,6 @@
     const alreadyPresent = rows.some(item => item.status === "present" && item.site === person?.site && item.program === person?.program && item.level === person?.level);
     if (scannedSession) showAttendancePreview(scannedSession, app);
     byId("start-scan").disabled = alreadyPresent;
-    byId("load-session").disabled = alreadyPresent;
-    byId("session-code").disabled = alreadyPresent;
     if (alreadyPresent) {
       byId("attendance-message").textContent = "Votre présence du jour est déjà enregistrée. Le QR ne peut être validé qu’une fois.";
       byId("submit-attendance").disabled = true;
@@ -443,7 +455,6 @@
   }
   function showAttendancePreview(code, app = getApplication()) {
     scannedSession = code;
-    byId("session-code").value = code;
     const person = app || profile;
     const site = D.getSite(person.site);
     const program = D.getProgram(person.program);
@@ -475,7 +486,7 @@
     if (error?.name === "NotFoundError" || error?.name === "DevicesNotFoundError") return "Aucune caméra n’a été détectée sur cet appareil.";
     if (error?.name === "NotReadableError" || error?.name === "TrackStartError") return "La caméra est utilisée par une autre application. Fermez cette application puis réessayez.";
     if (error?.name === "SecurityError" || !window.isSecureContext) return "La caméra exige une connexion sécurisée HTTPS. Ouvrez le site avec son adresse https://.";
-    return "La caméra n’a pas pu démarrer. Vérifiez les autorisations et réessayez, ou saisissez le code manuellement.";
+    return "La caméra n’a pas pu démarrer. Vérifiez les autorisations de caméra, puis réessayez.";
   }
   async function startCamera() {
     byId("attendance-message").textContent = "";
@@ -486,12 +497,12 @@
     }
     if (!navigator.mediaDevices?.getUserMedia) {
       byId("attendance-message").textContent = window.isSecureContext
-        ? "Ce navigateur ne permet pas d’ouvrir la caméra. Essayez un navigateur récent ou saisissez le code de séance manuellement."
+        ? "Ce navigateur ne permet pas d’ouvrir la caméra. Essayez un navigateur récent et autorisez l’accès à la caméra."
         : cameraErrorMessage({ name: "SecurityError" });
       return;
     }
     if (!("BarcodeDetector" in window) && typeof window.jsQR !== "function") {
-      byId("attendance-message").textContent = "Le lecteur QR n’a pas pu se charger. Vérifiez votre connexion, puis saisissez le code de séance manuellement.";
+      byId("attendance-message").textContent = "Le lecteur QR n’a pas pu se charger. Vérifiez votre connexion, puis rechargez la page.";
       return;
     }
     try {
@@ -553,13 +564,19 @@
   async function activatePortal() {
     if (!currentUser) { setScreen("auth-screen"); return; }
     try { await loadStudentData(); }
-    catch (error) { setScreen("auth-screen"); byId("login-message").textContent = error.message || "Impossible de charger votre dossier. Réessayez."; return; }
+    catch (error) {
+      if (error.name === "AccountBannedError") { showBlockedAccount(error.message); return; }
+      setScreen("auth-screen"); byId("login-message").textContent = error.message || "Impossible de charger votre dossier. Réessayez."; return;
+    }
     setScreen("portal-screen");
     byId("news-campus-label").textContent = D.getSite(profile.site).city;
     configureNotificationOptIn();
     void loadAnnouncements();
     void loadRepresentativeGroupmates();
     if (!studentChannel) studentChannel = db.channel(`student-${currentUser.id}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "student_profiles", filter: `user_id=eq.${currentUser.id}` }, payload => {
+        if (payload.new?.banned_at) showBlockedAccount(payload.new.ban_reason || "Votre compte a été banni par l’administration de votre établissement.");
+      })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "badge_applications", filter: `student_id=eq.${currentUser.id}` }, async () => {
         const oldStatus = application?.status;
         try { await loadStudentData(); if (application) applicationSummary(application); renderNotification(application); renderMyCard(); if (oldStatus !== "approved" && application?.status === "approved") void showCampusNotification("Votre badge IRGIB est approuvé", `Votre matricule définitif est ${application.finalMatricule}. Votre carte est disponible dans votre espace.`, `badge-approved-${application.id}`, "/etudiant/#card"); }
@@ -603,7 +620,10 @@
       currentUser = data.user;
       byId("login-form").reset();
       await activatePortal();
-    } catch { byId("login-message").textContent = "Connexion impossible. Vérifiez vos identifiants et confirmez votre e-mail."; }
+    } catch (error) {
+      if (/bann|ban|suspend/i.test(error?.message || "")) showBlockedAccount("Votre compte a été banni par l’administration de votre établissement. Contactez l’administration de votre site.");
+      else byId("login-message").textContent = "Connexion impossible. Vérifiez vos identifiants et confirmez votre e-mail.";
+    }
     finally { button.disabled = false; }
   });
   byId("signup-form").addEventListener("submit", async event => {
@@ -810,13 +830,6 @@
   });
   byId("start-scan").addEventListener("click", startCamera);
   byId("stop-scan").addEventListener("click", stopCamera);
-  byId("load-session").addEventListener("click", () => {
-    try {
-      if (todayAttendance().some(item => item.status === "present" && item.site === (application || profile).site && item.program === (application || profile).program && item.level === (application || profile).level)) throw new Error("Votre présence du jour est déjà enregistrée.");
-      showAttendancePreview(decodeSession(byId("session-code").value)); byId("attendance-message").textContent = "Séance chargée. Vérifiez vos informations avant validation.";
-    }
-    catch (error) { byId("attendance-message").textContent = error.message; }
-  });
   byId("submit-attendance").addEventListener("click", async () => {
     if (!scannedSession) return;
     const button = byId("submit-attendance"); button.disabled = true;
@@ -845,20 +858,51 @@
     button.disabled = true;
   });
   byId("print-my-card").addEventListener("click", () => {
-    document.body.classList.add("print-card-mode");
-    window.print();
-    setTimeout(() => document.body.classList.remove("print-card-mode"), 900);
+    const faces = [...byId("student-card-zone").querySelectorAll(".card-v2")];
+    if (faces.length !== 2) { byId("my-card-status").insertAdjacentHTML("beforeend", '<p class="form-message" role="status">La carte complète n’est pas prête. Rechargez la page puis réessayez.</p>'); return; }
+    const printWindow = window.open("", "irgib-card-print", "popup,width=980,height=820");
+    if (!printWindow) { byId("my-card-status").insertAdjacentHTML("beforeend", '<p class="form-message" role="status">Autorisez l’ouverture de la fenêtre d’impression pour créer le PDF.</p>'); return; }
+    printWindow.opener = null;
+    const stylesUrl = new URL("../assets/styles.css?v=20261025b", location.href).href;
+    const sheets = faces.map(face => {
+      const clone = face.cloneNode(true);
+      clone.querySelectorAll("canvas").forEach(canvas => {
+        try { const image = document.createElement("img"); image.src = canvas.toDataURL("image/png"); image.alt = "QR de vérification du badge"; canvas.replaceWith(image); } catch { /* Le QR reste dans sa représentation originale si le navigateur bloque la copie. */ }
+      });
+      clone.querySelectorAll("img").forEach(image => { image.src = new URL(image.getAttribute("src"), location.href).href; });
+      return `<section class="card-print-sheet">${clone.outerHTML}</section>`;
+    }).join("");
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Carte étudiante IRGIB AFRICA</title><link rel="stylesheet" href="${stylesUrl}"><style>
+      @page{size:A4 portrait;margin:0}*{box-sizing:border-box}html,body{margin:0!important;padding:0!important;width:210mm!important;min-width:210mm!important;background:#fff!important}.card-print-sheet{width:210mm;height:297mm;display:grid;place-items:center;overflow:hidden;break-after:page;page-break-after:always}.card-print-sheet:last-child{break-after:auto;page-break-after:auto}.card-print-sheet .card-v2{width:85.6mm!important;height:53.98mm!important;min-width:85.6mm!important;max-width:85.6mm!important;aspect-ratio:auto!important;margin:0!important;padding:2.2mm 2.4mm!important;border-radius:2mm!important;box-shadow:none!important;overflow:hidden!important;break-inside:avoid!important;page-break-inside:avoid!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}.card-print-sheet .card-v2-front{break-after:auto!important;page-break-after:auto!important}.card-print-sheet .card-v2.card-back{display:grid!important;break-before:auto!important;page-break-before:auto!important}.card-print-sheet img{print-color-adjust:exact;-webkit-print-color-adjust:exact} @media print{html,body{width:210mm!important;min-width:210mm!important}.card-print-sheet{height:297mm!important;break-after:page!important;page-break-after:always!important}.card-print-sheet:last-child{break-after:auto!important;page-break-after:auto!important}}
+      </style></head><body>${sheets}<script>window.addEventListener('load',async()=>{await Promise.all([...document.images].map(i=>i.decode?.().catch(()=>{})));if(document.fonts?.ready)await document.fonts.ready;window.focus();setTimeout(()=>window.print(),150)});window.addEventListener('afterprint',()=>window.close());</script></body></html>`);
+    printWindow.document.close();
   });
 
   byId("back-to-signup").textContent = "Retour à la connexion";
+  byId("banned-return-login").addEventListener("click", () => {
+    try { localStorage.removeItem("irgib-banned-account-notice"); } catch {}
+    blockedAccountNotice = "";
+    setScreen("auth-screen");
+    showAuthPage("login");
+  });
   db.auth.onAuthStateChange((event, session) => {
-    if (event === "SIGNED_OUT") { hideRepresentativeDailyQr(); representativeHasPin = false; currentUser = null; profile = null; application = null; attendanceRows = []; setScreen("auth-screen"); showAuthPage("login"); }
+    if (event === "SIGNED_OUT") {
+      hideRepresentativeDailyQr(); representativeHasPin = false; currentUser = null; profile = null; application = null; attendanceRows = [];
+      if (blockedAccountNotice) { setScreen("banned-screen"); byId("banned-account-message").textContent = blockedAccountNotice; }
+      else { setScreen("auth-screen"); showAuthPage("login"); }
+    }
     else if (event === "SIGNED_IN" && session?.user && !currentUser) { currentUser = session.user; void activatePortal(); }
   });
   db.auth.getSession().then(({ data, error }) => {
     if (error) throw error;
     currentUser = data.session?.user || null;
-    if (currentUser) void activatePortal(); else setScreen("auth-screen");
+    if (currentUser) void activatePortal();
+    else {
+      try { blockedAccountNotice = localStorage.getItem("irgib-banned-account-notice") || ""; } catch {}
+      if (blockedAccountNotice) { setScreen("banned-screen"); byId("banned-account-message").textContent = blockedAccountNotice; }
+      else setScreen("auth-screen");
+    }
   }).catch(() => { setScreen("auth-screen"); byId("login-message").textContent = "Connexion au service impossible. Rechargez la page ou contactez l’administration."; });
   window.setInterval(async () => {
     if (!currentUser || byId("portal-screen").style.display === "none") return;
@@ -868,6 +912,6 @@
       renderNotification(application); renderMyCard(); renderAttendance();
       if (Date.now() - lastNewsRefresh > 120000) void loadAnnouncements();
     }
-    catch { /* a short network interruption does not invalidate the signed-in session */ }
+    catch (error) { if (error?.name === "AccountBannedError") showBlockedAccount(error.message); /* a short network interruption does not invalidate the signed-in session */ }
   }, 30000);
 })();

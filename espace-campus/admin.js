@@ -37,7 +37,7 @@
       profiles.push(...(data || []));
       if (!data || data.length < 500) break;
     }
-    studentProfilesCache = profiles.map(row => ({ studentId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date }));
+    studentProfilesCache = profiles.map(row => ({ studentId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, bannedAt: row.banned_at || null }));
     const records = [];
     for (let from = 0; ; from += 500) {
       const { data, error } = await adminClient.from("attendance_records")
@@ -77,7 +77,7 @@
     document.querySelectorAll(".side-nav [data-view]").forEach(node => node.classList.toggle("active", node.dataset.view === view));
     const labels = { dashboard: "Vue d’ensemble", requests: "Demandes de badge", students: "Étudiants", attendance: "Présences", groups: "Groupes", representatives: "Responsables de classe", catalog: "Catalogue", announcements: "Actualités", cards: "Cartes" };
     byId("breadcrumb").textContent = `Campus / ${labels[view]}`;
-    ({ dashboard: renderDashboard, requests: renderRequests, students: renderStudents, attendance: renderAttendance, groups: renderGroups, representatives: () => void loadRepresentatives(), catalog: renderCatalog, announcements: () => void loadAnnouncements(), cards: renderCards })[view]?.();
+    ({ dashboard: renderDashboard, requests: renderRequests, students: () => void loadRepresentatives().then(renderStudents), attendance: renderAttendance, groups: renderGroups, representatives: () => void loadRepresentatives(), catalog: renderCatalog, announcements: () => void loadAnnouncements(), cards: renderCards })[view]?.();
   }
   function requestTableRows(list, recent = false) {
     const count = recent ? 6 : 7;
@@ -111,8 +111,10 @@
     byId("student-count").textContent = `${list.length} étudiant${list.length === 1 ? "" : "s"}`;
     byId("student-rows").innerHTML = list.map(person => {
       const app = applications().find(item => item.studentId === person.studentId);
-      return `<tr><td>${app ? photoCell(app) : `<span class="table-photo photo-empty">—</span>`}</td><td><strong>${esc(fullName(person))}</strong><span class="sub">${esc(person.email)}</span></td><td><strong>${esc(app?.finalMatricule || app?.temporaryMatricule || "—")}</strong><span class="sub">${app ? statusText(app.status) : "Inscrit · demande non envoyée"}</span></td><td>${esc(person.sex)}</td><td>${esc(programName(person.program))}<span class="sub">${esc(person.level)}</span></td><td>${esc(siteName(person.site))}</td><td>${esc(keyFor(person))}</td></tr>`;
-    }).join("") || `<tr><td colspan="7" class="table-empty">Aucun étudiant inscrit trouvé.</td></tr>`;
+      const rep = representativesCache.find(item => item.user_id === person.studentId);
+      const inGroupRep = representativesCache.some(item => item.site === person.site && item.program === person.program && item.level === person.level);
+      return `<tr><td>${app ? photoCell(app) : `<span class="table-photo photo-empty">—</span>`}</td><td><strong>${esc(fullName(person))}</strong><span class="sub">${esc(person.email)}</span>${person.bannedAt ? `<span class="sub status rejected">Compte banni</span>` : ""}</td><td><strong>${esc(app?.finalMatricule || app?.temporaryMatricule || "—")}</strong><span class="sub">${app ? statusText(app.status) : "Inscrit · demande non envoyée"}</span></td><td>${esc(person.sex)}</td><td>${esc(programName(person.program))}<span class="sub">${esc(person.level)}</span></td><td>${esc(siteName(person.site))}</td><td>${esc(keyFor(person))}</td><td class="student-admin-actions"><button class="btn secondary sm" type="button" data-student-role="${esc(person.studentId)}" ${person.bannedAt || rep ? "disabled" : ""}>${rep ? "Déjà responsable" : inGroupRep ? "Remplacer responsable" : "Nommer responsable"}</button>${person.bannedAt ? `<span class="small muted">Banni</span>` : `<button class="btn danger sm" type="button" data-student-ban="${esc(person.studentId)}">Bannir</button>`}<button class="btn danger sm" type="button" data-student-delete="${esc(person.studentId)}">Supprimer</button></td></tr>`;
+    }).join("") || `<tr><td colspan="8" class="table-empty">Aucun étudiant inscrit trouvé.</td></tr>`;
   }
   const careerCycles = [
     { name: "Licence", levels: ["LP1", "LP2", "LP3"] },
@@ -260,21 +262,50 @@
     const program = byId("rep-program").value || D.programs[0].code;
     const level = byId("rep-level").value || D.levels[0];
     const assignment = representativesCache.find(item => item.site === site && item.program === program && item.level === level);
-    const candidates = approved().filter(item => item.site === site && item.program === program && item.level === level && (!representativesCache.some(rep => rep.user_id === item.studentId) || assignment?.user_id === item.studentId));
-    const current = assignment && approved().find(item => item.studentId === assignment.user_id);
-    const select = `<label for="rep-student">Étudiant approuvé</label><select id="rep-student"><option value="">${candidates.length ? "Choisir dans le groupe" : "Aucun étudiant disponible"}</option>${candidates.map(item => `<option value="${esc(item.studentId)}" ${assignment?.user_id === item.studentId ? "selected" : ""}>${esc(fullName(item))} · ${esc(item.finalMatricule || "")}</option>`).join("")}</select>`;
-    byId("representative-manager").innerHTML = `<div class="representative-group-summary"><span class="news-tag">${esc(siteName(site))}</span><span class="news-tag">${esc(programName(program))}</span><span class="news-tag">${esc(level)}</span></div>${assignment ? `<div class="representative-current"><div><small>Responsable actuel</small><strong>${esc(current ? fullName(current) : "Compte affecté, étudiant non trouvé")}</strong><span>${esc(current?.finalMatricule || "")}</span></div><button class="btn secondary sm" type="button" data-rep-reset-pin="${esc(`${site}|${program}|${level}`)}">Réinitialiser son code QR</button><button class="btn danger sm" type="button" data-rep-remove="${esc(`${site}|${program}|${level}`)}">Retirer</button></div>` : `<div class="notice">Aucun responsable n’est encore désigné pour ce groupe.</div>`}<div class="representative-assign">${select}<button class="btn" type="button" data-rep-assign="${esc(`${site}|${program}|${level}`)}">${assignment ? "Remplacer le responsable" : "Désigner le responsable"}</button></div><p class="field-help">Un seul responsable est actif par groupe. Seuls les étudiants dont le badge est approuvé sont proposés.</p>`;
+    const candidates = studentProfilesCache.filter(item => item.site === site && item.program === program && item.level === level && !item.bannedAt);
+    const current = assignment && studentProfilesCache.find(item => item.studentId === assignment.user_id);
+    const select = `<label for="rep-student">Étudiant du groupe</label><select id="rep-student"><option value="">${candidates.length ? "Choisir dans le groupe" : "Aucun étudiant disponible"}</option>${candidates.map(item => `<option value="${esc(item.studentId)}" ${assignment?.user_id === item.studentId ? "selected" : ""}>${esc(fullName(item))} · ${esc(applications().find(app => app.studentId === item.studentId)?.finalMatricule || applications().find(app => app.studentId === item.studentId)?.temporaryMatricule || "Sans matricule")}</option>`).join("")}</select>`;
+    byId("representative-manager").innerHTML = `<div class="representative-group-summary"><span class="news-tag">${esc(siteName(site))}</span><span class="news-tag">${esc(programName(program))}</span><span class="news-tag">${esc(level)}</span></div>${assignment ? `<div class="representative-current"><div><small>Responsable actuel</small><strong>${esc(current ? fullName(current) : "Compte affecté, étudiant non trouvé")}</strong><span>${esc(applications().find(app => app.studentId === assignment.user_id)?.finalMatricule || "")}</span></div><button class="btn secondary sm" type="button" data-rep-reset-pin="${esc(`${site}|${program}|${level}`)}">Réinitialiser son code QR</button><button class="btn danger sm" type="button" data-rep-remove="${esc(`${site}|${program}|${level}`)}">Retirer</button></div>` : `<div class="notice">Aucun responsable n’est encore désigné pour ce groupe.</div>`}<div class="representative-assign">${select}<button class="btn" type="button" data-rep-assign="${esc(`${site}|${program}|${level}`)}">${assignment ? "Remplacer le responsable" : "Désigner le responsable"}</button></div><p class="field-help">L’administrateur peut désigner tout étudiant actif de ce groupe, même si sa carte n’est pas encore approuvée. Un responsable actif est associé à un seul groupe.</p>`;
   }
   async function assignRepresentative(key) {
     const [site, program, level] = key.split("|");
     const userId = byId("rep-student").value;
     if (!userId) { toast("Choisissez un étudiant approuvé dans ce groupe."); return; }
-    const student = approved().find(item => item.studentId === userId && item.site === site && item.program === program && item.level === level);
+    const student = studentProfilesCache.find(item => item.studentId === userId && item.site === site && item.program === program && item.level === level && !item.bannedAt);
     if (!student) { toast("Cet étudiant n’appartient pas au groupe sélectionné."); return; }
-    const { error } = await adminClient.from("class_representatives").upsert({ site, program, level, user_id: userId, assigned_by: currentAdminId, assigned_at: new Date().toISOString() }, { onConflict: "site,program,level" });
-    if (error) { toast(error.message || "Le responsable n’a pas pu être désigné."); return; }
+    const { error } = await adminClient.rpc("admin_assign_class_representative", { p_student_id: userId, p_site: site, p_program: program, p_level: level });
+    if (error) {
+      const message = /permission denied|row-level security/i.test(error.message || "")
+        ? "Votre compte admin n’est pas autorisé sur ce site."
+        : error.message || "Le responsable n’a pas pu être désigné.";
+      toast(message);
+      return;
+    }
     toast(`${fullName(student)} est maintenant responsable de ce groupe.`);
     await loadRepresentatives();
+  }
+  async function assignStudentFromRegistry(userId) {
+    const person = studentProfilesCache.find(item => item.studentId === userId);
+    if (!person) return;
+    if (person.bannedAt) { toast("Un compte banni ne peut pas être responsable."); return; }
+    const { error } = await adminClient.rpc("admin_assign_class_representative", { p_student_id: person.studentId, p_site: person.site, p_program: person.program, p_level: person.level });
+    if (error) { toast(error.message || "Le rôle n’a pas pu être modifié."); return; }
+    toast(`${fullName(person)} est maintenant responsable de ${keyFor(person)}.`);
+    await loadRepresentatives();
+    renderStudents();
+  }
+  async function manageStudentAccount(userId, action) {
+    const person = studentProfilesCache.find(item => item.studentId === userId);
+    if (!person) return;
+    const actionLabel = action === "ban" ? "Bannir" : "Supprimer définitivement";
+    const warning = action === "ban"
+      ? `Bannir ${fullName(person)} ? Sa session sera fermée et son accès sera bloqué.`
+      : `Supprimer définitivement le compte de ${fullName(person)} ? Ses demandes, photos et présences liées seront supprimées. Cette action est irréversible.`;
+    if (!window.confirm(warning)) return;
+    const { data, error } = await adminClient.functions.invoke("manage-student-account", { body: { action, studentId: userId } });
+    if (error || data?.error) { toast(data?.error || error?.message || "L’action n’a pas abouti."); return; }
+    toast(action === "ban" ? `${fullName(person)} a été banni et déconnecté.` : `Le compte de ${fullName(person)} a été supprimé.`);
+    await refreshCurrent();
   }
   async function removeRepresentative(key) {
     const [site, program, level] = key.split("|");
@@ -445,6 +476,12 @@
       if (announcementToggle) void toggleAnnouncement(announcementToggle.dataset.announcementToggle);
       const repAssign = target?.closest("[data-rep-assign]");
       if (repAssign) void assignRepresentative(repAssign.dataset.repAssign);
+      const studentRole = target?.closest("[data-student-role]");
+      if (studentRole) void assignStudentFromRegistry(studentRole.dataset.studentRole);
+      const studentBan = target?.closest("[data-student-ban]");
+      if (studentBan) void manageStudentAccount(studentBan.dataset.studentBan, "ban");
+      const studentDelete = target?.closest("[data-student-delete]");
+      if (studentDelete) void manageStudentAccount(studentDelete.dataset.studentDelete, "delete");
       const repRemove = target?.closest("[data-rep-remove]");
       if (repRemove) void removeRepresentative(repRemove.dataset.repRemove);
       const repResetPin = target?.closest("[data-rep-reset-pin]");
