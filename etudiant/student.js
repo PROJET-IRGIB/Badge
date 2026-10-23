@@ -256,8 +256,20 @@
     if (!("serviceWorker" in navigator) || !window.IRGIB_VAPID_PUBLIC_KEY || !profile || !currentUser) return false;
     try {
       const registration = await navigator.serviceWorker.ready;
+      const applicationServerKey = base64UrlBytes(window.IRGIB_VAPID_PUBLIC_KEY);
       let subscription = await registration.pushManager.getSubscription();
-      if (!subscription) subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64UrlBytes(window.IRGIB_VAPID_PUBLIC_KEY) });
+      if (subscription) {
+        const existingKey = subscription.options?.applicationServerKey;
+        const existingBytes = existingKey ? new Uint8Array(existingKey) : null;
+        const keyMatches = existingBytes && existingBytes.length === applicationServerKey.length
+          && existingBytes.every((byte, index) => byte === applicationServerKey[index]);
+        if (!keyMatches) {
+          await db.from("push_subscriptions").delete().eq("endpoint", subscription.endpoint).eq("user_id", currentUser.id);
+          await subscription.unsubscribe();
+          subscription = null;
+        }
+      }
+      if (!subscription) subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey });
       const row = subscription.toJSON();
       if (!row.endpoint || !row.keys?.p256dh || !row.keys?.auth) return false;
       const { error } = await db.from("push_subscriptions").upsert({ endpoint: row.endpoint, user_id: currentUser.id, site: profile.site, p256dh: row.keys.p256dh, auth_secret: row.keys.auth }, { onConflict: "endpoint" });
