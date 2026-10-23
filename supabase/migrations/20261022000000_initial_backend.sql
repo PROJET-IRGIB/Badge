@@ -28,7 +28,7 @@ create table if not exists public.student_profiles (
   sex text not null check (sex in ('M','F')),
   program text not null check (program in ('ABM','TIC','PFMI','PEA','PP','BBA','SJ','NUT')),
   level text not null check (level in ('LP1','LP2','LP3','M1','M2')),
-  site text not null check (site in ('COT-SIEGE','COT-AKPAKPA','CAL-CENTRE','PNV-CENTRE','PRK-CENTRE','DJG-CENTRE')),
+  site text not null check (site in ('COT-AKPAKPA','CAL-CENTRE','PNV-CENTRE','PRK-CENTRE','DJG-CENTRE')),
   birth_date date,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -86,7 +86,7 @@ create table if not exists public.badge_applications (
   phone text not null, sex text not null check(sex in ('M','F')), birth_date date not null,
   program text not null check(program in ('ABM','TIC','PFMI','PEA','PP','BBA','SJ','NUT')),
   level text not null check(level in ('LP1','LP2','LP3','M1','M2')),
-  site text not null check(site in ('COT-SIEGE','COT-AKPAKPA','CAL-CENTRE','PNV-CENTRE','PRK-CENTRE','DJG-CENTRE')),
+  site text not null check(site in ('COT-AKPAKPA','CAL-CENTRE','PNV-CENTRE','PRK-CENTRE','DJG-CENTRE')),
   status text not null default 'pending' check(status in ('pending','approved','rejected')),
   temporary_matricule text not null unique,
   final_matricule text unique check(final_matricule is null or final_matricule ~ '^IRGIB-[0-9]{4}[FB]$'),
@@ -170,7 +170,7 @@ grant execute on function public.admin_decide_application(uuid,text,text) to aut
 
 create table if not exists public.attendance_sessions (
   id uuid primary key default gen_random_uuid(), token_digest text not null unique,
-  site text not null check(site in ('COT-SIEGE','COT-AKPAKPA','CAL-CENTRE','PNV-CENTRE','PRK-CENTRE','DJG-CENTRE')),
+  site text not null check(site in ('COT-AKPAKPA','CAL-CENTRE','PNV-CENTRE','PRK-CENTRE','DJG-CENTRE')),
   program text not null check(program in ('ABM','TIC','PFMI','PP','BBA','SJ','NUT','PEA')),
   level text not null check(level in ('LP1','LP2','LP3','M1','M2')),
   starts_at timestamptz not null default now(), ends_at timestamptz not null,

@@ -10,7 +10,6 @@
     { code: "NUT", name: "Hygiène, nutrition, santé et environnement", shortName: "Nutrition et environnement", englishName: "Hygiene, nutrition, health and environment", status: "Code proposé", note: "Code court proposé pour la filière nutrition" }
   ];
   const sites = [
-    { id: "COT-SIEGE", city: "Cotonou — Siège", zone: "01", points: [{ name: "Siège", address: "Rue 1886, derrière Immeuble Air France, route de l’Aéroport", phone: "+229 01 99 19 00 85" }] },
     { id: "COT-AKPAKPA", city: "Cotonou — Akpakpa", zone: "02", points: [{ name: "Akpakpa", address: "Campus Universitaire", phone: "+229 01 96 17 19 10" }] },
     { id: "CAL-CENTRE", city: "Calavi", zone: "02", points: [{ name: "Centre d’application", address: "Centre d’application", phone: "+229 01 96 17 19 10" }] },
     { id: "PNV-CENTRE", city: "Porto-Novo", zone: "03", points: [{ name: "Centre d’application", address: "Centre d’application", phone: "+229 01 66 66 65 27" }] },

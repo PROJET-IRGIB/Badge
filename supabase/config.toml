@@ -24,3 +24,7 @@ enable_signup = true
 [auth.email]
 enable_signup = true
 enable_confirmations = true
+
+[auth.email.template.confirmation]
+subject = "Code de confirmation de votre compte IRGIB AFRICA"
+content_path = "./supabase/templates/confirmation.html"

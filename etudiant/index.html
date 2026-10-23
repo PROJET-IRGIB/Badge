@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#12315a">
-  <title>Espace étudiant · IRGIB AFRICA</title><link rel="stylesheet" href="../assets/styles.css?v=20261023c">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#12315a"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Espace étudiant · IRGIB AFRICA</title><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/assets/pwa-192.png"><link rel="stylesheet" href="../assets/styles.css?v=20261023d">
 </head>
 <body>
   <header class="topbar"><a class="brand" href="./"><img src="../assets/blason.jpg" alt="Blason IRGIB AFRICA"><span>IRGIB AFRICA<small>Portail étudiant</small></span></a><div class="top-actions"><span class="pill"><span class="dot"></span> Espace sécurisé</span><button id="signout" class="btn ghost sm" style="display:none">Déconnexion</button></div></header>
@@ -21,7 +21,7 @@
         <p class="field-help auth-switch-hint">Vous n’avez pas encore de compte ? <button class="text-button" type="button" data-open-signup>Créer un compte</button></p>
       </section>
       <section id="signup-panel" class="auth-page" style="display:none">
-      <div class="eyebrow">Nouvel étudiant</div><h2>Créer mon compte</h2><p class="subhead">Renseignez vos informations, puis confirmez votre adresse e-mail.</p>
+      <div class="eyebrow">Nouvel étudiant</div><h2>Créer mon compte</h2><p class="subhead">Renseignez vos informations, puis confirmez votre adresse e-mail avec le code reçu.</p>
       <form id="signup-form"><div class="form-grid">
         <div class="field"><label for="signup-first">Prénom(s)</label><input id="signup-first" name="firstName" required maxlength="50" autocomplete="given-name"></div>
         <div class="field"><label for="signup-last">Nom</label><input id="signup-last" name="lastName" required maxlength="50" autocomplete="family-name"></div>
@@ -38,8 +38,8 @@
     </section>
 
     <section id="verify-screen" class="panel auth-panel" style="display:none;max-width:620px;margin:auto">
-      <div class="eyebrow">Confirmation de l’adresse</div><h1>Vérifier mon e-mail</h1><p class="subhead">Ouvrez le lien de confirmation reçu dans votre boîte mail pour activer votre compte.</p>
-      <form id="verify-form"><input id="verify-code" type="hidden"><p id="demo-code-note" class="notice" style="margin:14px 0"></p><div class="form-actions"><button class="btn secondary" type="button" id="back-to-signup">Retour à la connexion</button></div></form>
+      <div class="eyebrow">Confirmation de l’adresse</div><h1>Vérifier mon e-mail</h1><p class="subhead">Copiez le code à usage unique reçu par e-mail, puis collez-le ici pour activer votre compte.</p>
+      <form id="verify-form"><div class="field"><label for="verify-code">Code de confirmation</label><input id="verify-code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" minlength="6" maxlength="8" placeholder="000000" required aria-describedby="demo-code-note"></div><p id="demo-code-note" class="notice" style="margin:14px 0"></p><div class="form-actions"><button class="btn" type="submit">Confirmer mon adresse</button><button class="btn secondary" type="button" id="resend-code">Renvoyer le code</button><button class="btn ghost" type="button" id="back-to-signup">Retour à l’inscription</button><span id="verify-message" class="form-message" aria-live="polite"></span></div></form>
     </section>
 
     <section id="portal-screen" style="display:none">
@@ -84,6 +84,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <script src="/assets/pwa-install.js?v=20261023b" defer></script>
   <script src="/assets/bootstrap.js?v=backend2" data-entry="/etudiant/student.js?v=backend2" data-error-target="login-message"></script>
 </body>
 </html>

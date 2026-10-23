@@ -17,6 +17,7 @@
 
   let profile = null;
   let currentUser = null;
+  let pendingSignupEmail = "";
   let application = null;
   let attendanceRows = [];
   let studentChannel = null;
@@ -53,7 +54,7 @@
     byId("show-login").classList.toggle("active", login);
     byId("show-signup").classList.toggle("active", !login);
     byId("auth-title").textContent = login ? "Connexion" : "Inscription";
-    byId("auth-intro").textContent = login ? "Connectez-vous avec l’adresse e-mail et le mot de passe utilisés lors de votre inscription." : "Créez votre compte étudiant en renseignant vos informations et en confirmant votre adresse e-mail.";
+    byId("auth-intro").textContent = login ? "Connectez-vous avec l’adresse e-mail et le mot de passe utilisés lors de votre inscription." : "Créez votre compte étudiant en renseignant vos informations et en confirmant votre adresse e-mail avec un code.";
     byId("login-message").textContent = "";
     byId("signup-message").textContent = "";
   };
@@ -322,14 +323,47 @@
       if (error) throw error;
       if (data.session) { currentUser = data.user; byId("signup-form").reset(); await activatePortal(); }
       else {
-        byId("demo-code-note").textContent = `Un message de confirmation a été envoyé à ${draft.email}. Ouvrez-le pour activer votre compte, puis revenez vous connecter.`;
+        pendingSignupEmail = draft.email;
+        byId("verify-code").value = "";
+        byId("verify-message").textContent = "";
+        byId("demo-code-note").textContent = `Un code de confirmation a été envoyé à ${draft.email}. Copiez-le depuis votre boîte e-mail et collez-le ci-dessus.`;
         setScreen("verify-screen");
       }
     } catch (error) { byId("signup-message").textContent = error.message || "Création du compte impossible. Vérifiez les informations puis réessayez."; }
     finally { button.disabled = false; }
   });
-  byId("verify-form").addEventListener("submit", event => event.preventDefault());
-  byId("back-to-signup").addEventListener("click", () => { setScreen("auth-screen"); showAuthPage("login"); });
+  byId("verify-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    const token = byId("verify-code").value.replace(/\s/g, "");
+    if (!pendingSignupEmail) { byId("verify-message").textContent = "Recommencez l’inscription pour demander un nouveau code."; return; }
+    if (!/^\d{6,8}$/.test(token)) { byId("verify-message").textContent = "Saisissez le code numérique reçu par e-mail."; return; }
+    const button = event.currentTarget.querySelector('[type="submit"]'); button.disabled = true;
+    byId("verify-message").textContent = "Vérification du code…";
+    try {
+      const { data, error } = await db.auth.verifyOtp({ email: pendingSignupEmail, token, type: "email" });
+      if (error) throw error;
+      if (!data.user) throw new Error("La confirmation a réussi mais le compte étudiant n’a pas été retourné. Connectez-vous pour continuer.");
+      currentUser = data.user;
+      pendingSignupEmail = "";
+      byId("verify-form").reset();
+      await activatePortal();
+    } catch (error) {
+      byId("verify-message").textContent = /expired|invalid|token|otp/i.test(error.message || "") ? "Code incorrect ou expiré. Vérifiez le code reçu ou demandez-en un nouveau." : error.message || "La vérification a échoué. Réessayez.";
+    } finally { button.disabled = false; }
+  });
+  byId("resend-code").addEventListener("click", async () => {
+    if (!pendingSignupEmail) { byId("verify-message").textContent = "Recommencez l’inscription pour demander un nouveau code."; return; }
+    const button = byId("resend-code"); button.disabled = true;
+    byId("verify-message").textContent = "Envoi d’un nouveau code…";
+    try {
+      const { error } = await db.auth.resend({ type: "signup", email: pendingSignupEmail });
+      if (error) throw error;
+      byId("verify-code").value = "";
+      byId("verify-message").textContent = `Un nouveau code a été envoyé à ${pendingSignupEmail}.`;
+    } catch (error) { byId("verify-message").textContent = error.message || "Le code n’a pas pu être renvoyé. Attendez un instant puis réessayez."; }
+    finally { button.disabled = false; }
+  });
+  byId("back-to-signup").addEventListener("click", () => { setScreen("auth-screen"); showAuthPage("signup"); });
   byId("password-form").addEventListener("submit", async event => {
     event.preventDefault();
     const current = byId("current-password").value;

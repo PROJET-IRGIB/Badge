@@ -26,7 +26,7 @@ La clé sb_publishable est conçue pour être transmise au navigateur et ne cons
 
 ## Données académiques
 
-Niveaux : LP1, LP2, LP3, M1, M2. Les huit filières et les six sites sont proposés : 240 groupes au total. Le Siège et Akpakpa sont deux sites distincts. La clé suit SITE-FILIERE-NIVEAU.
+Niveaux : LP1, LP2, LP3, M1, M2. Les huit filières et les cinq sites d’étude sont proposés : 200 groupes au total. À Cotonou, seul Akpakpa est un site d’étude; le Siège administratif n’est pas proposé aux étudiants. La clé suit SITE-FILIERE-NIVEAU.
 
 ## Carte et présence
 
