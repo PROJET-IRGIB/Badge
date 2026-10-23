@@ -171,20 +171,6 @@
     byId("attendance-program").innerHTML = `<option value="">Toutes les filières</option>${D.programs.map(item => `<option value="${item.code}">${item.code} · ${esc(item.shortName)}</option>`).join("")}`;
     byId("attendance-level").innerHTML = `<option value="">Toutes les années</option>${D.levels.map(level => `<option value="${level}">${level} · ${careerYear[level] || level}</option>`).join("")}`;
   }
-  async function downloadDailyQrDocument() {
-    const site = adminSite || byId("attendance-site").value || null;
-    const popup = window.open("", "_blank");
-    if (!popup) { toast("Autorisez les fenêtres contextuelles pour créer le document PDF."); return; }
-    popup.document.write("<p style='font:16px Arial;padding:30px'>Préparation des QR du jour…</p>");
-    const { data, error } = await adminClient.rpc("admin_daily_attendance_qrs", { p_site: site, p_day: D.todayKey() });
-    if (error) { popup.close(); toast(error.message || "Les QR du jour ne sont pas disponibles."); return; }
-    const sessions = Array.isArray(data) ? data : [];
-    if (!sessions.length) { popup.close(); toast("Les QR du jour ne sont pas disponibles pour ce site."); return; }
-    const cards = sessions.map(s => `<article><h2>Présence du jour</h2><h3>${esc(s.program)} · ${esc(s.level)}</h3><p>${esc(siteName(s.site))} · ${esc(s.session_day)}</p><div class="qr" data-token="${esc(s.token)}"></div><small>À transmettre au groupe correspondant · valable aujourd’hui</small></article>`).join("");
-    popup.document.open();
-    popup.document.write(`<!doctype html><html lang="fr"><meta charset="utf-8"><title>QR de présence · ${esc(D.todayKey())}</title><style>body{font:15px Arial;color:#102a39;margin:20px}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}article{border:1px solid #9cb4c4;border-radius:12px;padding:18px;text-align:center;break-inside:avoid}h2{font-size:19px;margin:0 0 6px}h3{font-size:26px;margin:6px}p{margin:6px}.qr{margin:14px auto;width:180px;height:180px}.qr img{width:180px;height:180px}small{display:block;color:#526d7b}@media print{button{display:none}.grid{gap:10px}}</style><h1>Présences IRGIB AFRICA · ${esc(D.todayKey())}</h1><button onclick="print()">Imprimer / Enregistrer en PDF</button><main class="grid">${cards}</main><script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"><\/script><script>document.querySelectorAll('.qr').forEach(e=>new QRCode(e,{text:e.dataset.token,width:180,height:180,correctLevel:QRCode.CorrectLevel.M}));setTimeout(()=>print(),700)<\/script></html>`);
-    popup.document.close();
-  }
   function renderGroups() {
     const site = byId("group-site").value;
     const program = byId("group-program").value;
@@ -277,7 +263,7 @@
     const candidates = approved().filter(item => item.site === site && item.program === program && item.level === level && (!representativesCache.some(rep => rep.user_id === item.studentId) || assignment?.user_id === item.studentId));
     const current = assignment && approved().find(item => item.studentId === assignment.user_id);
     const select = `<label for="rep-student">Étudiant approuvé</label><select id="rep-student"><option value="">${candidates.length ? "Choisir dans le groupe" : "Aucun étudiant disponible"}</option>${candidates.map(item => `<option value="${esc(item.studentId)}" ${assignment?.user_id === item.studentId ? "selected" : ""}>${esc(fullName(item))} · ${esc(item.finalMatricule || "")}</option>`).join("")}</select>`;
-    byId("representative-manager").innerHTML = `<div class="representative-group-summary"><span class="news-tag">${esc(siteName(site))}</span><span class="news-tag">${esc(programName(program))}</span><span class="news-tag">${esc(level)}</span></div>${assignment ? `<div class="representative-current"><div><small>Responsable actuel</small><strong>${esc(current ? fullName(current) : "Compte affecté, étudiant non trouvé")}</strong><span>${esc(current?.finalMatricule || "")}</span></div><button class="btn danger sm" type="button" data-rep-remove="${esc(`${site}|${program}|${level}`)}">Retirer</button></div>` : `<div class="notice">Aucun responsable n’est encore désigné pour ce groupe.</div>`}<div class="representative-assign">${select}<button class="btn" type="button" data-rep-assign="${esc(`${site}|${program}|${level}`)}">${assignment ? "Remplacer le responsable" : "Désigner le responsable"}</button></div><p class="field-help">Un seul responsable est actif par groupe. Seuls les étudiants dont le badge est approuvé sont proposés.</p>`;
+    byId("representative-manager").innerHTML = `<div class="representative-group-summary"><span class="news-tag">${esc(siteName(site))}</span><span class="news-tag">${esc(programName(program))}</span><span class="news-tag">${esc(level)}</span></div>${assignment ? `<div class="representative-current"><div><small>Responsable actuel</small><strong>${esc(current ? fullName(current) : "Compte affecté, étudiant non trouvé")}</strong><span>${esc(current?.finalMatricule || "")}</span></div><button class="btn secondary sm" type="button" data-rep-reset-pin="${esc(`${site}|${program}|${level}`)}">Réinitialiser son code QR</button><button class="btn danger sm" type="button" data-rep-remove="${esc(`${site}|${program}|${level}`)}">Retirer</button></div>` : `<div class="notice">Aucun responsable n’est encore désigné pour ce groupe.</div>`}<div class="representative-assign">${select}<button class="btn" type="button" data-rep-assign="${esc(`${site}|${program}|${level}`)}">${assignment ? "Remplacer le responsable" : "Désigner le responsable"}</button></div><p class="field-help">Un seul responsable est actif par groupe. Seuls les étudiants dont le badge est approuvé sont proposés.</p>`;
   }
   async function assignRepresentative(key) {
     const [site, program, level] = key.split("|");
@@ -296,6 +282,13 @@
     if (error) { toast(error.message || "Le responsable n’a pas pu être retiré."); return; }
     toast("Responsable retiré du groupe.");
     await loadRepresentatives();
+  }
+  async function resetRepresentativePin(key) {
+    if (!window.confirm("Réinitialiser le code secret du responsable ? Il devra en créer un nouveau.")) return;
+    const [site, program, level] = key.split("|");
+    const { error } = await adminClient.rpc("admin_reset_representative_daily_qr_pin", { p_site: site, p_program: program, p_level: level });
+    if (error) { toast(error.message || "Le code secret n’a pas pu être réinitialisé."); return; }
+    toast("Code secret réinitialisé. Le responsable devra en créer un nouveau.");
   }
   async function toggleAnnouncement(id) {
     const item = announcementsCache.find(row => row.id === id);
@@ -436,7 +429,6 @@
     ["attendance-site", "attendance-program", "attendance-level", "attendance-status"].forEach(id => byId(id).addEventListener("change", renderAttendance));
     byId("card-search").addEventListener("input", renderCards);
     ["group-site", "group-program", "group-level"].forEach(id => byId(id).addEventListener("change", renderGroups));
-    byId("download-daily-qrs").addEventListener("click", () => void downloadDailyQrDocument());
     byId("announcement-form").addEventListener("submit", event => void publishAnnouncement(event));
     byId("announcement-media").addEventListener("change", event => {
       const preview = byId("announcement-media-preview");
@@ -455,6 +447,8 @@
       if (repAssign) void assignRepresentative(repAssign.dataset.repAssign);
       const repRemove = target?.closest("[data-rep-remove]");
       if (repRemove) void removeRepresentative(repRemove.dataset.repRemove);
+      const repResetPin = target?.closest("[data-rep-reset-pin]");
+      if (repResetPin) void resetRepresentativePin(repResetPin.dataset.repResetPin);
       const review = target?.closest("[data-review]");
       if (review) void openReview(review.dataset.review);
       const preview = target?.closest("[data-preview-card]");

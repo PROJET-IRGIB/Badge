@@ -38,6 +38,7 @@
   let representativeScanFrame = 0;
   let representativeLastScanTime = 0;
   let representativeLastQr = "";
+  let representativeHasPin = false;
 
   const getApplication = () => application;
   const fromProfileRow = row => row && ({ userId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date });
@@ -73,6 +74,7 @@
     byId("signout").style.display = screen === "portal-screen" ? "inline-flex" : "none";
   };
   const selectStudentView = view => {
+    hideRepresentativeDailyQr();
     document.querySelectorAll(".student-view").forEach(section => section.classList.toggle("active", section.id === `student-view-${view}`));
     document.querySelectorAll(".student-tabs [data-student-view]").forEach(button => button.classList.toggle("active", button.dataset.studentView === view));
     if (view === "attendance") { renderAttendance(); }
@@ -289,12 +291,57 @@
     const { data: assignment, error: assignmentError } = await db.from("class_representatives").select("user_id").eq("user_id", currentUser.id).maybeSingle();
     if (assignmentError || !assignment) return;
     panel.hidden = false;
+    const { data: hasPin, error: pinError } = await db.rpc("representative_daily_qr_pin_status");
+    representativeHasPin = !pinError && Boolean(hasPin);
+    byId("rep-pin-label").textContent = representativeHasPin ? "Code secret à 4 chiffres" : "Créer votre code secret à 4 chiffres";
+    byId("rep-pin-submit").textContent = representativeHasPin ? "Voir le QR du jour" : "Créer mon code";
+    byId("rep-pin-message").textContent = pinError ? "La fonction PIN n’est pas encore disponible. Appliquez la migration Supabase puis rechargez." : "";
+    byId("rep-daily-pin").value = "";
     byId("rep-absent-list").innerHTML = `<p class="muted small">Chargement de la liste des absents…</p>`;
     const { data, error } = await db.rpc("list_representative_groupmates");
     if (error) { byId("rep-absent-list").innerHTML = `<p class="form-message">Impossible de charger les absents. Réessayez dans un instant.</p>`; return; }
     representativeGroupmates = data || [];
     if (!representativeGroupmates.some(row => row.student_id === selectedRepresentativeStudent?.student_id)) selectedRepresentativeStudent = null;
     renderRepresentativeGroupmates();
+  }
+  function hideRepresentativeDailyQr() {
+    const result = byId("rep-daily-qr-result");
+    if (!result) return;
+    result.hidden = true;
+    byId("rep-daily-qr-image").replaceChildren();
+    byId("rep-daily-pin").value = "";
+  }
+  async function revealRepresentativeDailyQr(pin) {
+    if (representativeHasPin) hideRepresentativeDailyQr();
+    const message = byId("rep-pin-message");
+    const submit = byId("rep-pin-submit");
+    submit.disabled = true;
+    message.textContent = "Vérification…";
+    try {
+      const rpc = representativeHasPin ? "representative_daily_attendance_qr" : "set_representative_daily_qr_pin";
+      const { data, error } = await db.rpc(rpc, { p_pin: pin });
+      if (error) throw error;
+      if (!representativeHasPin) {
+        representativeHasPin = true;
+        byId("rep-pin-label").textContent = "Code secret à 4 chiffres";
+        byId("rep-pin-submit").textContent = "Voir le QR du jour";
+        message.textContent = "Code créé. Saisissez-le à nouveau pour révéler le QR.";
+        byId("rep-daily-pin").value = "";
+        return;
+      }
+      if (!data?.ok) throw new Error(data?.message || "Code incorrect");
+      const host = byId("rep-daily-qr-image");
+      host.replaceChildren();
+      if (!window.QRCode) throw new Error("Le générateur QR n’est pas chargé. Rechargez puis réessayez.");
+      new QRCode(host, { text: data.token, width: 240, height: 240, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+      byId("rep-daily-qr-title").textContent = `${data.program} · ${data.level} · ${D.getSite(data.site).city}`;
+      byId("rep-daily-qr-date").textContent = `${data.course_title} · ${new Date(`${data.session_day}T12:00:00`).toLocaleDateString("fr-FR", { dateStyle: "long", timeZone: "Africa/Porto-Novo" })} · valable jusqu’à minuit`;
+      byId("rep-daily-qr-result").hidden = false;
+      message.textContent = "QR révélé. Masquez-le en quittant cette page ou après le pointage.";
+      byId("rep-daily-pin").value = "";
+    } catch (error) {
+      message.textContent = error.message || "Le QR n’a pas pu être révélé. Vérifiez le code puis réessayez.";
+    } finally { submit.disabled = false; }
   }
   function renderRepresentativeGroupmates() {
     const list = byId("rep-absent-list");
@@ -322,7 +369,7 @@
     representativeLastQr = rawValue;
     const expected = `IRGIB-CARTE:${selectedRepresentativeStudent.final_matricule || ""}`;
     if (!selectedRepresentativeStudent.final_matricule || rawValue !== expected) {
-      byId("rep-attendance-message").textContent = "Ce QR ne correspond pas à l’étudiant sélectionné. Vérifiez le nom et scannez son badge.";
+      byId("rep-attendance-message").textContent = "QR non valide pour cet étudiant : il ne correspond pas au badge sélectionné. Vérifiez son nom et scannez le QR de sa carte.";
       window.setTimeout(() => { representativeLastQr = ""; }, 1200);
       return;
     }
@@ -668,6 +715,18 @@
     await startRepresentativeCamera();
     event.currentTarget.disabled = !selectedRepresentativeStudent;
   });
+  byId("rep-pin-form").addEventListener("submit", event => {
+    event.preventDefault();
+    const pin = byId("rep-daily-pin").value;
+    if (!/^\d{4}$/.test(pin)) { byId("rep-pin-message").textContent = "Saisissez exactement 4 chiffres."; return; }
+    void revealRepresentativeDailyQr(pin);
+  });
+  byId("rep-hide-daily-qr").addEventListener("click", () => {
+    hideRepresentativeDailyQr();
+    byId("rep-pin-message").textContent = "QR masqué. Saisissez votre code secret pour le révéler de nouveau.";
+  });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) hideRepresentativeDailyQr(); });
+  window.addEventListener("pagehide", hideRepresentativeDailyQr);
   byId("rep-absent-list").addEventListener("click", event => {
     const choice = event.target.closest("[data-rep-student]");
     if (!choice || representativeCameraStream) return;
@@ -793,7 +852,7 @@
 
   byId("back-to-signup").textContent = "Retour à la connexion";
   db.auth.onAuthStateChange((event, session) => {
-    if (event === "SIGNED_OUT") { currentUser = null; profile = null; application = null; attendanceRows = []; setScreen("auth-screen"); showAuthPage("login"); }
+    if (event === "SIGNED_OUT") { hideRepresentativeDailyQr(); representativeHasPin = false; currentUser = null; profile = null; application = null; attendanceRows = []; setScreen("auth-screen"); showAuthPage("login"); }
     else if (event === "SIGNED_IN" && session?.user && !currentUser) { currentUser = session.user; void activatePortal(); }
   });
   db.auth.getSession().then(({ data, error }) => {
