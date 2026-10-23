@@ -11,8 +11,6 @@
   let studentProfilesCache = [];
   let attendanceCache = [];
   let adminSite = null;
-  let qrScanStream = null;
-  let qrScanFrame = 0;
   const applications = () => applicationsCache;
   const approved = () => applications().filter(item => item.status === "approved");
   const siteName = id => D.getSite(id).city;
@@ -212,41 +210,6 @@
     popup.document.write(`<!doctype html><html lang="fr"><meta charset="utf-8"><title>QR de présence · ${esc(D.todayKey())}</title><style>body{font:15px Arial;color:#102a39;margin:20px}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}article{border:1px solid #9cb4c4;border-radius:12px;padding:18px;text-align:center;break-inside:avoid}h2{font-size:19px;margin:0 0 6px}h3{font-size:26px;margin:6px}p{margin:6px}.qr{margin:14px auto;width:180px;height:180px}.qr img{width:180px;height:180px}small{display:block;color:#526d7b}@media print{button{display:none}.grid{gap:10px}}</style><h1>Présences IRGIB AFRICA · ${esc(D.todayKey())}</h1><button onclick="print()">Imprimer / Enregistrer en PDF</button><main class="grid">${cards}</main><script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"><\/script><script>document.querySelectorAll('.qr').forEach(e=>new QRCode(e,{text:e.dataset.token,width:180,height:180,correctLevel:QRCode.CorrectLevel.M}));setTimeout(()=>print(),700)<\/script></html>`);
     popup.document.close();
   }
-  function stopAdminScanner() {
-    if (qrScanFrame) cancelAnimationFrame(qrScanFrame);
-    qrScanFrame = 0;
-    if (qrScanStream) qrScanStream.getTracks().forEach(track => track.stop());
-    qrScanStream = null;
-    const video = byId("admin-camera-video");
-    if (video) video.srcObject = null;
-    if (byId("admin-stop-scan")) byId("admin-stop-scan").hidden = true;
-    if (byId("admin-resume-scan")) byId("admin-resume-scan").hidden = false;
-  }
-  async function resumeAdminScanner() {
-    try {
-      if (!navigator.mediaDevices?.getUserMedia || !window.jsQR) throw new Error("Caméra ou lecteur QR indisponible. Utilisez un navigateur récent en HTTPS.");
-      stopAdminScanner();
-      qrScanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
-      const video = byId("admin-camera-video"); video.srcObject = qrScanStream; await video.play();
-      byId("admin-stop-scan").hidden = false; byId("admin-resume-scan").hidden = true;
-      byId("admin-scan-message").textContent = "Caméra active. Scannez un QR de séance pour vérifier le groupe.";
-      const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d", { willReadFrequently: true });
-      const scan = async () => {
-        if (!qrScanStream || video.readyState < 2) { qrScanFrame = requestAnimationFrame(scan); return; }
-        canvas.width = video.videoWidth; canvas.height = video.videoHeight; ctx.drawImage(video,0,0);
-        const frame = ctx.getImageData(0,0,canvas.width,canvas.height); const decoded = window.jsQR(frame.data,frame.width,frame.height,{inversionAttempts:"attemptBoth"});
-        if (decoded?.data) {
-          stopAdminScanner();
-          const { data, error } = await adminClient.rpc("admin_attendance_session_info", { p_token: decoded.data });
-          if (error) byId("admin-scan-message").textContent = error.message || "Ce QR n’est pas accessible pour votre site.";
-          else byId("admin-scan-message").textContent = `${data.course_title} · ${data.program} ${data.level} · ${siteName(data.site)} · ${data.active ? "séance active" : "séance terminée"}. Les étudiants doivent scanner ce QR depuis leur espace pour enregistrer leur présence.`;
-          return;
-        }
-        qrScanFrame = requestAnimationFrame(scan);
-      };
-      qrScanFrame = requestAnimationFrame(scan);
-    } catch (error) { stopAdminScanner(); byId("admin-scan-message").textContent = error.message || "Impossible d’ouvrir la caméra."; }
-  }
   function renderGroups() {
     const site = byId("group-site").value;
     const program = byId("group-program").value;
@@ -373,7 +336,6 @@
     if (appInitialized) return;
     appInitialized = true;
     byId("session-create-form").insertAdjacentHTML("beforebegin", `<button class="btn secondary sm" id="download-daily-qrs" type="button" style="margin-bottom:12px">Imprimer / enregistrer les QR du jour en PDF</button>`);
-    byId("session-qr-panel").insertAdjacentHTML("afterend", `<section class="panel" style="margin:16px 0"><div class="panel-head"><div><div class="eyebrow">Contrôle du QR</div><h2>Scanner un code de séance</h2><p>Annule le scan à tout moment puis reprends-le sans perdre la liste.</p></div></div><video id="admin-camera-video" playsinline muted style="width:min(100%,420px);border-radius:12px;background:#102a39;min-height:220px"></video><div class="form-actions"><button class="btn" id="admin-resume-scan" type="button">Ouvrir / reprendre le scanner</button><button class="btn secondary" id="admin-stop-scan" type="button" hidden>Annuler le scan</button></div><p id="admin-scan-message" class="form-message" aria-live="polite">Le QR quotidien identifie la séance. Pour qu’une présence soit enregistrée, l’étudiant doit le scanner depuis son espace.</p></section>`);
     const studentHeading = document.querySelector("#view-students .table-tools h3");
     if (studentHeading) studentHeading.textContent = "Étudiants inscrits";
     document.querySelectorAll(".side-nav [data-view]").forEach(button => button.addEventListener("click", () => setView(button.dataset.view)));
@@ -388,8 +350,6 @@
     byId("card-search").addEventListener("input", renderCards);
     ["group-site", "group-program", "group-level"].forEach(id => byId(id).addEventListener("change", renderGroups));
     byId("download-daily-qrs").addEventListener("click", () => void downloadDailyQrDocument());
-    byId("admin-resume-scan").addEventListener("click", () => void resumeAdminScanner());
-    byId("admin-stop-scan").addEventListener("click", () => { stopAdminScanner(); byId("admin-scan-message").textContent = "Scanner mis en pause. Reprenez quand vous le souhaitez."; });
     byId("group-search").addEventListener("input", renderGroups);
     document.addEventListener("click", event => {
       const target = event.target instanceof Element ? event.target : event.target?.parentElement;
@@ -402,14 +362,12 @@
     });
     byId("print-admin-card").addEventListener("click", () => { document.body.classList.add("print-card-mode", "admin-print-mode"); window.print(); setTimeout(() => document.body.classList.remove("print-card-mode", "admin-print-mode"), 900); });
     byId("admin-logout").addEventListener("click", async () => {
-      stopAdminScanner();
       const { error } = await adminClient.auth.signOut();
       showAdminGate(error ? "La déconnexion a échoué. Réessayez." : "Vous êtes déconnecté.");
     });
     initGroupFilters();
     initSessionForm();
     renderDashboard();
-    window.addEventListener("beforeunload", stopAdminScanner);
   }
   async function authorizeAdmin(session) {
     if (!session) { showAdminGate("Connectez-vous avec votre compte administrateur."); return false; }
