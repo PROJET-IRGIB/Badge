@@ -129,6 +129,7 @@
     const status = byId("my-card-status");
     const zone = byId("student-card-zone");
     const actions = byId("card-print-actions");
+    zone.closest(".student-card-panel")?.classList.toggle("has-approved-card", Boolean(app && app.status === "approved"));
     if (!app || app.status !== "approved") {
       zone.style.display = "none";
       actions.style.display = "none";
@@ -136,7 +137,7 @@
       return;
     }
     status.innerHTML = `<div class="notice" style="margin-bottom:14px"><strong>Carte approuvée.</strong> Matricule définitif : ${esc(app.finalMatricule)}. Le QR du recto contient un identifiant de carte, sans nom ni données personnelles.</div>`;
-    zone.style.display = "grid";
+    zone.style.display = "block";
     actions.style.display = "flex";
     drawCard(app);
   }

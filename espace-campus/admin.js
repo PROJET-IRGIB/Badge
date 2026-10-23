@@ -158,43 +158,9 @@
     byId("group-site").innerHTML = `${adminSite ? "" : `<option value="">Tous les sites</option>`}${scopedSites.map(item => `<option value="${item.id}">${esc(item.city)}</option>`).join("")}`;
     byId("group-program").innerHTML = `<option value="">Toutes les filières</option>${D.programs.map(item => `<option value="${item.code}">${item.code} · ${esc(item.shortName)}</option>`).join("")}`;
     byId("group-level").innerHTML = `<option value="">Tous les niveaux</option>${D.levels.map(level => `<option value="${level}">${level} · ${careerYear[level] || level}</option>`).join("")}`;
-    byId("attendance-site").innerHTML = `${adminSite ? "" : `<option value="">Tous les sites</option>`}${scopedSites.map(item => `<option value="${item.id}">${esc(item.city)}</option>`).join("")}`;
+    byId("attendance-site").innerHTML = `${adminSite ? "" : `<option value="">Tous les sites · 200 QR</option>`}${scopedSites.map(item => `<option value="${item.id}">${esc(item.city)} · 40 QR</option>`).join("")}`;
     byId("attendance-program").innerHTML = `<option value="">Toutes les filières</option>${D.programs.map(item => `<option value="${item.code}">${item.code} · ${esc(item.shortName)}</option>`).join("")}`;
     byId("attendance-level").innerHTML = `<option value="">Toutes les années</option>${D.levels.map(level => `<option value="${level}">${level} · ${careerYear[level] || level}</option>`).join("")}`;
-  }
-  let activeSessionToken = "";
-  function initSessionForm() {
-    byId("session-duration").closest(".field").hidden = true;
-    byId("session-create-button").textContent = "Afficher le QR du jour";
-    byId("session-site").innerHTML = D.sites.filter(site => !adminSite || site.id === adminSite).map(site => `<option value="${esc(site.id)}">${esc(site.city)}</option>`).join("");
-    byId("session-program").innerHTML = D.programs.map(program => `<option value="${esc(program.code)}">${esc(program.code)} · ${esc(program.shortName)}</option>`).join("");
-    byId("session-level").innerHTML = D.levels.map(level => `<option value="${esc(level)}">${esc(level)}</option>`).join("");
-    byId("session-create-form").addEventListener("submit", async event => {
-      event.preventDefault();
-      const button = byId("session-create-button"); button.disabled = true;
-      byId("session-create-message").textContent = "Création du code…";
-      try {
-        const { data, error } = await adminClient.rpc("admin_create_attendance_session", {
-          p_site: byId("session-site").value, p_program: byId("session-program").value,
-          p_level: byId("session-level").value, p_duration_minutes: Number(byId("session-duration").value)
-        });
-        if (error) throw error;
-        const session = Array.isArray(data) ? data[0] : data;
-        activeSessionToken = session.token;
-        const host = byId("session-qr-code"); host.replaceChildren();
-        if (!window.QRCode) throw new Error("Le générateur QR n’est pas chargé. Rechargez la page.");
-        new QRCode(host, { text: activeSessionToken, width: 220, height: 220, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
-        byId("session-qr-info").textContent = `${siteName(session.site)} · ${programName(session.program)} · ${session.level} · expire à ${new Date(session.ends_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}. Gardez ce QR réservé au groupe sélectionné.`;
-        byId("session-qr-panel").hidden = false;
-        byId("session-create-message").textContent = "QR créé. Le code complet n’est affiché qu’ici.";
-      } catch (error) { byId("session-create-message").textContent = error.message || "La séance n’a pas pu être créée."; }
-      finally { button.disabled = false; }
-    });
-    byId("copy-session-token").addEventListener("click", async () => {
-      if (!activeSessionToken) return;
-      try { await navigator.clipboard.writeText(activeSessionToken); toast("Code de secours copié."); }
-      catch { toast("La copie automatique est bloquée par le navigateur."); }
-    });
   }
   async function downloadDailyQrDocument() {
     const site = adminSite || byId("attendance-site").value || null;
@@ -204,8 +170,8 @@
     const { data, error } = await adminClient.rpc("admin_daily_attendance_qrs", { p_site: site, p_day: D.todayKey() });
     if (error) { popup.close(); toast(error.message || "Les QR du jour ne sont pas disponibles."); return; }
     const sessions = Array.isArray(data) ? data : [];
-    if (!sessions.length) { popup.close(); toast("Aucun groupe avec des étudiants approuvés aujourd’hui."); return; }
-    const cards = sessions.map(s => `<article><h2>Code QR du jour</h2><h3>${esc(s.program)} ${esc(s.level)}</h3><p>${esc(siteName(s.site))} · ${esc(s.session_day)}</p><p>${esc(s.course_title || "Séance du jour")}</p><div class="qr" data-token="${esc(s.token)}"></div><small>À scanner depuis l’espace étudiant · valable jusqu’à la fin de la journée</small></article>`).join("");
+    if (!sessions.length) { popup.close(); toast("Les QR du jour ne sont pas disponibles pour ce site."); return; }
+    const cards = sessions.map(s => `<article><h2>Présence du jour</h2><h3>${esc(s.program)} · ${esc(s.level)}</h3><p>${esc(siteName(s.site))} · ${esc(s.session_day)}</p><div class="qr" data-token="${esc(s.token)}"></div><small>À transmettre au groupe correspondant · valable aujourd’hui</small></article>`).join("");
     popup.document.open();
     popup.document.write(`<!doctype html><html lang="fr"><meta charset="utf-8"><title>QR de présence · ${esc(D.todayKey())}</title><style>body{font:15px Arial;color:#102a39;margin:20px}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}article{border:1px solid #9cb4c4;border-radius:12px;padding:18px;text-align:center;break-inside:avoid}h2{font-size:19px;margin:0 0 6px}h3{font-size:26px;margin:6px}p{margin:6px}.qr{margin:14px auto;width:180px;height:180px}.qr img{width:180px;height:180px}small{display:block;color:#526d7b}@media print{button{display:none}.grid{gap:10px}}</style><h1>Présences IRGIB AFRICA · ${esc(D.todayKey())}</h1><button onclick="print()">Imprimer / Enregistrer en PDF</button><main class="grid">${cards}</main><script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"><\/script><script>document.querySelectorAll('.qr').forEach(e=>new QRCode(e,{text:e.dataset.token,width:180,height:180,correctLevel:QRCode.CorrectLevel.M}));setTimeout(()=>print(),700)<\/script></html>`);
     popup.document.close();
@@ -335,7 +301,6 @@
   function initAdminApp() {
     if (appInitialized) return;
     appInitialized = true;
-    byId("session-create-form").insertAdjacentHTML("beforebegin", `<button class="btn secondary sm" id="download-daily-qrs" type="button" style="margin-bottom:12px">Imprimer / enregistrer les QR du jour en PDF</button>`);
     const studentHeading = document.querySelector("#view-students .table-tools h3");
     if (studentHeading) studentHeading.textContent = "Étudiants inscrits";
     document.querySelectorAll(".side-nav [data-view]").forEach(button => button.addEventListener("click", () => setView(button.dataset.view)));
@@ -366,7 +331,6 @@
       showAdminGate(error ? "La déconnexion a échoué. Réessayez." : "Vous êtes déconnecté.");
     });
     initGroupFilters();
-    initSessionForm();
     renderDashboard();
   }
   async function authorizeAdmin(session) {

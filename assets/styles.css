@@ -116,6 +116,17 @@
     break-after: auto;
     page-break-after: auto;
   }
+  body.print-card-mode .student-card-panel .card-v2-front {
+    break-after: page !important;
+    page-break-after: always !important;
+  }
+  body.print-card-mode .student-card-panel .card-v2-back {
+    display: grid !important;
+    break-before: auto !important;
+    page-break-before: auto !important;
+    break-after: auto !important;
+    page-break-after: auto !important;
+  }
 }
 
 /* Palette du blason : bleu marine, sans doré ni vert d’eau. */
@@ -145,6 +156,86 @@
 .field input:focus,.field select:focus,.searchbox:focus{border-color:#3d6ca8;box-shadow:0 0 0 3px rgba(26,68,128,.12)}
 .student-tabs,.auth-switch{background:#e8edf3}
 .notification-banner{border-color:#d7e3c8;background:#f3f7ef;color:#2f5d3a}
+
+/* Student portal: larger on-screen front and a mobile-first campus app layout. */
+.student-card-panel{overflow:hidden}
+.student-card-wrap .card-v2-front{width:min(100%,900px);max-width:900px;box-shadow:0 24px 60px rgba(12,35,68,.24)}
+.student-card-panel .card-v2-back{display:none}
+.student-card-panel .panel-head{margin-bottom:20px}
+.student-card-panel .panel-head h2{font-size:28px}
+.student-site-panel{background:linear-gradient(150deg,#fff 35%,#eef4fb)}
+.daily-qr-panel{display:flex;align-items:center;justify-content:space-between;gap:24px;border-color:#c9d9ec;background:linear-gradient(120deg,#fff,#edf4fc)}
+.daily-qr-copy{max-width:620px}.daily-qr-copy h2{margin:6px 0}.daily-qr-copy p{margin:0;color:var(--muted);line-height:1.5}
+.daily-qr-actions{display:grid;grid-template-columns:minmax(190px,1fr) auto;gap:9px;align-items:center;min-width:min(510px,48%)}
+.daily-qr-actions select{height:44px;border:1px solid #cbd8e6;border-radius:9px;background:#fff;padding:0 11px;color:var(--ink)}
+.daily-qr-actions .btn{min-height:44px;white-space:nowrap}.daily-qr-actions>span{grid-column:1/-1}
+@media(max-width:700px){
+  body:has(#portal-screen[style*="display: block"]){background:#edf2f8}
+  body:has(#portal-screen[style*="display: block"]) .topbar{height:62px;padding:0 16px;background:#fff}
+  body:has(#portal-screen[style*="display: block"]) .topbar .brand{font-size:14px;gap:9px}
+  body:has(#portal-screen[style*="display: block"]) .brand img{width:36px;height:36px}
+  body:has(#portal-screen[style*="display: block"]) .top-actions{gap:6px}
+  body:has(#portal-screen[style*="display: block"]) .top-actions .pill{font-size:0;padding:8px;border:0;background:#eef4fb}
+  body:has(#portal-screen[style*="display: block"]) .top-actions .pill .dot{width:9px;height:9px}
+  body:has(#portal-screen[style*="display: block"]) #signout{font-size:11px;padding:8px}
+  body:has(#portal-screen[style*="display: block"]) .content{padding:14px 13px calc(94px + env(safe-area-inset-bottom));}
+  body:has(#portal-screen[style*="display: block"]) .content>.notice{font-size:11px;padding:10px 12px;margin-bottom:12px!important}
+  .portal-hero.compact-hero{grid-template-columns:1fr 54px;gap:10px;padding:20px 18px;border-radius:18px;background:radial-gradient(circle at 100% 0%,#315c91 0,transparent 42%),linear-gradient(135deg,#0c2344,#1d4778);box-shadow:0 12px 28px rgba(12,35,68,.19)}
+  .portal-hero.compact-hero h1{font-size:25px;margin:7px 0 6px}
+  .portal-hero.compact-hero p{font-size:12px;line-height:1.45;margin:0}
+  .portal-hero.compact-hero .eyebrow{font-size:9px}
+  .portal-hero.compact-hero .hero-mark{width:54px;padding:5px;border-radius:13px;background:#fff}
+  .portal-hero.compact-hero .notification-banner{margin-top:10px!important}
+  .student-tabs{position:fixed;z-index:50;left:10px;right:10px;bottom:calc(9px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px;padding:6px;border:1px solid rgba(255,255,255,.8);border-radius:17px;background:rgba(10,32,59,.96);box-shadow:0 12px 34px rgba(9,28,50,.28);backdrop-filter:blur(14px);overflow:visible}
+  .student-tabs button{min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 2px;border:0;border-radius:11px;background:transparent;color:#c7d5e4;font-size:9px;font-weight:700;line-height:1.1}
+  .student-tabs button::before{font-size:17px;line-height:1}
+  .student-tabs button[data-student-view="request"]::before{content:"▤"}
+  .student-tabs button[data-student-view="attendance"]::before{content:"⌗"}
+  .student-tabs button[data-student-view="card"]::before{content:"▣"}
+  .student-tabs button[data-student-view="profile"]::before{content:"●"}
+  .student-tabs button.active{background:#fff;color:#12315a;box-shadow:0 3px 10px rgba(0,0,0,.16)}
+  .student-tabs button.active{background:linear-gradient(145deg,#fff,#e2efff);color:#1556a0}
+  .student-view.active{animation:student-view-in .18s ease-out}
+  @keyframes student-view-in{from{opacity:.55;transform:translateY(5px)}to{opacity:1;transform:none}}
+  .student-main-grid,.portal-grid{grid-template-columns:minmax(0,1fr);gap:12px;margin-top:13px}
+  .student-view>.panel,.student-view .panel{border:1px solid #e0e8f1;border-radius:17px;padding:17px 15px;box-shadow:0 7px 22px rgba(18,49,90,.07)}
+  .student-view .panel-head{gap:8px;margin-bottom:14px}
+  .student-view .panel-head h2{font-size:20px}
+  .student-view .panel-head p{font-size:12px;line-height:1.5}
+  .student-view .eyebrow{font-size:9px}
+  .student-view .panel-head .eyebrow{color:#2679d2}
+  .student-view .btn:not(.secondary):not(.ghost){background:linear-gradient(135deg,#286fcb,#123f79);box-shadow:0 7px 17px rgba(31,91,158,.2)}
+  .student-view .field input:focus,.student-view .field select:focus{border-color:#378be7;box-shadow:0 0 0 4px rgba(55,139,231,.14)}
+  .student-view .notice{background:linear-gradient(125deg,#eef6ff,#f7faff);border-color:#d4e5f8}
+  .student-view .form-grid{grid-template-columns:minmax(0,1fr);gap:12px}
+  .student-view .field.full{grid-column:auto}
+  .student-view .field label{font-size:12px}
+  .student-view .field input,.student-view .field select{height:46px;border-radius:11px;font-size:14px}
+  .student-view .btn{min-height:44px;border-radius:11px}
+  .student-view .form-actions{align-items:stretch;flex-direction:column;gap:8px}
+  .student-view .notice{border-radius:12px;font-size:11px;line-height:1.55}
+  .student-view .photo-preview{min-height:120px}
+  .student-view .attendance-grid{grid-template-columns:minmax(0,1fr);gap:18px}
+  .scanner-frame{min-height:230px;border-radius:16px}
+  .attendance-grid .form-actions{flex-direction:row}
+  .attendance-grid .form-actions .btn{flex:1}
+  .student-view .section-title{align-items:center;margin:23px 0 11px}
+  .student-view .section-title h2{font-size:19px}
+  .student-view .table-panel{overflow:hidden;border-radius:13px}
+  .student-view .table-scroll{overflow-x:auto}
+  .student-view table{min-width:600px}
+  #student-view-card .student-card-panel{padding:16px 12px}
+  #student-view-card .student-card-panel .panel-head h2{font-size:24px}
+  #student-view-card .student-card-wrap{display:block;width:100%;margin:4px auto 0}
+  #student-view-card .student-card-wrap .card-v2-front{width:100%;max-width:none;border-radius:9px;box-shadow:0 16px 38px rgba(12,35,68,.24)}
+  #student-view-card .student-card-wrap .card-v2-back{display:none}
+  #student-view-card .student-card-panel.has-approved-card .print-actions{display:grid!important;grid-template-columns:1fr;gap:10px;max-width:none;align-items:stretch}
+  #student-view-card .print-actions .btn{width:100%}
+  #student-view-card .student-site-panel{padding:16px}
+  .profile-summary{gap:12px}
+  .readonly-grid{grid-template-columns:1fr}
+  .student-view .info-row{gap:10px;font-size:12px}
+}
 
 /* Student PWA installation gate: shown after the visitor has spent 15 seconds on the portal. */
 body.pwa-install-locked{overflow:hidden}
