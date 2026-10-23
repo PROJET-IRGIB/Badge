@@ -1,18 +1,18 @@
 {
   "id": "/etudiant/",
-  "name": "IRGIB AFRICA — Espace étudiant",
-  "short_name": "IRGIB Étudiant",
-  "description": "Carte étudiante, profil et présence IRGIB AFRICA.",
+  "name": "ESPACE ETUDIANT IRGIB",
+  "short_name": "ESPACE ETUDIANT IRGIB",
+  "description": "L’application étudiante officielle IRGIB AFRICA : badge, actualités du campus et présences.",
   "lang": "fr-BJ",
   "start_url": "/etudiant/",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
   "orientation": "portrait-primary",
-  "background_color": "#f4f6f8",
-  "theme_color": "#12315a",
+  "background_color": "#0a1f39",
+  "theme_color": "#0a1f39",
   "icons": [
-    { "src": "/assets/pwa-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/assets/pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "/assets/pwa-192-v2.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/assets/pwa-512-v2.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
   ]
 }

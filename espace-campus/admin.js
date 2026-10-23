@@ -11,6 +11,7 @@
   let studentProfilesCache = [];
   let attendanceCache = [];
   let announcementsCache = [];
+  let representativesCache = [];
   let adminSite = null;
   let currentAdminId = "";
   const applications = () => applicationsCache;
@@ -40,7 +41,7 @@
     const records = [];
     for (let from = 0; ; from += 500) {
       const { data, error } = await adminClient.from("attendance_records")
-        .select("status,attended_at,session_id,student_profiles!inner(user_id,first_name,last_name,email,program,level,site),attendance_sessions!inner(site,program,level,session_day,course_title)")
+        .select("status,attended_at,session_id,marked_by,student_profiles!inner(user_id,first_name,last_name,email,program,level,site),attendance_sessions!inner(site,program,level,session_day,course_title)")
         .eq("attendance_sessions.session_day", D.todayKey())
         .order("attended_at", { ascending: false, nullsFirst: false }).order("id", { ascending: false }).range(from, from + 499);
       if (error) throw error;
@@ -49,8 +50,8 @@
     }
     const byStudent = new Map(applicationsCache.map(item => [item.studentId, item]));
     attendanceCache = (records || []).map(row => {
-      const person = row.student_profiles; const app = byStudent.get(person.user_id);
-      return { studentId: person.user_id, createdAt: row.attended_at, day: row.attendance_sessions.session_day, sessionCode: row.session_id.slice(0, 8), courseTitle: row.attendance_sessions.course_title, present: row.status === "present", firstName: person.first_name, lastName: person.last_name, email: person.email, matricule: app?.finalMatricule || app?.temporaryMatricule || "", program: person.program, level: person.level, site: person.site };
+      const person = row.student_profiles; const app = byStudent.get(person.user_id); const actor = row.marked_by ? byStudent.get(row.marked_by) : null;
+      return { studentId: person.user_id, markedBy: row.marked_by, markedByName: actor ? fullName(actor) : "Étudiant", createdAt: row.attended_at, day: row.attendance_sessions.session_day, sessionCode: row.session_id.slice(0, 8), courseTitle: row.attendance_sessions.course_title, present: row.status === "present", firstName: person.first_name, lastName: person.last_name, email: person.email, matricule: app?.finalMatricule || app?.temporaryMatricule || "", program: person.program, level: person.level, site: person.site };
     });
   }
   const statusText = status => ({ pending: "En attente", approved: "Approuvée", rejected: "Rejetée" }[status] || status);
@@ -64,13 +65,19 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => element.classList.remove("show"), 2800);
   }
+  async function dispatchCampusPush(body) {
+    try {
+      const { data, error } = await adminClient.functions.invoke("send-campus-push", { body });
+      return { data, error: error || (data?.error ? new Error(data.error) : null) };
+    } catch (error) { return { data: null, error }; }
+  }
   function setView(view) {
     currentView = view;
     document.querySelectorAll(".view").forEach(node => node.classList.toggle("active", node.id === `view-${view}`));
     document.querySelectorAll(".side-nav [data-view]").forEach(node => node.classList.toggle("active", node.dataset.view === view));
-    const labels = { dashboard: "Vue d’ensemble", requests: "Demandes de badge", students: "Étudiants", attendance: "Présences", groups: "Groupes", catalog: "Catalogue", announcements: "Actualités", cards: "Cartes" };
+    const labels = { dashboard: "Vue d’ensemble", requests: "Demandes de badge", students: "Étudiants", attendance: "Présences", groups: "Groupes", representatives: "Responsables de classe", catalog: "Catalogue", announcements: "Actualités", cards: "Cartes" };
     byId("breadcrumb").textContent = `Campus / ${labels[view]}`;
-    ({ dashboard: renderDashboard, requests: renderRequests, students: renderStudents, attendance: renderAttendance, groups: renderGroups, catalog: renderCatalog, announcements: () => void loadAnnouncements(), cards: renderCards })[view]?.();
+    ({ dashboard: renderDashboard, requests: renderRequests, students: renderStudents, attendance: renderAttendance, groups: renderGroups, representatives: () => void loadRepresentatives(), catalog: renderCatalog, announcements: () => void loadAnnouncements(), cards: renderCards })[view]?.();
   }
   function requestTableRows(list, recent = false) {
     const count = recent ? 6 : 7;
@@ -147,8 +154,8 @@
           sites.forEach(siteId => {
             const rows = atLevel.filter(item => item.program === programCode && item.site === siteId).sort((a, b) => fullName(a).localeCompare(fullName(b), "fr"));
             const here = rows.filter(item => item.present).length;
-            const body = rows.map(item => `<tr><td><strong>${esc(fullName(item))}</strong><span class="sub">${esc(item.email)}</span></td><td>${esc(item.matricule || "—")}</td><td>${item.present && item.createdAt ? new Date(item.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—"}</td><td><span class="status ${item.present ? "active" : "absent"}">${item.present ? "Présent" : "Absent"}</span></td></tr>`).join("");
-            blocks.push(`<section class="roll-section"><header><strong>${esc(programName(programCode))}</strong><span>${esc(siteName(siteId))}</span><span>${here} / ${rows.length}</span></header><div class="table-scroll"><table><thead><tr><th>Étudiant</th><th>Matricule</th><th>Heure</th><th>Statut</th></tr></thead><tbody>${body}</tbody></table></div></section>`);
+            const body = rows.map(item => `<tr><td><strong>${esc(fullName(item))}</strong><span class="sub">${esc(item.email)}</span></td><td>${esc(item.matricule || "—")}</td><td>${item.present && item.createdAt ? new Date(item.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—"}</td><td>${item.present ? esc(item.markedByName || "Étudiant") : "—"}</td><td><span class="status ${item.present ? "active" : "absent"}">${item.present ? "Présent" : "Absent"}</span></td></tr>`).join("");
+            blocks.push(`<section class="roll-section"><header><strong>${esc(programName(programCode))}</strong><span>${esc(siteName(siteId))}</span><span>${here} / ${rows.length}</span></header><div class="table-scroll"><table><thead><tr><th>Étudiant</th><th>Matricule</th><th>Heure</th><th>Saisi par</th><th>Statut</th></tr></thead><tbody>${body}</tbody></table></div></section>`);
           });
         });
       });
@@ -198,14 +205,21 @@
       host.innerHTML = `<div class="news-empty"><strong>Aucune publication pour le moment</strong><p>Les annonces que vous publiez apparaîtront ici.</p></div>`;
       return;
     }
-    host.innerHTML = announcementsCache.map(item => `<article class="announcement-admin-item"><div class="announcement-admin-meta"><span class="news-tag">${item.site ? esc(siteName(item.site)) : "Tous les campus"}</span><span class="status ${item.status === "published" ? "active" : "pending"}">${item.status === "published" ? "Publiée" : item.status === "archived" ? "Archivée" : "Brouillon"}</span></div><h3>${esc(item.title)}</h3><p>${esc(item.body)}</p><small>${item.published_at ? new Date(item.published_at).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "Pas encore publiée"}</small><button class="btn secondary sm" type="button" data-announcement-toggle="${esc(item.id)}">${item.status === "published" ? "Retirer de l’espace étudiant" : "Publier maintenant"}</button></article>`).join("");
+    host.innerHTML = announcementsCache.map(item => `<article class="announcement-admin-item"><div class="announcement-admin-meta"><span class="news-tag">${item.site ? esc(siteName(item.site)) : "Tous les campus"}</span><span class="status ${item.status === "published" ? "active" : "pending"}">${item.status === "published" ? "Publiée" : item.status === "archived" ? "Archivée" : "Brouillon"}</span></div><h3>${esc(item.title)}</h3><p>${esc(item.body)}</p>${item.mediaUrl ? (item.media_type === "video" ? `<video class="news-media" src="${esc(item.mediaUrl)}" controls playsinline preload="metadata"></video>` : `<img class="news-media" src="${esc(item.mediaUrl)}" alt="Aperçu : ${esc(item.title)}" loading="lazy">`) : ""}<small>${item.published_at ? new Date(item.published_at).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "Pas encore publiée"}</small><button class="btn secondary sm" type="button" data-announcement-toggle="${esc(item.id)}">${item.status === "published" ? "Retirer de l’espace étudiant" : "Publier maintenant"}</button></article>`).join("");
+  }
+  async function signedAnnouncementRows(rows) {
+    return Promise.all((rows || []).map(async item => {
+      if (!item.media_path) return item;
+      const { data } = await adminClient.storage.from("campus-announcement-media").createSignedUrl(item.media_path, 3600);
+      return { ...item, mediaUrl: data?.signedUrl || "" };
+    }));
   }
   async function loadAnnouncements() {
     const host = byId("announcement-admin-rows");
     host.innerHTML = `<div class="news-empty"><strong>Chargement…</strong></div>`;
-    const { data, error } = await adminClient.from("campus_announcements").select("id,title,body,site,status,published_at,expires_at,created_at").order("created_at", { ascending: false }).limit(50);
+    const { data, error } = await adminClient.from("campus_announcements").select("id,title,body,site,status,published_at,expires_at,created_at,media_path,media_type").order("created_at", { ascending: false }).limit(50);
     if (error) { host.innerHTML = `<div class="notice">Impossible de charger les actualités. Vérifiez que la migration des annonces est appliquée.</div>`; return; }
-    announcementsCache = data || [];
+    announcementsCache = await signedAnnouncementRows(data || []);
     renderAnnouncements();
   }
   async function publishAnnouncement(event) {
@@ -215,20 +229,73 @@
     const message = byId("announcement-message");
     const title = byId("announcement-title").value.trim();
     const body = byId("announcement-body").value.trim();
+    const file = byId("announcement-media").files?.[0] || null;
     if (title.length < 4 || body.length < 10) { message.textContent = "Ajoutez un titre précis et une information d’au moins 10 caractères."; return; }
+    if (file && (!/^(image\/(jpeg|png|webp)|video\/(mp4|webm))$/.test(file.type) || file.size > 50 * 1024 * 1024)) { message.textContent = "Choisissez une image ou vidéo JPG, PNG, WebP, MP4 ou WebM de 50 Mo maximum."; return; }
     button.disabled = true;
     message.textContent = "Publication en cours…";
+    let mediaPath = null;
     try {
-      const { error } = await adminClient.from("campus_announcements").insert({ title, body, site: byId("announcement-site").value || null, status: "published", published_at: new Date().toISOString(), expires_at: byId("announcement-expiry").value || null, created_by: currentAdminId });
-      if (error) { message.textContent = error.message || "La publication n’a pas pu être enregistrée."; return; }
+      const id = crypto.randomUUID();
+      const site = byId("announcement-site").value || null;
+      if (file) {
+        const extension = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "video/mp4": "mp4", "video/webm": "webm" })[file.type];
+        mediaPath = `${site || "all"}/${id}/${crypto.randomUUID()}.${extension}`;
+        const { error: uploadError } = await adminClient.storage.from("campus-announcement-media").upload(mediaPath, file, { contentType: file.type, cacheControl: "3600", upsert: false });
+        if (uploadError) throw uploadError;
+      }
+      const { error } = await adminClient.from("campus_announcements").insert({ id, title, body, site, status: "published", published_at: new Date().toISOString(), expires_at: byId("announcement-expiry").value || null, created_by: currentAdminId, media_path: mediaPath, media_type: file?.type.startsWith("video/") ? "video" : file ? "image" : null });
+      if (error) {
+        if (mediaPath) await adminClient.storage.from("campus-announcement-media").remove([mediaPath]).catch(() => {});
+        message.textContent = error.message || "La publication n’a pas pu être enregistrée."; return;
+      }
       form.reset();
-      message.textContent = "Actualité publiée dans l’espace étudiant.";
+      byId("announcement-media-preview").innerHTML = "";
+      const push = await dispatchCampusPush({ kind: "announcement", id });
+      message.textContent = push.error ? "Actualité publiée. Les étudiants connectés la verront; l’envoi en arrière-plan est momentanément indisponible." : push.data?.sent ? `Actualité publiée et notification envoyée à ${push.data.sent} appareil${push.data.sent === 1 ? "" : "s"}${push.data.failed ? ` · ${push.data.failed} échec(s)` : ""}.` : "Actualité publiée. Aucun appareil étudiant n’a encore activé les notifications.";
       await loadAnnouncements();
-    } catch {
-      message.textContent = "Connexion interrompue : l’actualité n’a pas pu être publiée. Réessayez.";
+    } catch (error) {
+      if (mediaPath) await adminClient.storage.from("campus-announcement-media").remove([mediaPath]).catch(() => {});
+      message.textContent = error?.message || "Connexion interrompue : l’actualité n’a pas pu être publiée. Réessayez.";
     } finally {
       button.disabled = false;
     }
+  }
+  async function loadRepresentatives() {
+    const host = byId("representative-manager");
+    host.innerHTML = `<div class="news-empty"><strong>Chargement…</strong></div>`;
+    const { data, error } = await adminClient.from("class_representatives").select("site,program,level,user_id,assigned_at").order("site").order("program").order("level");
+    if (error) { host.innerHTML = `<div class="notice">Le registre des responsables est indisponible. Appliquez la nouvelle migration Supabase.</div>`; return; }
+    representativesCache = data || [];
+    renderRepresentativeManager();
+  }
+  function renderRepresentativeManager() {
+    const site = byId("rep-site").value || adminSite || D.sites[0].id;
+    const program = byId("rep-program").value || D.programs[0].code;
+    const level = byId("rep-level").value || D.levels[0];
+    const assignment = representativesCache.find(item => item.site === site && item.program === program && item.level === level);
+    const candidates = approved().filter(item => item.site === site && item.program === program && item.level === level && (!representativesCache.some(rep => rep.user_id === item.studentId) || assignment?.user_id === item.studentId));
+    const current = assignment && approved().find(item => item.studentId === assignment.user_id);
+    const select = `<label for="rep-student">Étudiant approuvé</label><select id="rep-student"><option value="">${candidates.length ? "Choisir dans le groupe" : "Aucun étudiant disponible"}</option>${candidates.map(item => `<option value="${esc(item.studentId)}" ${assignment?.user_id === item.studentId ? "selected" : ""}>${esc(fullName(item))} · ${esc(item.finalMatricule || "")}</option>`).join("")}</select>`;
+    byId("representative-manager").innerHTML = `<div class="representative-group-summary"><span class="news-tag">${esc(siteName(site))}</span><span class="news-tag">${esc(programName(program))}</span><span class="news-tag">${esc(level)}</span></div>${assignment ? `<div class="representative-current"><div><small>Responsable actuel</small><strong>${esc(current ? fullName(current) : "Compte affecté, étudiant non trouvé")}</strong><span>${esc(current?.finalMatricule || "")}</span></div><button class="btn danger sm" type="button" data-rep-remove="${esc(`${site}|${program}|${level}`)}">Retirer</button></div>` : `<div class="notice">Aucun responsable n’est encore désigné pour ce groupe.</div>`}<div class="representative-assign">${select}<button class="btn" type="button" data-rep-assign="${esc(`${site}|${program}|${level}`)}">${assignment ? "Remplacer le responsable" : "Désigner le responsable"}</button></div><p class="field-help">Un seul responsable est actif par groupe. Seuls les étudiants dont le badge est approuvé sont proposés.</p>`;
+  }
+  async function assignRepresentative(key) {
+    const [site, program, level] = key.split("|");
+    const userId = byId("rep-student").value;
+    if (!userId) { toast("Choisissez un étudiant approuvé dans ce groupe."); return; }
+    const student = approved().find(item => item.studentId === userId && item.site === site && item.program === program && item.level === level);
+    if (!student) { toast("Cet étudiant n’appartient pas au groupe sélectionné."); return; }
+    const { error } = await adminClient.from("class_representatives").upsert({ site, program, level, user_id: userId, assigned_by: currentAdminId, assigned_at: new Date().toISOString() }, { onConflict: "site,program,level" });
+    if (error) { toast(error.message || "Le responsable n’a pas pu être désigné."); return; }
+    toast(`${fullName(student)} est maintenant responsable de ce groupe.`);
+    await loadRepresentatives();
+  }
+  async function removeRepresentative(key) {
+    const [site, program, level] = key.split("|");
+    const { error } = await adminClient.from("class_representatives").delete().eq("site", site).eq("program", program).eq("level", level);
+    if (error) { toast(error.message || "Le responsable n’a pas pu être retiré."); return; }
+    toast("Responsable retiré du groupe.");
+    await loadRepresentatives();
   }
   async function toggleAnnouncement(id) {
     const item = announcementsCache.find(row => row.id === id);
@@ -237,8 +304,9 @@
     try {
       const { data, error } = await adminClient.from("campus_announcements").update({ status: publish ? "published" : "draft", published_at: publish ? (item.published_at || new Date().toISOString()) : item.published_at }).eq("id", id).select("id").maybeSingle();
       if (error || !data) { toast(error?.message || "Cette actualité n’a pas pu être modifiée. Vérifiez les droits du site."); return; }
+      const push = publish ? await dispatchCampusPush({ kind: "announcement", id }) : null;
       await loadAnnouncements();
-      toast(publish ? "Actualité publiée." : "Actualité retirée de l’espace étudiant.");
+      toast(!publish ? "Actualité retirée de l’espace étudiant." : push?.error ? "Actualité publiée; notification en arrière-plan indisponible." : push.data?.sent ? `Actualité publiée; notification envoyée à ${push.data.sent} appareil(s).` : "Actualité publiée; aucun appareil n’a activé les notifications.");
     } catch {
       toast("Connexion interrompue : cette actualité n’a pas pu être modifiée.");
     }
@@ -297,7 +365,8 @@
     closeReview();
     await refreshCurrent();
     const decided = Array.isArray(data) ? data[0] : data;
-    toast(`Demande approuvée · ${decided.final_matricule}.`);
+    const push = await dispatchCampusPush({ kind: "badge_approved", id: item.id });
+    toast(push.error ? `Demande approuvée · ${decided.final_matricule}. Notification en arrière-plan indisponible.` : push.data?.sent ? `Demande approuvée · ${decided.final_matricule}. Notification envoyée${push.data.failed ? ` avec ${push.data.failed} échec(s)` : ""}.` : `Demande approuvée · ${decided.final_matricule}. Aucun appareil n’a activé les notifications.`);
   }
   async function rejectRequest() {
     const list = applications();
@@ -316,7 +385,7 @@
   async function refreshCurrent() {
     try { await loadAdminData(); }
     catch (error) { toast(error.message || "Les données ne sont pas joignables. Réessayez."); return; }
-    renderDashboard(); if (currentView === "requests") renderRequests(); if (currentView === "students") renderStudents(); if (currentView === "attendance") renderAttendance(); if (currentView === "groups") renderGroups(); if (currentView === "announcements") await loadAnnouncements(); if (currentView === "cards") renderCards();
+    renderDashboard(); if (currentView === "requests") renderRequests(); if (currentView === "students") renderStudents(); if (currentView === "attendance") renderAttendance(); if (currentView === "groups") renderGroups(); if (currentView === "representatives") await loadRepresentatives(); if (currentView === "announcements") await loadAnnouncements(); if (currentView === "cards") renderCards();
   }
   async function drawAdminCard(item) {
     const { data: signedPhoto, error } = await adminClient.storage.from("student-photos").createSignedUrl(item.photoPath, 600);
@@ -336,7 +405,7 @@
       const counts = approved().reduce((memo, item) => { const key = keyFor(item); memo[key] = (memo[key] || 0) + 1; return memo; }, {});
       rows = [["cle_groupe", "ville", "code_filiere", "filiere", "niveau", "effectif"], ...D.allGroups().filter(group => !adminSite || group.site === adminSite).map(group => [group.key, siteName(group.site), group.program, programName(group.program), group.level, counts[group.key] || 0])]; filename = "groupes-irgib.csv";
     } else if (kind === "attendance") {
-      rows = [["date", "heure", "cours", "etudiant", "matricule", "statut", "cycle", "annee", "code_filiere", "filiere", "niveau", "site"], ...attendanceRoster().map(item => [D.todayKey(), item.createdAt ? new Date(item.createdAt).toLocaleTimeString("fr-FR") : "", item.courseTitle, fullName(item), item.matricule, item.present ? "present" : "absent", item.level.startsWith("M") ? "Master" : "Licence", careerYear[item.level] || item.level, item.program, programName(item.program), item.level, siteName(item.site)])]; filename = "presences-jour.csv";
+      rows = [["date", "heure", "cours", "etudiant", "matricule", "statut", "saisi_par", "cycle", "annee", "code_filiere", "filiere", "niveau", "site"], ...attendanceRoster().map(item => [D.todayKey(), item.createdAt ? new Date(item.createdAt).toLocaleTimeString("fr-FR") : "", item.courseTitle, fullName(item), item.matricule, item.present ? "present" : "absent", item.markedByName || "", item.level.startsWith("M") ? "Master" : "Licence", careerYear[item.level] || item.level, item.program, programName(item.program), item.level, siteName(item.site)])]; filename = "presences-jour.csv";
     } else {
       rows = [["matricule_final", "matricule_temporaire", "nom", "prenom", "email", "sexe", "code_filiere", "filiere", "niveau", "ville", "groupe", "statut_demande"], ...studentProfilesCache.map(person => { const app = applications().find(item => item.studentId === person.studentId); return [app?.finalMatricule || "", app?.temporaryMatricule || "", person.lastName, person.firstName, person.email, person.sex, person.program, programName(person.program), person.level, siteName(person.site), keyFor(person), app ? statusText(app.status) : "inscrit sans demande"]; })]; filename = "etudiants-irgib.csv";
     }
@@ -369,11 +438,23 @@
     ["group-site", "group-program", "group-level"].forEach(id => byId(id).addEventListener("change", renderGroups));
     byId("download-daily-qrs").addEventListener("click", () => void downloadDailyQrDocument());
     byId("announcement-form").addEventListener("submit", event => void publishAnnouncement(event));
+    byId("announcement-media").addEventListener("change", event => {
+      const preview = byId("announcement-media-preview");
+      const file = event.currentTarget.files?.[0];
+      if (!file) { preview.innerHTML = ""; return; }
+      if (file.size > 50 * 1024 * 1024) { event.currentTarget.value = ""; preview.textContent = "Fichier trop volumineux : 50 Mo maximum."; return; }
+      const url = URL.createObjectURL(file);
+      preview.innerHTML = file.type.startsWith("video/") ? `<video class="news-media" src="${url}" controls muted playsinline></video>` : `<img class="news-media" src="${url}" alt="Aperçu de la pièce jointe">`;
+    });
     byId("group-search").addEventListener("input", renderGroups);
     document.addEventListener("click", event => {
       const target = event.target instanceof Element ? event.target : event.target?.parentElement;
       const announcementToggle = target?.closest("[data-announcement-toggle]");
       if (announcementToggle) void toggleAnnouncement(announcementToggle.dataset.announcementToggle);
+      const repAssign = target?.closest("[data-rep-assign]");
+      if (repAssign) void assignRepresentative(repAssign.dataset.repAssign);
+      const repRemove = target?.closest("[data-rep-remove]");
+      if (repRemove) void removeRepresentative(repRemove.dataset.repRemove);
       const review = target?.closest("[data-review]");
       if (review) void openReview(review.dataset.review);
       const preview = target?.closest("[data-preview-card]");
@@ -387,6 +468,10 @@
       showAdminGate(error ? "La déconnexion a échoué. Réessayez." : "Vous êtes déconnecté.");
     });
     initGroupFilters();
+    byId("rep-site").innerHTML = (adminSite ? D.sites.filter(site => site.id === adminSite) : D.sites).map(site => `<option value="${esc(site.id)}">${esc(site.city)}</option>`).join("");
+    byId("rep-program").innerHTML = D.programs.map(item => `<option value="${esc(item.code)}">${esc(item.code)} · ${esc(programName(item.code))}</option>`).join("");
+    byId("rep-level").innerHTML = D.levels.map(level => `<option value="${esc(level)}">${esc(level)}</option>`).join("");
+    ["rep-site", "rep-program", "rep-level"].forEach(id => byId(id).addEventListener("change", renderRepresentativeManager));
     const announcementSite = byId("announcement-site");
     announcementSite.innerHTML = adminSite
       ? `<option value="${esc(adminSite)}">${esc(siteName(adminSite))} uniquement</option>`
@@ -429,6 +514,8 @@
       .on("postgres_changes", { event: "*", schema: "public", table: "student_profiles" }, () => { void refreshCurrent(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "attendance_records" }, () => { void refreshCurrent(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "attendance_sessions" }, () => { void refreshCurrent(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "class_representatives" }, () => { if (currentView === "representatives") void loadRepresentatives(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "campus_announcements" }, () => { if (currentView === "announcements") void loadAnnouncements(); })
       .subscribe();
     return true;
   }

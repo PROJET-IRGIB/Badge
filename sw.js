@@ -1,14 +1,15 @@
-const CACHE_NAME = "irgib-student-shell-v2";
+const CACHE_NAME = "irgib-student-shell-v4";
 const APP_SHELL = [
   "/etudiant/",
-  "/assets/styles.css?v=20261023f",
-  "/assets/catalog.js?v=20261023f",
-  "/assets/pwa-install.js?v=20261023f",
-  "/etudiant/student.js?v=backend5",
+  "/assets/styles.css?v=20261024b",
+  "/assets/catalog.js?v=20261024b",
+  "/assets/pwa-install.js?v=20261024b",
+  "/etudiant/student.js?v=backend7",
+  "/assets/pwa-192-v2.png",
+  "/assets/pwa-512-v2.png",
+  "/assets/push-config.js?v=20261024b",
   "/assets/bootstrap.js?v=backend2",
   "/manifest.webmanifest",
-  "/assets/pwa-192.png",
-  "/assets/pwa-512.png"
 ];
 
 self.addEventListener("install", event => {
@@ -17,6 +18,28 @@ self.addEventListener("install", event => {
 
 self.addEventListener("activate", event => {
   event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith("irgib-") && key !== CACHE_NAME).map(key => caches.delete(key)))).then(() => self.clients.claim()));
+});
+
+self.addEventListener("notificationclick", event => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || "/etudiant/", self.location.origin).href;
+  event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(clients => {
+    const existing = clients.find(client => client.url.startsWith(self.location.origin));
+    return existing ? existing.navigate(target).then(() => existing.focus()) : self.clients.openWindow(target);
+  }));
+});
+
+self.addEventListener("push", event => {
+  let message = {};
+  try { message = event.data?.json() || {}; }
+  catch { message = { body: event.data?.text() || "Une information est disponible dans votre espace étudiant." }; }
+  event.waitUntil(self.registration.showNotification(message.title || "ESPACE ETUDIANT IRGIB", {
+    body: message.body || "Une information est disponible dans votre espace étudiant.",
+    icon: "/assets/pwa-192-v2.png",
+    badge: "/assets/pwa-192-v2.png",
+    tag: message.tag || "irgib-notification",
+    data: { url: message.url || "/etudiant/" },
+  }));
 });
 
 self.addEventListener("fetch", event => {

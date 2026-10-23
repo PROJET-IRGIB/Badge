@@ -27,6 +27,8 @@
   let scannedSession = "";
   let announcements = [];
   let lastNewsRefresh = 0;
+  let initialNewsLoaded = false;
+  const knownAnnouncementIds = new Set();
   let cameraStream = null;
   let scanFrame = 0;
   let lastScanTime = 0;
@@ -45,9 +47,9 @@
       const { data } = await db.storage.from("student-photos").createSignedUrl(application.photoPath, 600);
       application.photo = data?.signedUrl || "";
     }
-    const { data: records, error: attendanceError } = await db.from("attendance_records").select("status,attended_at,session_id,attendance_sessions!inner(site,program,level,session_day,course_title)").eq("student_id", currentUser.id).order("attended_at", { ascending: false, nullsFirst: false });
+    const { data: records, error: attendanceError } = await db.from("attendance_records").select("status,attended_at,session_id,marked_by,attendance_sessions!inner(site,program,level,session_day,course_title)").eq("student_id", currentUser.id).order("attended_at", { ascending: false, nullsFirst: false });
     if (attendanceError) throw attendanceError;
-    attendanceRows = (records || []).map(row => ({ sessionId: row.session_id, createdAt: row.attended_at, sessionCode: row.session_id.slice(0, 8), courseTitle: row.attendance_sessions.course_title || "Séance du jour", status: row.status, site: row.attendance_sessions.site, program: row.attendance_sessions.program, level: row.attendance_sessions.level, day: row.attendance_sessions.session_day }));
+    attendanceRows = (records || []).map(row => ({ sessionId: row.session_id, markedBy: row.marked_by, createdAt: row.attended_at, sessionCode: row.session_id.slice(0, 8), courseTitle: row.attendance_sessions.course_title || "Séance du jour", status: row.status, site: row.attendance_sessions.site, program: row.attendance_sessions.program, level: row.attendance_sessions.level, day: row.attendance_sessions.session_day }));
   }
   const showAuthPage = page => {
     const login = page === "login";
@@ -169,7 +171,7 @@
     const app = getApplication();
     byId("today-label").textContent = D.todayKey();
     const rows = todayAttendance();
-    byId("my-attendance-rows").innerHTML = rows.length ? rows.map(item => `<tr><td>${item.createdAt ? new Date(item.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—"}</td><td>${esc(item.courseTitle)}</td><td>${esc(D.getProgram(item.program).shortName)} · ${esc(item.level)}</td><td>${esc(D.getSite(item.site).city)}</td><td><span class="status ${item.status === "present" ? "active" : "absent"}">${item.status === "present" ? "Présent" : "Absent"}</span></td></tr>`).join("") : `<tr><td colspan="5" class="table-empty">Aucune séance créée pour votre groupe aujourd’hui.</td></tr>`;
+    byId("my-attendance-rows").innerHTML = rows.length ? rows.map(item => `<tr><td>${item.createdAt ? new Date(item.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—"}</td><td>${esc(item.courseTitle)}</td><td>${esc(D.getProgram(item.program).shortName)} · ${esc(item.level)}</td><td>${esc(D.getSite(item.site).city)}</td><td>${item.status === "present" ? (item.markedBy ? "Responsable de classe" : "Moi") : "—"}</td><td><span class="status ${item.status === "present" ? "active" : "absent"}">${item.status === "present" ? "Présent" : "Absent"}</span></td></tr>`).join("") : `<tr><td colspan="6" class="table-empty">Aucune séance créée pour votre groupe aujourd’hui.</td></tr>`;
     const person = app || profile;
     const alreadyPresent = rows.some(item => item.status === "present" && item.site === person?.site && item.program === person?.program && item.level === person?.level);
     if (scannedSession) showAttendancePreview(scannedSession, app);
@@ -187,22 +189,94 @@
       node.innerHTML = `<article class="news-empty"><span class="news-empty-icon" aria-hidden="true">✦</span><strong>Rien de nouveau pour le moment</strong><p>Les annonces importantes de votre campus apparaîtront ici.</p></article>`;
       return;
     }
-    node.innerHTML = announcements.map(item => `<article class="news-card"><div class="news-card-top"><span class="news-tag">${item.site ? esc(D.getSite(item.site).city) : "Tous les campus"}</span><time datetime="${esc(item.published_at)}">${new Date(item.published_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}</time></div><h3>${esc(item.title)}</h3><p>${esc(item.body)}</p></article>`).join("");
+    node.innerHTML = announcements.map(item => `<article class="news-card"><div class="news-card-top"><span class="news-tag">${item.site ? esc(D.getSite(item.site).city) : "Tous les campus"}</span><time datetime="${esc(item.published_at)}">${new Date(item.published_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}</time></div><h3>${esc(item.title)}</h3><p>${esc(item.body)}</p>${item.mediaUrl ? (item.media_type === "video" ? `<video class="news-media" src="${esc(item.mediaUrl)}" controls playsinline preload="metadata" aria-label="Vidéo : ${esc(item.title)}"></video>` : `<img class="news-media" src="${esc(item.mediaUrl)}" alt="Illustration : ${esc(item.title)}" loading="lazy">`) : ""}</article>`).join("");
+  }
+  async function signAnnouncementMedia(rows) {
+    return Promise.all((rows || []).map(async item => {
+      if (!item.media_path) return item;
+      const { data } = await db.storage.from("campus-announcement-media").createSignedUrl(item.media_path, 3600);
+      return { ...item, mediaUrl: data?.signedUrl || "" };
+    }));
   }
   async function loadAnnouncements() {
     if (!profile) return;
     const node = byId("news-list");
     if (!lastNewsRefresh) node.innerHTML = `<article class="news-empty"><span class="news-empty-icon" aria-hidden="true">✦</span><strong>Chargement des actualités…</strong><p>Nous récupérons les informations de votre campus.</p></article>`;
-    const { data, error } = await db.from("campus_announcements").select("id,title,body,site,published_at,expires_at").eq("status", "published").or(`site.is.null,site.eq.${profile.site}`).or(`expires_at.is.null,expires_at.gte.${D.todayKey()}`).order("published_at", { ascending: false }).limit(15);
+    const { data, error } = await db.from("campus_announcements").select("id,title,body,site,published_at,expires_at,media_path,media_type").eq("status", "published").or(`site.is.null,site.eq.${profile.site}`).or(`expires_at.is.null,expires_at.gte.${D.todayKey()}`).order("published_at", { ascending: false }).limit(15);
     if (error) {
       node.innerHTML = `<article class="news-empty"><strong>Actualités indisponibles</strong><p>La connexion aux informations du campus a échoué. Réessayez dans quelques instants.</p><button class="btn secondary sm" id="retry-news" type="button">Réessayer</button></article>`;
       byId("retry-news").addEventListener("click", () => void loadAnnouncements());
       return;
     }
-    announcements = data || [];
+    announcements = await signAnnouncementMedia(data || []);
+    announcements.forEach(item => knownAnnouncementIds.add(item.id));
+    initialNewsLoaded = true;
     lastNewsRefresh = Date.now();
     byId("news-campus-label").textContent = D.getSite(profile.site).city;
     renderAnnouncements();
+  }
+
+  async function showCampusNotification(title, body, tag, url) {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    const options = { body, icon: "/assets/pwa-192-v2.png", badge: "/assets/pwa-192-v2.png", tag, data: { url } };
+    try {
+      if ("serviceWorker" in navigator) (await navigator.serviceWorker.ready).showNotification(title, options);
+      else { const notification = new Notification(title, options); notification.onclick = () => { window.focus(); window.location.href = url; }; }
+    } catch { /* Notifications remain optional; the in-app feed still updates. */ }
+  }
+  function configureNotificationOptIn() {
+    const banner = byId("notification-optin");
+    if (!("Notification" in window)) { banner.hidden = false; byId("notification-optin-message").textContent = "Ce navigateur ne prend pas en charge les notifications. Consultez les actualités dans votre espace étudiant."; byId("enable-notifications").hidden = true; byId("dismiss-notifications").textContent = "Compris"; }
+    else if (Notification.permission === "granted") { banner.hidden = true; }
+    else if (Notification.permission === "denied") { banner.hidden = false; byId("notification-optin-message").textContent = "Les notifications sont bloquées dans les réglages du navigateur. Vous pouvez quand même consulter les actualités et le statut de votre badge ici."; byId("enable-notifications").textContent = "Voir les réglages"; }
+    else {
+      let seen = false;
+      try { seen = localStorage.getItem(`irgib-notification-optin-${currentUser.id}`) === "1"; } catch {}
+      if (!seen) banner.hidden = false;
+    }
+  }
+  async function requestCampusNotifications(messageTarget = byId("notification-optin-message")) {
+    if (!("Notification" in window)) { messageTarget.textContent = "Ce navigateur ne prend pas en charge les notifications."; return; }
+    if (Notification.permission === "denied") { messageTarget.textContent = "Autorisez les notifications dans les réglages du navigateur, puis revenez ici."; return; }
+    try {
+      const permission = await Notification.requestPermission();
+      try { localStorage.setItem(`irgib-notification-optin-${currentUser.id}`, "1"); } catch {}
+      byId("notification-optin").hidden = true;
+      if (permission === "granted") {
+        const subscribed = await registerPushSubscription();
+        byId("notification-settings-message").textContent = subscribed ? "Notifications activées sur cet appareil, même lorsque l’application est en arrière-plan." : "Notifications activées pendant que l’application est ouverte. L’activation en arrière-plan sera terminée dès que le service sera prêt.";
+      } else byId("notification-settings-message").textContent = "Vous pourrez activer les notifications depuis les réglages du navigateur.";
+    } catch { messageTarget.textContent = "La demande de permission n’a pas abouti. Réessayez depuis les réglages du navigateur."; }
+  }
+  function base64UrlBytes(value) {
+    const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+    return Uint8Array.from(atob(padded), char => char.charCodeAt(0));
+  }
+  async function registerPushSubscription() {
+    if (!("serviceWorker" in navigator) || !window.IRGIB_VAPID_PUBLIC_KEY || !profile || !currentUser) return false;
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64UrlBytes(window.IRGIB_VAPID_PUBLIC_KEY) });
+      const row = subscription.toJSON();
+      if (!row.endpoint || !row.keys?.p256dh || !row.keys?.auth) return false;
+      const { error } = await db.from("push_subscriptions").upsert({ endpoint: row.endpoint, user_id: currentUser.id, site: profile.site, p256dh: row.keys.p256dh, auth_secret: row.keys.auth }, { onConflict: "endpoint" });
+      return !error;
+    } catch { return false; }
+  }
+
+  async function loadRepresentativeGroupmates() {
+    const panel = byId("rep-attendance-panel");
+    panel.hidden = true;
+    const { data: assignment, error: assignmentError } = await db.from("class_representatives").select("user_id").eq("user_id", currentUser.id).maybeSingle();
+    if (assignmentError || !assignment) return;
+    panel.hidden = false;
+    const select = byId("rep-student-select");
+    select.innerHTML = `<option value="">Chargement des étudiants…</option>`;
+    const { data, error } = await db.rpc("list_representative_groupmates");
+    if (error) { select.innerHTML = `<option value="">Liste indisponible</option>`; byId("rep-attendance-message").textContent = "Impossible de charger la liste de votre groupe."; return; }
+    select.innerHTML = `<option value="">Choisir un étudiant</option>${(data || []).map(row => `<option value="${esc(row.student_id)}">${esc(`${row.last_name} ${row.first_name}`)} · ${esc(row.final_matricule || "Sans matricule")}</option>`).join("")}`;
+    if (!data?.length) { select.innerHTML = `<option value="">Aucun camarade approuvé dans ce groupe</option>`; }
   }
   function showAttendancePreview(code, app = getApplication()) {
     scannedSession = code;
@@ -319,15 +393,24 @@
     catch (error) { setScreen("auth-screen"); byId("login-message").textContent = error.message || "Impossible de charger votre dossier. Réessayez."; return; }
     setScreen("portal-screen");
     byId("news-campus-label").textContent = D.getSite(profile.site).city;
+    configureNotificationOptIn();
     void loadAnnouncements();
+    void loadRepresentativeGroupmates();
     if (!studentChannel) studentChannel = db.channel(`student-${currentUser.id}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "badge_applications", filter: `student_id=eq.${currentUser.id}` }, async () => {
-        try { await loadStudentData(); if (application) applicationSummary(application); renderNotification(application); renderMyCard(); }
+        const oldStatus = application?.status;
+        try { await loadStudentData(); if (application) applicationSummary(application); renderNotification(application); renderMyCard(); if (oldStatus !== "approved" && application?.status === "approved") void showCampusNotification("Votre badge IRGIB est approuvé", `Votre matricule définitif est ${application.finalMatricule}. Votre carte est disponible dans votre espace.`, `badge-approved-${application.id}`, "/etudiant/#card"); }
         catch { byId("login-message").textContent = "La mise à jour de votre dossier est temporairement indisponible."; }
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "attendance_records", filter: `student_id=eq.${currentUser.id}` }, async () => {
         try { await loadStudentData(); renderAttendance(); }
         catch { byId("attendance-message").textContent = "La liste des présences n’a pas pu être actualisée."; }
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "campus_announcements" }, payload => {
+        const item = payload.new;
+        if (item?.status !== "published" || (item.site && item.site !== profile.site)) return;
+        if (initialNewsLoaded && !knownAnnouncementIds.has(item.id)) void showCampusNotification("Nouvelle actualité IRGIB", item.title, `campus-news-${item.id}`, "/etudiant/#news");
+        void loadAnnouncements();
       }).subscribe();
     byId("hello-name").textContent = profile.firstName;
     renderNotification(getApplication());
@@ -338,6 +421,8 @@
     else { byId("request-form-wrap").style.display = "block"; byId("request-readonly").style.display = "none"; populateRequestForm(); }
     renderMyCard();
     renderAttendance();
+    if (location.hash === "#news") selectStudentView("news");
+    else if (location.hash === "#card") selectStudentView("card");
   }
 
   byId("show-login").addEventListener("click", () => showAuthPage("login"));
@@ -425,11 +510,55 @@
   byId("signout").addEventListener("click", async () => {
     stopCamera();
     if (studentChannel) { await db.removeChannel(studentChannel); studentChannel = null; }
+    // Remove this device's push endpoint before the session closes, so another
+    // student using the same browser can register it safely on their account.
+    try {
+      const registration = await navigator.serviceWorker?.getRegistration("/");
+      const subscription = await registration?.pushManager?.getSubscription();
+      if (subscription) {
+        await db.from("push_subscriptions").delete().eq("endpoint", subscription.endpoint);
+        await subscription.unsubscribe();
+      }
+    } catch { /* Signing out must still work when push is unavailable. */ }
     await db.auth.signOut();
     currentUser = null; profile = null; application = null; attendanceRows = [];
     profile = null;
     setScreen("auth-screen");
     showAuthPage("login");
+  });
+  byId("enable-notifications").addEventListener("click", () => {
+    if ("Notification" in window && Notification.permission === "denied") {
+      byId("notification-optin-message").textContent = "Ouvrez les réglages du navigateur pour autoriser les notifications de ce site.";
+      return;
+    }
+    void requestCampusNotifications();
+  });
+  byId("dismiss-notifications").addEventListener("click", () => {
+    if (currentUser) { try { localStorage.setItem(`irgib-notification-optin-${currentUser.id}`, "1"); } catch {} }
+    byId("notification-optin").hidden = true;
+  });
+  byId("notification-settings").addEventListener("click", () => {
+    if ("Notification" in window && Notification.permission === "granted") {
+      byId("notification-settings-message").textContent = "Activation des notifications en arrière-plan…";
+      void registerPushSubscription().then(ok => { byId("notification-settings-message").textContent = ok ? "Notifications activées sur cet appareil, même lorsque l’application est en arrière-plan." : "Notifications visibles lorsque l’application est ouverte. La configuration des alertes en arrière-plan n’est pas encore terminée."; });
+      return;
+    }
+    if ("Notification" in window && Notification.permission === "denied") { byId("notification-settings-message").textContent = "Autorisez les notifications dans les réglages du navigateur."; return; }
+    void requestCampusNotifications(byId("notification-settings-message"));
+  });
+  byId("rep-mark-attendance").addEventListener("click", async event => {
+    const button = event.currentTarget;
+    const studentId = byId("rep-student-select").value;
+    const message = byId("rep-attendance-message");
+    if (!studentId) { message.textContent = "Sélectionnez un étudiant de votre groupe."; return; }
+    button.disabled = true; message.textContent = "Enregistrement de la présence…";
+    try {
+      const { error } = await db.rpc("mark_classmate_attendance", { p_student_id: studentId });
+      if (error) throw error;
+      message.textContent = "Présence enregistrée pour cet étudiant.";
+      await loadStudentData(); renderAttendance(); await loadRepresentativeGroupmates();
+    } catch (error) { message.textContent = error.message || "La présence n’a pas pu être enregistrée."; }
+    finally { button.disabled = false; }
   });
 
   byId("request-photo").addEventListener("change", async event => {
@@ -496,6 +625,10 @@
   });
 
   document.querySelectorAll(".student-tabs [data-student-view]").forEach(button => button.addEventListener("click", () => selectStudentView(button.dataset.studentView)));
+  window.addEventListener("hashchange", () => {
+    const view = location.hash === "#news" ? "news" : location.hash === "#card" ? "card" : "";
+    if (view && currentUser) selectStudentView(view);
+  });
   byId("start-scan").addEventListener("click", startCamera);
   byId("stop-scan").addEventListener("click", stopCamera);
   byId("load-session").addEventListener("click", () => {

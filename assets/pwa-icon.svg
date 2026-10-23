@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+ <defs><linearGradient id="bg" x2="0" y2="1"><stop stop-color="#0a1f39"/><stop offset="1" stop-color="#143c63"/></linearGradient></defs>
+ <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+ <rect x="24" y="24" width="464" height="464" rx="96" fill="none" stroke="#c19d4d" stroke-width="5"/>
+ <circle cx="256" cy="160" r="88" fill="#f2f6fa" stroke="#d3b05d" stroke-width="6"/>
+ <g fill="#e3eef4" stroke="#0f3655" stroke-width="4"><path d="m199 133 53 14v52l-53-15z"/><path d="m260 147 53-14v51l-53 15z"/></g>
+ <path d="M256 146v53" stroke="#bc8f34" stroke-width="6"/><path d="m210 150 31 9m-31 3 31 9m30-21 31-9m-31 21 31-9" stroke="#0f3655" stroke-width="4"/>
+ <g fill="#2f7a70"><ellipse cx="174" cy="124" rx="8" ry="5"/><ellipse cx="176" cy="142" rx="8" ry="5"/><ellipse cx="181" cy="160" rx="8" ry="5"/><ellipse cx="187" cy="178" rx="8" ry="5"/><ellipse cx="195" cy="196" rx="8" ry="5"/><ellipse cx="338" cy="124" rx="8" ry="5"/><ellipse cx="336" cy="142" rx="8" ry="5"/><ellipse cx="331" cy="160" rx="8" ry="5"/><ellipse cx="325" cy="178" rx="8" ry="5"/><ellipse cx="317" cy="196" rx="8" ry="5"/></g>
+ <text x="256" y="337" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif" font-size="62" font-weight="700" fill="#fff">IRGIB</text>
+ <rect x="150" y="365" width="212" height="4" rx="2" fill="#bc8f34"/>
+ <text x="256" y="416" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif" font-size="24" fill="#dbe6ee">ESPACE ÉTUDIANT</text>
+</svg>

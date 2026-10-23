@@ -343,3 +343,46 @@ body:has(#portal-screen[style*="display: block"])>.notice{max-width:1100px;margi
   .student-view .info-row strong{max-width:62%}
 }
 @media(prefers-reduced-motion:reduce){.student-view.active{animation:none}.student-tabs button{transition:none}}
+
+/* Class delegate tools, secure announcement media, and notification preferences. */
+.news-media{display:block;width:100%;max-height:480px;object-fit:cover;margin-top:14px;border-radius:14px;background:#eaf0f6}
+.news-card .news-media{max-height:520px}
+.announcement-admin-item .news-media{max-height:300px}
+.announcement-media-preview:empty{display:none}
+.announcement-media-preview{margin-top:8px;overflow:hidden;border-radius:14px;background:#eaf0f6}
+.announcement-media-preview .news-media{margin:0;max-height:240px}
+.representative-manager{display:grid;gap:17px}
+.representative-filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;max-width:850px}
+.representative-filters label,.representative-assign label{display:grid;gap:7px;color:#536579;font-size:12px;font-weight:750}
+.representative-filters select,.representative-assign select{min-width:0;min-height:42px;padding:9px 12px;border:1px solid #d8e1eb;border-radius:10px;background:#fff;color:var(--ink)}
+.representative-manager-body{display:grid;gap:14px}
+.representative-group-summary{display:flex;flex-wrap:wrap;gap:7px}
+.representative-current{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:15px 17px;border:1px solid #cfe7da;border-radius:14px;background:#f2faf5}
+.representative-current>div{display:grid;gap:4px}
+.representative-current small,.representative-current span{color:#657b70;font-size:11px}
+.representative-current strong{color:#205b3b}
+.representative-assign{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:11px;max-width:760px}
+.rep-attendance-panel{margin:16px 0;border-color:#d9e8f4!important;background:linear-gradient(135deg,#fff,#f4f9fe)}
+.rep-attendance-controls{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:10px}
+.rep-attendance-controls label{grid-column:1/-1;color:#526477;font-size:12px;font-weight:750}
+.rep-attendance-controls select{min-width:0;min-height:44px;padding:10px 12px;border:1px solid #d5dfeb;border-radius:10px;background:#fff;color:var(--ink)}
+.notification-optin{display:flex;align-items:center;gap:14px;padding:14px 17px;margin:14px 0 0;border:1px solid #d8e6f2;border-radius:15px;background:linear-gradient(100deg,#fff,#f3f8fd);box-shadow:0 8px 24px rgba(18,49,90,.05)}
+.notification-optin[hidden]{display:none}
+.notification-optin-icon{display:grid;place-items:center;flex:0 0 42px;width:42px;height:42px;border-radius:13px;background:#e7f0fa;color:#1c5d91;font-size:22px}
+.notification-optin-copy{flex:1;min-width:0}
+.notification-optin-copy strong{color:var(--navy);font-size:14px}
+.notification-optin-copy p{margin:4px 0 0;color:#647589;font-size:12px;line-height:1.5}
+.notification-optin-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+@media(max-width:760px){
+  .representative-filters{grid-template-columns:minmax(0,1fr)}
+  .representative-assign{grid-template-columns:minmax(0,1fr)}
+  .representative-assign .btn{width:100%}
+  .rep-attendance-controls{grid-template-columns:minmax(0,1fr)}
+  .rep-attendance-controls label{grid-column:auto}
+  .rep-attendance-controls .btn{width:100%}
+  .notification-optin{align-items:flex-start;flex-wrap:wrap;padding:13px}
+  .notification-optin-copy{flex-basis:calc(100% - 60px)}
+  .notification-optin-actions{width:100%;padding-left:56px}
+  .notification-optin-actions .btn{flex:1}
+  .news-media{max-height:320px}
+}
