@@ -44,10 +44,20 @@
   const getApplication = () => application;
   const fromProfileRow = row => row && ({ userId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, bannedAt: row.banned_at || null, banReason: row.ban_reason || "" });
   const fromApplicationRow = row => row && ({ id: row.id, studentId: row.student_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, birthDate: row.birth_date, program: row.program, level: row.level, site: row.site, status: row.status, temporaryMatricule: row.temporary_matricule, finalMatricule: row.final_matricule, photoPath: row.photo_path, rejectionReason: row.rejection_reason, submittedAt: row.submitted_at, decidedAt: row.decided_at });
+  function readableAccountError(error) {
+    const message = error?.message || "";
+    if (/coerce|single JSON object|PGRST116/i.test(message)) return "Ce compte n’a pas de dossier étudiant complet. Ouvrez Inscription avec la même adresse, ou contactez l’administration.";
+    return message || "Impossible de charger votre dossier. Réessayez.";
+  }
   async function loadStudentData() {
-    const { data: profileRow, error: profileError } = await db.from("student_profiles").select("*").eq("user_id", currentUser.id).single();
+    const { data: profileRow, error: profileError } = await db.from("student_profiles").select("*").eq("user_id", currentUser.id).maybeSingle();
     if (profileError) throw profileError;
-    profile = fromProfileRow(profileRow);
+    if (!profileRow) {
+      const repaired = await db.rpc("ensure_student_profile");
+      const retry = repaired.error ? { data: null } : await db.from("student_profiles").select("*").eq("user_id", currentUser.id).maybeSingle();
+      if (!retry.data) throw Object.assign(new Error("Ce compte n’a pas de dossier étudiant. Utilisez Inscription avec cette adresse, ou contactez l’administration de votre site."), { name: "MissingProfileError" });
+      profile = fromProfileRow(retry.data);
+    } else profile = fromProfileRow(profileRow);
     if (profile.bannedAt) {
       const site = D.getSite(profile.site)?.city || "votre site";
       throw Object.assign(new Error(profile.banReason || `Votre compte a été banni par l’administration de ${site}.`), { name: "AccountBannedError" });
@@ -147,8 +157,19 @@
     const qrPayload = `IRGIB-CARTE:${app.finalMatricule}`;
     byId("student-card-zone").innerHTML = D.cardHtml(app, "card-qr");
     const qrHost = byId("card-qr");
-    if (window.QRCode && app.finalMatricule) new QRCode(qrHost, { text: qrPayload, width: 128, height: 128, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
-    else qrHost.innerHTML = `<div class="qr-fallback">${app.finalMatricule ? "QR indisponible" : "QR après approbation"}</div>`;
+    if (window.QRCode && app.finalMatricule) {
+      qrHost.innerHTML = "";
+      new QRCode(qrHost, { text: qrPayload, width: 180, height: 180, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+      const canvas = qrHost.querySelector("canvas");
+      if (canvas) {
+        const image = document.createElement("img");
+        image.className = "card-qr-image";
+        image.alt = "QR de vérification du badge";
+        image.src = canvas.toDataURL("image/png");
+        qrHost.querySelectorAll("canvas, img").forEach(node => node.remove());
+        qrHost.append(image);
+      }
+    } else qrHost.innerHTML = `<div class="qr-fallback">${app.finalMatricule ? "QR indisponible" : "QR après approbation"}</div>`;
   }
 
   function renderMyCard() {
@@ -206,7 +227,7 @@
   function renderAnnouncements() {
     const node = byId("news-list");
     if (!announcements.length) {
-      node.innerHTML = `<article class="news-empty"><span class="news-empty-icon" aria-hidden="true">✦</span><strong>Rien de nouveau pour le moment</strong><p>Les annonces importantes de votre campus apparaîtront ici.</p></article>`;
+      node.innerHTML = `<article class="news-empty"><span class="news-empty-icon" aria-hidden="true"></span><strong>Rien de nouveau pour le moment</strong><p>Les annonces importantes de votre campus apparaîtront ici.</p></article>`;
       return;
     }
     node.innerHTML = announcements.map(item => `<article class="news-card"><div class="news-card-top"><span class="news-tag">${item.site ? esc(D.getSite(item.site).city) : "Tous les campus"}</span><time datetime="${esc(item.published_at)}">${new Date(item.published_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}</time></div><h3>${esc(item.title)}</h3><p>${esc(item.body)}</p>${item.mediaUrl ? (item.media_type === "video" ? `<video class="news-media" src="${esc(item.mediaUrl)}" controls playsinline preload="metadata" aria-label="Vidéo : ${esc(item.title)}"></video>` : `<img class="news-media" src="${esc(item.mediaUrl)}" alt="Illustration : ${esc(item.title)}" loading="lazy">`) : ""}</article>`).join("");
@@ -221,7 +242,7 @@
   async function loadAnnouncements() {
     if (!profile) return;
     const node = byId("news-list");
-    if (!lastNewsRefresh) node.innerHTML = `<article class="news-empty"><span class="news-empty-icon" aria-hidden="true">✦</span><strong>Chargement des actualités…</strong><p>Nous récupérons les informations de votre campus.</p></article>`;
+    if (!lastNewsRefresh) node.innerHTML = `<article class="news-empty"><span class="news-empty-icon" aria-hidden="true"></span><strong>Chargement des actualités…</strong><p>Nous récupérons les informations de votre campus.</p></article>`;
     const { data, error } = await db.from("campus_announcements").select("id,title,body,site,published_at,expires_at,media_path,media_type").eq("status", "published").or(`site.is.null,site.eq.${profile.site}`).or(`expires_at.is.null,expires_at.gte.${D.todayKey()}`).order("published_at", { ascending: false }).limit(15);
     if (error) {
       node.innerHTML = `<article class="news-empty"><strong>Actualités indisponibles</strong><p>La connexion aux informations du campus a échoué. Réessayez dans quelques instants.</p><button class="btn secondary sm" id="retry-news" type="button">Réessayer</button></article>`;
@@ -238,7 +259,7 @@
 
   async function showCampusNotification(title, body, tag, url) {
     if (!("Notification" in window) || Notification.permission !== "granted") return;
-    const options = { body, icon: "/assets/pwa-192-v2.png", badge: "/assets/pwa-192-v2.png", tag, data: { url } };
+    const options = { body, icon: "/assets/pwa-192-v3.png", badge: "/assets/pwa-192-v3.png", tag, data: { url } };
     try {
       if ("serviceWorker" in navigator) (await navigator.serviceWorker.ready).showNotification(title, options);
       else { const notification = new Notification(title, options); notification.onclick = () => { window.focus(); window.location.href = url; }; }
@@ -406,6 +427,27 @@
     renderAttendance();
     await loadRepresentativeGroupmates();
   }
+  async function openUserCamera() {
+    const attempts = [
+      { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+      { video: { facingMode: "environment" }, audio: false },
+      { video: true, audio: false },
+    ];
+    let lastError;
+    for (const constraints of attempts) {
+      try { return await navigator.mediaDevices.getUserMedia(constraints); }
+      catch (error) {
+        lastError = error;
+        if (error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError") throw error;
+      }
+    }
+    throw lastError;
+  }
+  function prepareCameraVideo(video) {
+    video.muted = true;
+    video.setAttribute("playsinline", "");
+    video.setAttribute("webkit-playsinline", "");
+  }
   async function startRepresentativeCamera() {
     const message = byId("rep-attendance-message");
     if (!selectedRepresentativeStudent) { message.textContent = "Sélectionnez d’abord un étudiant absent."; return; }
@@ -414,12 +456,13 @@
     try {
       byId("rep-badge-scanner").hidden = false;
       message.textContent = "Présentez le QR du badge de l’étudiant sélectionné devant la caméra.";
-      representativeCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      representativeCameraStream = await openUserCamera();
       const video = byId("rep-camera-video");
       video.srcObject = representativeCameraStream;
+      prepareCameraVideo(video);
       video.style.display = "block";
-      await video.play();
       byId("rep-scanner-placeholder").style.display = "none";
+      try { await video.play(); } catch { /* Le flux est déjà ouvert. */ }
       let detector = null;
       if ("BarcodeDetector" in window) { try { detector = new BarcodeDetector({ formats: ["qr_code"] }); } catch { detector = null; } }
       const canvas = document.createElement("canvas");
@@ -449,8 +492,10 @@
       };
       representativeScanFrame = requestAnimationFrame(scan);
     } catch (error) {
-      stopRepresentativeCamera();
-      message.textContent = cameraErrorMessage(error);
+      if (!representativeCameraStream) {
+        stopRepresentativeCamera();
+        message.textContent = cameraErrorMessage(error);
+      } else message.textContent = "Le lecteur est ouvert. Présentez le QR du badge devant la caméra.";
     }
   }
   function showAttendancePreview(code, app = getApplication()) {
@@ -482,7 +527,7 @@
     byId("start-scan").style.display = "inline-flex";
   }
   function cameraErrorMessage(error) {
-    if (error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError") return "L’accès à la caméra est refusé. Autorisez la caméra pour ce site dans les réglages du navigateur, puis réessayez.";
+    if (error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError") return "L’accès à la caméra est refusé. Ouvrez les réglages de ce site dans le navigateur, autorisez la caméra, puis réessayez.";
     if (error?.name === "NotFoundError" || error?.name === "DevicesNotFoundError") return "Aucune caméra n’a été détectée sur cet appareil.";
     if (error?.name === "NotReadableError" || error?.name === "TrackStartError") return "La caméra est utilisée par une autre application. Fermez cette application puis réessayez.";
     if (error?.name === "SecurityError" || !window.isSecureContext) return "La caméra exige une connexion sécurisée HTTPS. Ouvrez le site avec son adresse https://.";
@@ -505,12 +550,28 @@
       byId("attendance-message").textContent = "Le lecteur QR n’a pas pu se charger. Vérifiez votre connexion, puis rechargez la page.";
       return;
     }
+    let stream;
     try {
-      cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      if (navigator.permissions?.query) {
+        const status = await navigator.permissions.query({ name: "camera" }).catch(() => null);
+        if (status?.state === "denied") {
+          byId("attendance-message").textContent = "La caméra est bloquée pour ce site. Ouvrez les réglages du site (cadenas ou informations de la page), autorisez la caméra, puis rouvrez le scanner. Le navigateur ne redemande l’accès tant qu’il reste bloqué.";
+          return;
+        }
+      }
+      stream = await openUserCamera();
+    } catch (error) {
+      byId("attendance-message").textContent = cameraErrorMessage(error);
+      return;
+    }
+    try {
+      cameraStream = stream;
       const video = byId("camera-video");
       video.srcObject = cameraStream;
+      prepareCameraVideo(video);
       video.style.display = "block";
-      await video.play();
+      byId("scanner-placeholder").style.display = "none";
+      try { await video.play(); } catch { /* Le flux est déjà autorisé : on continue même si la lecture automatique est retardée. */ }
       byId("scanner-placeholder").style.display = "none";
       byId("start-scan").style.display = "none";
       byId("stop-scan").style.display = "inline-flex";
@@ -556,8 +617,7 @@
       };
       scanFrame = requestAnimationFrame(scan);
     } catch (error) {
-      byId("attendance-message").textContent = cameraErrorMessage(error);
-      stopCamera();
+      byId("attendance-message").textContent = "Le lecteur est ouvert, mais le décodage du QR a échoué. Rapprochez le code et réessayez.";
     }
   }
 
@@ -566,7 +626,7 @@
     try { await loadStudentData(); }
     catch (error) {
       if (error.name === "AccountBannedError") { showBlockedAccount(error.message); return; }
-      setScreen("auth-screen"); byId("login-message").textContent = error.message || "Impossible de charger votre dossier. Réessayez."; return;
+      setScreen("auth-screen"); byId("login-message").textContent = readableAccountError(error); return;
     }
     setScreen("portal-screen");
     byId("news-campus-label").textContent = D.getSite(profile.site).city;
@@ -622,7 +682,7 @@
       await activatePortal();
     } catch (error) {
       if (/bann|ban|suspend/i.test(error?.message || "")) showBlockedAccount("Votre compte a été banni par l’administration de votre établissement. Contactez l’administration de votre site.");
-      else byId("login-message").textContent = "Connexion impossible. Vérifiez vos identifiants et confirmez votre e-mail.";
+      else byId("login-message").textContent = /coerce|single JSON object|PGRST116/i.test(error?.message || "") ? readableAccountError(error) : "Connexion impossible. Vérifiez vos identifiants et confirmez votre e-mail.";
     }
     finally { button.disabled = false; }
   });
@@ -863,13 +923,13 @@
     const printWindow = window.open("", "irgib-card-print", "popup,width=980,height=820");
     if (!printWindow) { byId("my-card-status").insertAdjacentHTML("beforeend", '<p class="form-message" role="status">Autorisez l’ouverture de la fenêtre d’impression pour créer le PDF.</p>'); return; }
     printWindow.opener = null;
-    const stylesUrl = new URL("../assets/styles.css?v=20261025b", location.href).href;
+    const stylesUrl = new URL("../assets/styles.css?v=20261025e", location.href).href;
     const sheets = faces.map(face => {
       const clone = face.cloneNode(true);
       clone.querySelectorAll("canvas").forEach(canvas => {
         try { const image = document.createElement("img"); image.src = canvas.toDataURL("image/png"); image.alt = "QR de vérification du badge"; canvas.replaceWith(image); } catch { /* Le QR reste dans sa représentation originale si le navigateur bloque la copie. */ }
       });
-      clone.querySelectorAll("img").forEach(image => { image.src = new URL(image.getAttribute("src"), location.href).href; });
+      clone.querySelectorAll("img").forEach(image => { const src = image.getAttribute("src") || ""; if (src.startsWith("data:") || src.startsWith("blob:")) return; image.src = new URL(src, location.href).href; });
       return `<section class="card-print-sheet">${clone.outerHTML}</section>`;
     }).join("");
     printWindow.document.open();
