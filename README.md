@@ -3,7 +3,7 @@
 ## Applications
 
 - Étudiants : /etudiant/
-- Administration : /gestion-campus-irga82/ (/admin/ redirige vers l’entrée sécurisée)
+- Administration : /espace-campus/ (connexion Supabase et autorisation par site ; /admin/ renvoie au portail étudiant)
 - Configuration publique d’exécution : /api/config lit uniquement les variables SUPABASE_URL et SUPABASE_PUBLISHABLE_KEY.
 - La clé service_role n’est jamais utilisée côté navigateur ni dans ce dépôt.
 

@@ -127,7 +127,7 @@ Dans la première phase : la file des demandes et, avec la présence, le tableau
 | Responsable de classe | /responsable | Scanne, vérifie, clôture et produit la fiche |
 | Professeur | /professeur | Reçoit la fiche et consulte l'historique |
 | Bibliothèque | /bibliotheque | Entrées et emprunts |
-| Administration | /admin | Valide les demandes et suit présences et heures |
+| Administration | /espace-campus/ | Valide les demandes et suit présences et heures |
 
 ## 11. Structure retenue
 
