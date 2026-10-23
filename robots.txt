@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://irgib-africa-badge.vercel.app/sitemap.xml
