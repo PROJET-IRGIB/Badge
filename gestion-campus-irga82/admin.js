@@ -8,7 +8,11 @@
   let reviewedId = "";
   let toastTimer;
   let applicationsCache = [];
+  let studentProfilesCache = [];
   let attendanceCache = [];
+  let adminSite = null;
+  let qrScanStream = null;
+  let qrScanFrame = 0;
   const applications = () => applicationsCache;
   const approved = () => applications().filter(item => item.status === "approved");
   const siteName = id => D.getSite(id).city;
@@ -25,14 +29,20 @@
       if (!data || data.length < 500) break;
     }
     applicationsCache = rows.map(mapApplication);
-    const start = new Date(`${D.todayKey()}T00:00:00+01:00`).toISOString();
-    const end = new Date(`${D.todayKey()}T00:00:00+01:00`); end.setUTCDate(end.getUTCDate() + 1);
+    const profiles = [];
+    for (let from = 0; ; from += 500) {
+      const { data, error } = await adminClient.from("student_profiles").select("*").order("created_at", { ascending: false }).range(from, from + 499);
+      if (error) throw error;
+      profiles.push(...(data || []));
+      if (!data || data.length < 500) break;
+    }
+    studentProfilesCache = profiles.map(row => ({ studentId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date }));
     const records = [];
     for (let from = 0; ; from += 500) {
       const { data, error } = await adminClient.from("attendance_records")
-        .select("attended_at,session_id,student_profiles!inner(user_id,first_name,last_name,email,program,level,site),attendance_sessions!inner(site,program,level)")
-        .gte("attended_at", start).lt("attended_at", end.toISOString())
-        .order("attended_at", { ascending: false }).order("id", { ascending: false }).range(from, from + 499);
+        .select("status,attended_at,session_id,student_profiles!inner(user_id,first_name,last_name,email,program,level,site),attendance_sessions!inner(site,program,level,session_day,course_title)")
+        .eq("attendance_sessions.session_day", D.todayKey())
+        .order("attended_at", { ascending: false, nullsFirst: false }).order("id", { ascending: false }).range(from, from + 499);
       if (error) throw error;
       records.push(...(data || []));
       if (!data || data.length < 500) break;
@@ -40,7 +50,7 @@
     const byStudent = new Map(applicationsCache.map(item => [item.studentId, item]));
     attendanceCache = (records || []).map(row => {
       const person = row.student_profiles; const app = byStudent.get(person.user_id);
-      return { studentId: person.user_id, createdAt: row.attended_at, day: D.todayKey(), sessionCode: row.session_id.slice(0, 8), firstName: person.first_name, lastName: person.last_name, email: person.email, matricule: app?.finalMatricule || app?.temporaryMatricule || "", program: person.program, level: person.level, site: person.site };
+      return { studentId: person.user_id, createdAt: row.attended_at, day: row.attendance_sessions.session_day, sessionCode: row.session_id.slice(0, 8), courseTitle: row.attendance_sessions.course_title, present: row.status === "present", firstName: person.first_name, lastName: person.last_name, email: person.email, matricule: app?.finalMatricule || app?.temporaryMatricule || "", program: person.program, level: person.level, site: person.site };
     });
   }
   const statusText = status => ({ pending: "En attente", approved: "Approuvée", rejected: "Rejetée" }[status] || status);
@@ -72,7 +82,7 @@
     const pending = list.filter(item => item.status === "pending");
     const active = list.filter(item => item.status === "approved");
     const rejected = list.filter(item => item.status === "rejected");
-    const today = attendanceCache.filter(item => item.day === D.todayKey());
+    const today = attendanceCache.filter(item => item.day === D.todayKey() && item.present);
     byId("dashboard-stats").innerHTML = [["Demandes en attente", pending.length, "À vérifier par l’administration"], ["Cartes approuvées", active.length, "Matricules définitifs attribués"], ["Demandes rejetées", rejected.length, "Décisions enregistrées"], ["Présences aujourd’hui", today.length, D.todayKey()]].map(([label, value, note]) => `<article class="stat-card"><div class="stat-top"><span>${label}</span></div><div class="stat-value">${value}</div><div class="stat-note">${note}</div></article>`).join("");
     byId("today-attendance-summary").innerHTML = `<div class="attendance-count-big">${today.length}</div><p class="muted small">présence${today.length === 1 ? "" : "s"} validée${today.length === 1 ? "" : "s"} aujourd’hui</p>`;
     byId("pending-summary").innerHTML = pending.slice(0, 3).map(item => `<button class="quick-item" data-review="${esc(item.id)}" style="width:100%;text-align:left;background:#fff"><span class="q-icon">${photoCell(item)}</span><span><strong>${esc(fullName(item))}</strong><span>${esc(item.temporaryMatricule)} · ${esc(siteName(item.site))}</span></span></button>`).join("") || `<div class="muted small">Aucune demande en attente.</div>`;
@@ -87,9 +97,15 @@
   }
   function renderStudents() {
     const query = (byId("student-search").value || "").trim().toLowerCase();
-    const list = approved().filter(item => [fullName(item), item.finalMatricule, programName(item.program), item.level, siteName(item.site)].join(" ").toLowerCase().includes(query));
+    const list = studentProfilesCache.filter(person => {
+      const app = applications().find(item => item.studentId === person.studentId);
+      return [fullName(person), person.email, app?.finalMatricule, app?.temporaryMatricule, programName(person.program), person.level, siteName(person.site)].join(" ").toLowerCase().includes(query);
+    });
     byId("student-count").textContent = `${list.length} étudiant${list.length === 1 ? "" : "s"}`;
-    byId("student-rows").innerHTML = list.map(item => `<tr><td>${photoCell(item)}</td><td><strong>${esc(fullName(item))}</strong><span class="sub">${esc(item.email)}</span></td><td><strong>${esc(item.finalMatricule)}</strong></td><td>${esc(item.sex)}</td><td>${esc(programName(item.program))}<span class="sub">${esc(item.level)}</span></td><td>${esc(siteName(item.site))}</td><td>${esc(keyFor(item))}</td></tr>`).join("") || `<tr><td colspan="7" class="table-empty">Aucun étudiant approuvé trouvé.</td></tr>`;
+    byId("student-rows").innerHTML = list.map(person => {
+      const app = applications().find(item => item.studentId === person.studentId);
+      return `<tr><td>${app ? photoCell(app) : `<span class="table-photo photo-empty">—</span>`}</td><td><strong>${esc(fullName(person))}</strong><span class="sub">${esc(person.email)}</span></td><td><strong>${esc(app?.finalMatricule || app?.temporaryMatricule || "—")}</strong><span class="sub">${app ? statusText(app.status) : "Inscrit · demande non envoyée"}</span></td><td>${esc(person.sex)}</td><td>${esc(programName(person.program))}<span class="sub">${esc(person.level)}</span></td><td>${esc(siteName(person.site))}</td><td>${esc(keyFor(person))}</td></tr>`;
+    }).join("") || `<tr><td colspan="7" class="table-empty">Aucun étudiant inscrit trouvé.</td></tr>`;
   }
   const careerCycles = [
     { name: "Licence", levels: ["LP1", "LP2", "LP3"] },
@@ -97,18 +113,7 @@
   ];
   const careerYear = { LP1: "1re année", LP2: "2e année", LP3: "3e année", M1: "1re année", M2: "2e année" };
   function attendanceRoster() {
-    const today = attendanceCache.filter(item => item.day === D.todayKey());
-    const presentByStudent = new Map(today.map(item => [item.studentId, item]));
-    const rows = approved().map(student => {
-      const mark = presentByStudent.get(student.studentId);
-      return { studentId: student.studentId, firstName: student.firstName, lastName: student.lastName, email: student.email, matricule: student.finalMatricule || "", program: student.program, level: student.level, site: student.site, present: Boolean(mark), attendedAt: mark?.createdAt || "" };
-    });
-    const known = new Set(rows.map(row => row.studentId));
-    today.forEach(item => {
-      if (known.has(item.studentId)) return;
-      rows.push({ studentId: item.studentId, firstName: item.firstName, lastName: item.lastName, email: item.email, matricule: item.matricule || "", program: item.program, level: item.level, site: item.site, present: true, attendedAt: item.createdAt });
-    });
-    return rows;
+    return attendanceCache.filter(item => item.day === D.todayKey());
   }
   function renderAttendance() {
     const query = (byId("attendance-search").value || "").trim().toLowerCase();
@@ -142,25 +147,28 @@
           sites.forEach(siteId => {
             const rows = atLevel.filter(item => item.program === programCode && item.site === siteId).sort((a, b) => fullName(a).localeCompare(fullName(b), "fr"));
             const here = rows.filter(item => item.present).length;
-            const body = rows.map(item => `<tr><td><strong>${esc(fullName(item))}</strong><span class="sub">${esc(item.email)}</span></td><td>${esc(item.matricule || "—")}</td><td>${item.present && item.attendedAt ? new Date(item.attendedAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—"}</td><td><span class="status ${item.present ? "active" : "absent"}">${item.present ? "Présent" : "Absent"}</span></td></tr>`).join("");
+            const body = rows.map(item => `<tr><td><strong>${esc(fullName(item))}</strong><span class="sub">${esc(item.email)}</span></td><td>${esc(item.matricule || "—")}</td><td>${item.present && item.createdAt ? new Date(item.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—"}</td><td><span class="status ${item.present ? "active" : "absent"}">${item.present ? "Présent" : "Absent"}</span></td></tr>`).join("");
             blocks.push(`<section class="roll-section"><header><strong>${esc(programName(programCode))}</strong><span>${esc(siteName(siteId))}</span><span>${here} / ${rows.length}</span></header><div class="table-scroll"><table><thead><tr><th>Étudiant</th><th>Matricule</th><th>Heure</th><th>Statut</th></tr></thead><tbody>${body}</tbody></table></div></section>`);
           });
         });
       });
     });
-    byId("attendance-board").innerHTML = blocks.join("") || `<p class="table-empty">Aucun étudiant pour ces critères. L’appel compte les cartes approuvées.</p>`;
+    byId("attendance-board").innerHTML = blocks.join("") || `<p class="table-empty">Aucune séance active aujourd’hui pour ces critères.</p>`;
   }
   function initGroupFilters() {
-    byId("group-site").innerHTML = `<option value="">Toutes les villes</option>${D.sites.map(item => `<option value="${item.id}">${esc(item.city)}</option>`).join("")}`;
+    const scopedSites = D.sites.filter(item => !adminSite || item.id === adminSite);
+    byId("group-site").innerHTML = `${adminSite ? "" : `<option value="">Tous les sites</option>`}${scopedSites.map(item => `<option value="${item.id}">${esc(item.city)}</option>`).join("")}`;
     byId("group-program").innerHTML = `<option value="">Toutes les filières</option>${D.programs.map(item => `<option value="${item.code}">${item.code} · ${esc(item.shortName)}</option>`).join("")}`;
     byId("group-level").innerHTML = `<option value="">Tous les niveaux</option>${D.levels.map(level => `<option value="${level}">${level} · ${careerYear[level] || level}</option>`).join("")}`;
-    byId("attendance-site").innerHTML = `<option value="">Tous les sites</option>${D.sites.map(item => `<option value="${item.id}">${esc(item.city)}</option>`).join("")}`;
+    byId("attendance-site").innerHTML = `${adminSite ? "" : `<option value="">Tous les sites</option>`}${scopedSites.map(item => `<option value="${item.id}">${esc(item.city)}</option>`).join("")}`;
     byId("attendance-program").innerHTML = `<option value="">Toutes les filières</option>${D.programs.map(item => `<option value="${item.code}">${item.code} · ${esc(item.shortName)}</option>`).join("")}`;
     byId("attendance-level").innerHTML = `<option value="">Toutes les années</option>${D.levels.map(level => `<option value="${level}">${level} · ${careerYear[level] || level}</option>`).join("")}`;
   }
   let activeSessionToken = "";
   function initSessionForm() {
-    byId("session-site").innerHTML = D.sites.map(site => `<option value="${esc(site.id)}">${esc(site.city)}</option>`).join("");
+    byId("session-duration").closest(".field").hidden = true;
+    byId("session-create-button").textContent = "Afficher le QR du jour";
+    byId("session-site").innerHTML = D.sites.filter(site => !adminSite || site.id === adminSite).map(site => `<option value="${esc(site.id)}">${esc(site.city)}</option>`).join("");
     byId("session-program").innerHTML = D.programs.map(program => `<option value="${esc(program.code)}">${esc(program.code)} · ${esc(program.shortName)}</option>`).join("");
     byId("session-level").innerHTML = D.levels.map(level => `<option value="${esc(level)}">${esc(level)}</option>`).join("");
     byId("session-create-form").addEventListener("submit", async event => {
@@ -189,6 +197,55 @@
       try { await navigator.clipboard.writeText(activeSessionToken); toast("Code de secours copié."); }
       catch { toast("La copie automatique est bloquée par le navigateur."); }
     });
+  }
+  async function downloadDailyQrDocument() {
+    const site = adminSite || byId("attendance-site").value || null;
+    const popup = window.open("", "_blank");
+    if (!popup) { toast("Autorisez les fenêtres contextuelles pour créer le document PDF."); return; }
+    popup.document.write("<p style='font:16px Arial;padding:30px'>Préparation des QR du jour…</p>");
+    const { data, error } = await adminClient.rpc("admin_daily_attendance_qrs", { p_site: site, p_day: D.todayKey() });
+    if (error) { popup.close(); toast(error.message || "Les QR du jour ne sont pas disponibles."); return; }
+    const sessions = Array.isArray(data) ? data : [];
+    if (!sessions.length) { popup.close(); toast("Aucun groupe avec des étudiants approuvés aujourd’hui."); return; }
+    const cards = sessions.map(s => `<article><h2>Code QR du jour</h2><h3>${esc(s.program)} ${esc(s.level)}</h3><p>${esc(siteName(s.site))} · ${esc(s.session_day)}</p><p>${esc(s.course_title || "Séance du jour")}</p><div class="qr" data-token="${esc(s.token)}"></div><small>À scanner depuis l’espace étudiant · valable jusqu’à la fin de la journée</small></article>`).join("");
+    popup.document.open();
+    popup.document.write(`<!doctype html><html lang="fr"><meta charset="utf-8"><title>QR de présence · ${esc(D.todayKey())}</title><style>body{font:15px Arial;color:#102a39;margin:20px}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}article{border:1px solid #9cb4c4;border-radius:12px;padding:18px;text-align:center;break-inside:avoid}h2{font-size:19px;margin:0 0 6px}h3{font-size:26px;margin:6px}p{margin:6px}.qr{margin:14px auto;width:180px;height:180px}.qr img{width:180px;height:180px}small{display:block;color:#526d7b}@media print{button{display:none}.grid{gap:10px}}</style><h1>Présences IRGIB AFRICA · ${esc(D.todayKey())}</h1><button onclick="print()">Imprimer / Enregistrer en PDF</button><main class="grid">${cards}</main><script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"><\/script><script>document.querySelectorAll('.qr').forEach(e=>new QRCode(e,{text:e.dataset.token,width:180,height:180,correctLevel:QRCode.CorrectLevel.M}));setTimeout(()=>print(),700)<\/script></html>`);
+    popup.document.close();
+  }
+  function stopAdminScanner() {
+    if (qrScanFrame) cancelAnimationFrame(qrScanFrame);
+    qrScanFrame = 0;
+    if (qrScanStream) qrScanStream.getTracks().forEach(track => track.stop());
+    qrScanStream = null;
+    const video = byId("admin-camera-video");
+    if (video) video.srcObject = null;
+    if (byId("admin-stop-scan")) byId("admin-stop-scan").hidden = true;
+    if (byId("admin-resume-scan")) byId("admin-resume-scan").hidden = false;
+  }
+  async function resumeAdminScanner() {
+    try {
+      if (!navigator.mediaDevices?.getUserMedia || !window.jsQR) throw new Error("Caméra ou lecteur QR indisponible. Utilisez un navigateur récent en HTTPS.");
+      stopAdminScanner();
+      qrScanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+      const video = byId("admin-camera-video"); video.srcObject = qrScanStream; await video.play();
+      byId("admin-stop-scan").hidden = false; byId("admin-resume-scan").hidden = true;
+      byId("admin-scan-message").textContent = "Caméra active. Scannez un QR de séance pour vérifier le groupe.";
+      const canvas = document.createElement("canvas"), ctx = canvas.getContext("2d", { willReadFrequently: true });
+      const scan = async () => {
+        if (!qrScanStream || video.readyState < 2) { qrScanFrame = requestAnimationFrame(scan); return; }
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight; ctx.drawImage(video,0,0);
+        const frame = ctx.getImageData(0,0,canvas.width,canvas.height); const decoded = window.jsQR(frame.data,frame.width,frame.height,{inversionAttempts:"attemptBoth"});
+        if (decoded?.data) {
+          stopAdminScanner();
+          const { data, error } = await adminClient.rpc("admin_attendance_session_info", { p_token: decoded.data });
+          if (error) byId("admin-scan-message").textContent = error.message || "Ce QR n’est pas accessible pour votre site.";
+          else byId("admin-scan-message").textContent = `${data.course_title} · ${data.program} ${data.level} · ${siteName(data.site)} · ${data.active ? "séance active" : "séance terminée"}. Les étudiants doivent scanner ce QR depuis leur espace pour enregistrer leur présence.`;
+          return;
+        }
+        qrScanFrame = requestAnimationFrame(scan);
+      };
+      qrScanFrame = requestAnimationFrame(scan);
+    } catch (error) { stopAdminScanner(); byId("admin-scan-message").textContent = error.message || "Impossible d’ouvrir la caméra."; }
   }
   function renderGroups() {
     const site = byId("group-site").value;
@@ -295,11 +352,11 @@
     let filename = "";
     if (kind === "groups") {
       const counts = approved().reduce((memo, item) => { const key = keyFor(item); memo[key] = (memo[key] || 0) + 1; return memo; }, {});
-      rows = [["cle_groupe", "ville", "code_filiere", "filiere", "niveau", "effectif"], ...D.allGroups().map(group => [group.key, siteName(group.site), group.program, programName(group.program), group.level, counts[group.key] || 0])]; filename = "groupes-irgib.csv";
+      rows = [["cle_groupe", "ville", "code_filiere", "filiere", "niveau", "effectif"], ...D.allGroups().filter(group => !adminSite || group.site === adminSite).map(group => [group.key, siteName(group.site), group.program, programName(group.program), group.level, counts[group.key] || 0])]; filename = "groupes-irgib.csv";
     } else if (kind === "attendance") {
-      rows = [["date", "heure", "etudiant", "matricule", "statut", "cycle", "annee", "code_filiere", "filiere", "niveau", "site"], ...attendanceRoster().map(item => [D.todayKey(), item.attendedAt ? new Date(item.attendedAt).toLocaleTimeString("fr-FR") : "", fullName(item), item.matricule, item.present ? "present" : "absent", item.level.startsWith("M") ? "Master" : "Licence", careerYear[item.level] || item.level, item.program, programName(item.program), item.level, siteName(item.site)])]; filename = "presences-jour.csv";
+      rows = [["date", "heure", "cours", "etudiant", "matricule", "statut", "cycle", "annee", "code_filiere", "filiere", "niveau", "site"], ...attendanceRoster().map(item => [D.todayKey(), item.createdAt ? new Date(item.createdAt).toLocaleTimeString("fr-FR") : "", item.courseTitle, fullName(item), item.matricule, item.present ? "present" : "absent", item.level.startsWith("M") ? "Master" : "Licence", careerYear[item.level] || item.level, item.program, programName(item.program), item.level, siteName(item.site)])]; filename = "presences-jour.csv";
     } else {
-      rows = [["matricule_final", "matricule_temporaire", "nom", "prenom", "email", "sexe", "code_filiere", "filiere", "niveau", "ville", "groupe"], ...approved().map(item => [item.finalMatricule, item.temporaryMatricule, item.lastName, item.firstName, item.email, item.sex, item.program, programName(item.program), item.level, siteName(item.site), keyFor(item)])]; filename = "etudiants-irgib.csv";
+      rows = [["matricule_final", "matricule_temporaire", "nom", "prenom", "email", "sexe", "code_filiere", "filiere", "niveau", "ville", "groupe", "statut_demande"], ...studentProfilesCache.map(person => { const app = applications().find(item => item.studentId === person.studentId); return [app?.finalMatricule || "", app?.temporaryMatricule || "", person.lastName, person.firstName, person.email, person.sex, person.program, programName(person.program), person.level, siteName(person.site), keyFor(person), app ? statusText(app.status) : "inscrit sans demande"]; })]; filename = "etudiants-irgib.csv";
     }
     const csv = "\uFEFF" + rows.map(row => row.map(value => `"${String(value ?? "").replace(/"/g, '""')}"`).join(";")).join("\r\n");
     const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); toast("Export CSV préparé.");
@@ -315,6 +372,10 @@
   function initAdminApp() {
     if (appInitialized) return;
     appInitialized = true;
+    byId("session-create-form").insertAdjacentHTML("beforebegin", `<button class="btn secondary sm" id="download-daily-qrs" type="button" style="margin-bottom:12px">Imprimer / enregistrer les QR du jour en PDF</button>`);
+    byId("session-qr-panel").insertAdjacentHTML("afterend", `<section class="panel" style="margin:16px 0"><div class="panel-head"><div><div class="eyebrow">Contrôle du QR</div><h2>Scanner un code de séance</h2><p>Annule le scan à tout moment puis reprends-le sans perdre la liste.</p></div></div><video id="admin-camera-video" playsinline muted style="width:min(100%,420px);border-radius:12px;background:#102a39;min-height:220px"></video><div class="form-actions"><button class="btn" id="admin-resume-scan" type="button">Ouvrir / reprendre le scanner</button><button class="btn secondary" id="admin-stop-scan" type="button" hidden>Annuler le scan</button></div><p id="admin-scan-message" class="form-message" aria-live="polite">Le QR quotidien identifie la séance. Pour qu’une présence soit enregistrée, l’étudiant doit le scanner depuis son espace.</p></section>`);
+    const studentHeading = document.querySelector("#view-students .table-tools h3");
+    if (studentHeading) studentHeading.textContent = "Étudiants inscrits";
     document.querySelectorAll(".side-nav [data-view]").forEach(button => button.addEventListener("click", () => setView(button.dataset.view)));
     document.querySelectorAll("[data-go]").forEach(button => button.addEventListener("click", () => setView(button.dataset.go)));
     document.querySelectorAll("[data-close-review]").forEach(button => button.addEventListener("click", closeReview));
@@ -326,6 +387,9 @@
     ["attendance-site", "attendance-program", "attendance-level", "attendance-status"].forEach(id => byId(id).addEventListener("change", renderAttendance));
     byId("card-search").addEventListener("input", renderCards);
     ["group-site", "group-program", "group-level"].forEach(id => byId(id).addEventListener("change", renderGroups));
+    byId("download-daily-qrs").addEventListener("click", () => void downloadDailyQrDocument());
+    byId("admin-resume-scan").addEventListener("click", () => void resumeAdminScanner());
+    byId("admin-stop-scan").addEventListener("click", () => { stopAdminScanner(); byId("admin-scan-message").textContent = "Scanner mis en pause. Reprenez quand vous le souhaitez."; });
     byId("group-search").addEventListener("input", renderGroups);
     document.addEventListener("click", event => {
       const target = event.target instanceof Element ? event.target : event.target?.parentElement;
@@ -338,18 +402,31 @@
     });
     byId("print-admin-card").addEventListener("click", () => { document.body.classList.add("print-card-mode", "admin-print-mode"); window.print(); setTimeout(() => document.body.classList.remove("print-card-mode", "admin-print-mode"), 900); });
     byId("admin-logout").addEventListener("click", async () => {
+      stopAdminScanner();
       const { error } = await adminClient.auth.signOut();
       showAdminGate(error ? "La déconnexion a échoué. Réessayez." : "Vous êtes déconnecté.");
     });
     initGroupFilters();
     initSessionForm();
     renderDashboard();
+    window.addEventListener("beforeunload", stopAdminScanner);
   }
   async function authorizeAdmin(session) {
     if (!session) { showAdminGate("Connectez-vous avec votre compte administrateur."); return false; }
-    const { data: membership, error } = await adminClient.from("admin_members").select("user_id").eq("user_id", session.user.id).maybeSingle();
-    if (error) { showAdminGate("La vérification du rôle admin Supabase a échoué. Vérifiez la configuration de la table admin_members."); return false; }
-    if (!membership) {
+    const { data: globalMembership, error: globalError } = await adminClient.from("admin_members").select("user_id").eq("user_id", session.user.id).maybeSingle();
+    if (globalError) { showAdminGate("La vérification du rôle admin Supabase a échoué."); return false; }
+    if (globalMembership) adminSite = null;
+    else {
+      const { data: siteMemberships, error: siteError } = await adminClient.from("admin_site_members").select("site").eq("user_id", session.user.id);
+      if (siteError) { showAdminGate("La vérification du site administrateur a échoué. Appliquez la migration des accès par site."); return false; }
+      if (siteMemberships?.length !== 1) {
+        await adminClient.auth.signOut();
+        showAdminGate(siteMemberships?.length ? "Ce compte est associé à plusieurs sites. Contactez l’administrateur principal." : "Ce compte n’est pas autorisé à accéder à l’administration.");
+        return false;
+      }
+      adminSite = siteMemberships[0].site;
+    }
+    if (!globalMembership && !adminSite) {
       await adminClient.auth.signOut();
       showAdminGate("Ce compte n’est pas autorisé à accéder à l’administration.");
       return false;
@@ -359,14 +436,16 @@
       showAdminGate("Base de données indisponible. Appliquez les migrations Supabase et vérifiez les autorisations RLS avant de réessayer.");
       return false;
     }
-    byId("admin-user-label").textContent = session.user.email || "Administration";
+    byId("admin-user-label").textContent = adminSite ? `${session.user.email || "Administration"} · ${siteName(adminSite)}` : (session.user.email || "Administration");
     byId("admin-profile-mark").textContent = (session.user.email || "A").trim().charAt(0).toUpperCase();
     byId("admin-auth-screen").hidden = true;
     byId("admin-app").hidden = false;
     initAdminApp();
     adminClient.channel("irgib-admin-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "badge_applications" }, () => { void refreshCurrent(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "student_profiles" }, () => { void refreshCurrent(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "attendance_records" }, () => { void refreshCurrent(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "attendance_sessions" }, () => { void refreshCurrent(); })
       .subscribe();
     return true;
   }

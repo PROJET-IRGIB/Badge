@@ -43,9 +43,9 @@
       const { data } = await db.storage.from("student-photos").createSignedUrl(application.photoPath, 600);
       application.photo = data?.signedUrl || "";
     }
-    const { data: records, error: attendanceError } = await db.from("attendance_records").select("attended_at,session_id,attendance_sessions!inner(site,program,level)").eq("student_id", currentUser.id).order("attended_at", { ascending: false });
+    const { data: records, error: attendanceError } = await db.from("attendance_records").select("status,attended_at,session_id,attendance_sessions!inner(site,program,level,session_day,course_title)").eq("student_id", currentUser.id).order("attended_at", { ascending: false, nullsFirst: false });
     if (attendanceError) throw attendanceError;
-    attendanceRows = (records || []).map(row => ({ createdAt: row.attended_at, sessionCode: row.session_id.slice(0, 8), site: row.attendance_sessions.site, program: row.attendance_sessions.program, level: row.attendance_sessions.level, day: row.attended_at.slice(0, 10) }));
+    attendanceRows = (records || []).map(row => ({ createdAt: row.attended_at, sessionCode: row.session_id.slice(0, 8), courseTitle: row.attendance_sessions.course_title || "Séance du jour", status: row.status, site: row.attendance_sessions.site, program: row.attendance_sessions.program, level: row.attendance_sessions.level, day: row.attendance_sessions.session_day }));
   }
   const showAuthPage = page => {
     const login = page === "login";
@@ -165,7 +165,7 @@
     const app = getApplication();
     byId("today-label").textContent = D.todayKey();
     const rows = todayAttendance();
-    byId("my-attendance-rows").innerHTML = rows.length ? rows.map(item => `<tr><td>${new Date(item.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</td><td>${esc(item.sessionCode)}</td><td>${esc(D.getProgram(item.program).shortName)} · ${esc(item.level)}</td><td>${esc(D.getSite(item.site).city)}</td><td><span class="status active">Présent</span></td></tr>`).join("") : `<tr><td colspan="5" class="table-empty">Aucune présence validée aujourd’hui.</td></tr>`;
+    byId("my-attendance-rows").innerHTML = rows.length ? rows.map(item => `<tr><td>${item.createdAt ? new Date(item.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—"}</td><td>${esc(item.courseTitle)}</td><td>${esc(D.getProgram(item.program).shortName)} · ${esc(item.level)}</td><td>${esc(D.getSite(item.site).city)}</td><td><span class="status ${item.status === "present" ? "active" : "absent"}">${item.status === "present" ? "Présent" : "Absent"}</span></td></tr>`).join("") : `<tr><td colspan="5" class="table-empty">Aucune séance créée pour votre groupe aujourd’hui.</td></tr>`;
     if (scannedSession) showAttendancePreview(scannedSession, app);
   }
   function showAttendancePreview(code, app = getApplication()) {
@@ -281,6 +281,10 @@
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "badge_applications", filter: `student_id=eq.${currentUser.id}` }, async () => {
         try { await loadStudentData(); if (application) applicationSummary(application); renderNotification(application); renderMyCard(); }
         catch { byId("login-message").textContent = "La mise à jour de votre dossier est temporairement indisponible."; }
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "attendance_records", filter: `student_id=eq.${currentUser.id}` }, async () => {
+        try { await loadStudentData(); renderAttendance(); }
+        catch { byId("attendance-message").textContent = "La liste des présences n’a pas pu être actualisée."; }
       }).subscribe();
     byId("hello-name").textContent = profile.firstName;
     renderNotification(getApplication());
