@@ -170,8 +170,8 @@
     byId("today-label").textContent = D.todayKey();
     const rows = todayAttendance();
     byId("my-attendance-rows").innerHTML = rows.length ? rows.map(item => `<tr><td>${item.createdAt ? new Date(item.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—"}</td><td>${esc(item.courseTitle)}</td><td>${esc(D.getProgram(item.program).shortName)} · ${esc(item.level)}</td><td>${esc(D.getSite(item.site).city)}</td><td><span class="status ${item.status === "present" ? "active" : "absent"}">${item.status === "present" ? "Présent" : "Absent"}</span></td></tr>`).join("") : `<tr><td colspan="5" class="table-empty">Aucune séance créée pour votre groupe aujourd’hui.</td></tr>`;
-    const todayGroup = rows.find(item => item.site === (app || profile)?.site && item.program === (app || profile)?.program && item.level === (app || profile)?.level);
-    const alreadyPresent = todayGroup?.status === "present";
+    const person = app || profile;
+    const alreadyPresent = rows.some(item => item.status === "present" && item.site === person?.site && item.program === person?.program && item.level === person?.level);
     if (scannedSession) showAttendancePreview(scannedSession, app);
     byId("start-scan").disabled = alreadyPresent;
     byId("load-session").disabled = alreadyPresent;
