@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="fr">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#0c2344"><meta name="robots" content="noindex,nofollow"><title>Espace campus · IRGIB AFRICA</title><link rel="stylesheet" href="/assets/styles.css?v=20261024b"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#0c2344"><meta name="robots" content="noindex,nofollow"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="IRGIB Admin"><title>Espace campus · IRGIB AFRICA</title><link rel="manifest" href="/espace-campus/manifest.webmanifest"><link rel="apple-touch-icon" href="/assets/pwa-192-v2.png"><link rel="stylesheet" href="/assets/styles.css?v=20261024c"></head>
 <body>
   <main class="admin-auth-screen" id="admin-auth-screen">
     <section class="panel admin-auth-card" aria-labelledby="admin-auth-title">
@@ -31,7 +31,8 @@
         <button data-view="cards"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="8.5" cy="12" r="1.7"/><path d="M12.5 10.5h6M12.5 13.5h4"/></svg></span><span class="nav-text">Cartes</span></button>
       </nav><div class="side-bottom">IRGIB AFRICA<br>Gestion des dossiers et présences</div>
     </aside>
-    <div class="admin-main"><header class="admin-top no-print"><div class="crumb" id="breadcrumb">Campus / Vue d’ensemble</div><div class="profile"><span class="pill"><span class="dot"></span> Compte autorisé</span><span class="profile-icon" id="admin-profile-mark">A</span><strong id="admin-user-label">Administration</strong><button class="btn ghost sm" id="admin-logout" type="button">Déconnexion</button></div></header>
+    <div class="admin-main"><header class="admin-top no-print"><div class="crumb" id="breadcrumb">Campus / Vue d’ensemble</div><div class="profile"><button class="btn secondary sm" id="admin-install-button" type="button">Installer l’espace admin</button><span class="profile-icon" id="admin-profile-mark">A</span><strong id="admin-user-label">Administration</strong><button class="btn ghost sm" id="admin-logout" type="button">Déconnexion</button></div></header>
+      <p id="admin-install-message" class="form-message no-print" role="status" aria-live="polite" hidden></p>
       <main class="admin-content">
         <div class="notice no-print" style="margin-bottom:18px"><strong>Données synchronisées.</strong> Les demandes, photos et présences sont protégées par l’authentification et les règles d’accès Supabase.</div>
         <section class="view active" id="view-dashboard"><div class="admin-heading"><div><div class="eyebrow">Campus · Administration</div><h1>Vue d’ensemble</h1><p>Examinez les demandes, approuvez les cartes et suivez les présences du jour.</p></div><button class="btn" data-go="requests">Voir les demandes</button></div>
@@ -67,5 +68,5 @@
   </div>
   <div class="modal-backdrop no-print" id="review-modal" role="dialog" aria-modal="true" aria-labelledby="review-title"><div class="modal review-modal"><div class="modal-head"><div><div class="eyebrow">Contrôle de demande</div><h2 id="review-title">Demande de badge</h2><p id="review-subtitle" class="muted small"></p></div><button class="modal-close" type="button" data-close-review aria-label="Fermer">×</button></div><div id="review-content"></div><div class="review-actions" id="review-actions"></div></div></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="/assets/catalog.js?v=20261024b"></script><script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script><script src="/assets/bootstrap.js?v=backend2" data-entry="/espace-campus/admin.js?v=backend11" data-error-target="admin-auth-message"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="/assets/catalog.js?v=20261024b"></script><script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script><script src="/espace-campus/admin-pwa.js?v=1"></script><script src="/assets/bootstrap.js?v=backend2" data-entry="/espace-campus/admin.js?v=backend11" data-error-target="admin-auth-message"></script>
 </body></html>

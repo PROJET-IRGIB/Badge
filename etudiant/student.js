@@ -32,6 +32,12 @@
   let cameraStream = null;
   let scanFrame = 0;
   let lastScanTime = 0;
+  let representativeGroupmates = [];
+  let selectedRepresentativeStudent = null;
+  let representativeCameraStream = null;
+  let representativeScanFrame = 0;
+  let representativeLastScanTime = 0;
+  let representativeLastQr = "";
 
   const getApplication = () => application;
   const fromProfileRow = row => row && ({ userId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date });
@@ -283,12 +289,110 @@
     const { data: assignment, error: assignmentError } = await db.from("class_representatives").select("user_id").eq("user_id", currentUser.id).maybeSingle();
     if (assignmentError || !assignment) return;
     panel.hidden = false;
-    const select = byId("rep-student-select");
-    select.innerHTML = `<option value="">Chargement des étudiants…</option>`;
+    byId("rep-absent-list").innerHTML = `<p class="muted small">Chargement de la liste des absents…</p>`;
     const { data, error } = await db.rpc("list_representative_groupmates");
-    if (error) { select.innerHTML = `<option value="">Liste indisponible</option>`; byId("rep-attendance-message").textContent = "Impossible de charger la liste de votre groupe."; return; }
-    select.innerHTML = `<option value="">Choisir un étudiant</option>${(data || []).map(row => `<option value="${esc(row.student_id)}">${esc(`${row.last_name} ${row.first_name}`)} · ${esc(row.final_matricule || "Sans matricule")}</option>`).join("")}`;
-    if (!data?.length) { select.innerHTML = `<option value="">Aucun camarade approuvé dans ce groupe</option>`; }
+    if (error) { byId("rep-absent-list").innerHTML = `<p class="form-message">Impossible de charger les absents. Réessayez dans un instant.</p>`; return; }
+    representativeGroupmates = data || [];
+    if (!representativeGroupmates.some(row => row.student_id === selectedRepresentativeStudent?.student_id)) selectedRepresentativeStudent = null;
+    renderRepresentativeGroupmates();
+  }
+  function renderRepresentativeGroupmates() {
+    const list = byId("rep-absent-list");
+    const button = byId("rep-mark-attendance");
+    button.disabled = !selectedRepresentativeStudent;
+    if (!representativeGroupmates.length) {
+      list.innerHTML = `<div class="notice">Aucun étudiant absent à confirmer dans votre groupe pour aujourd’hui.</div>`;
+      return;
+    }
+    list.innerHTML = representativeGroupmates.map(row => `<button type="button" class="rep-absent-choice${row.student_id === selectedRepresentativeStudent?.student_id ? " selected" : ""}" data-rep-student="${esc(row.student_id)}" aria-pressed="${row.student_id === selectedRepresentativeStudent?.student_id}"><span><strong>${esc(`${row.last_name} ${row.first_name}`)}</strong><small>${esc(row.final_matricule || "Matricule indisponible")}</small></span><span class="status absent">Absent</span></button>`).join("");
+  }
+  function stopRepresentativeCamera(hide = true) {
+    if (representativeScanFrame) cancelAnimationFrame(representativeScanFrame);
+    representativeScanFrame = 0;
+    if (representativeCameraStream) representativeCameraStream.getTracks().forEach(track => track.stop());
+    representativeCameraStream = null;
+    const video = byId("rep-camera-video");
+    video.srcObject = null;
+    video.style.display = "none";
+    byId("rep-scanner-placeholder").style.display = "grid";
+    if (hide) byId("rep-badge-scanner").hidden = true;
+  }
+  async function confirmRepresentativeBadge(rawValue) {
+    if (!selectedRepresentativeStudent || rawValue === representativeLastQr) return;
+    representativeLastQr = rawValue;
+    const expected = `IRGIB-CARTE:${selectedRepresentativeStudent.final_matricule || ""}`;
+    if (!selectedRepresentativeStudent.final_matricule || rawValue !== expected) {
+      byId("rep-attendance-message").textContent = "Ce QR ne correspond pas à l’étudiant sélectionné. Vérifiez le nom et scannez son badge.";
+      window.setTimeout(() => { representativeLastQr = ""; }, 1200);
+      return;
+    }
+    const button = byId("rep-mark-attendance");
+    button.disabled = true;
+    byId("rep-attendance-message").textContent = "Badge reconnu. Vérification et enregistrement sécurisés…";
+    let error;
+    try {
+      ({ error } = await db.rpc("mark_classmate_attendance", { p_student_id: selectedRepresentativeStudent.student_id, p_scanned_qr: rawValue }));
+    } catch (rpcError) { error = rpcError; }
+    if (error) {
+      button.disabled = false;
+      byId("rep-attendance-message").textContent = error.message || "La présence n’a pas pu être mise à jour.";
+      window.setTimeout(() => { representativeLastQr = ""; }, 1200);
+      return;
+    }
+    const markedName = `${selectedRepresentativeStudent.last_name} ${selectedRepresentativeStudent.first_name}`;
+    stopRepresentativeCamera();
+    selectedRepresentativeStudent = null;
+    byId("rep-attendance-message").textContent = `Présence mise à jour : ${markedName} est maintenant marqué présent.`;
+    await loadStudentData();
+    renderAttendance();
+    await loadRepresentativeGroupmates();
+  }
+  async function startRepresentativeCamera() {
+    const message = byId("rep-attendance-message");
+    if (!selectedRepresentativeStudent) { message.textContent = "Sélectionnez d’abord un étudiant absent."; return; }
+    if (!navigator.mediaDevices?.getUserMedia || !window.isSecureContext) { message.textContent = "Le scan nécessite un navigateur récent et une connexion HTTPS."; return; }
+    if (!("BarcodeDetector" in window) && typeof window.jsQR !== "function") { message.textContent = "Le lecteur QR ne s’est pas chargé. Rechargez la page puis réessayez."; return; }
+    try {
+      byId("rep-badge-scanner").hidden = false;
+      message.textContent = "Présentez le QR du badge de l’étudiant sélectionné devant la caméra.";
+      representativeCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      const video = byId("rep-camera-video");
+      video.srcObject = representativeCameraStream;
+      video.style.display = "block";
+      await video.play();
+      byId("rep-scanner-placeholder").style.display = "none";
+      let detector = null;
+      if ("BarcodeDetector" in window) { try { detector = new BarcodeDetector({ formats: ["qr_code"] }); } catch { detector = null; } }
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      representativeLastScanTime = 0;
+      representativeLastQr = "";
+      const scan = async timestamp => {
+        if (!representativeCameraStream) return;
+        const now = timestamp || performance.now();
+        if (now - representativeLastScanTime >= 180 && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0) {
+          representativeLastScanTime = now;
+          let rawValue = "";
+          if (detector) { try { rawValue = (await detector.detect(video)).find(code => code.rawValue)?.rawValue || ""; } catch { detector = null; } }
+          if (!rawValue && typeof window.jsQR === "function") {
+            try {
+              const scale = Math.min(1, 900 / video.videoWidth);
+              canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+              canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+              context.drawImage(video, 0, 0, canvas.width, canvas.height);
+              const frame = context.getImageData(0, 0, canvas.width, canvas.height);
+              rawValue = window.jsQR(frame.data, frame.width, frame.height, { inversionAttempts: "attemptBoth" })?.data || "";
+            } catch { /* La caméra peut ne pas encore fournir une image exploitable. */ }
+          }
+          if (rawValue) await confirmRepresentativeBadge(rawValue);
+        }
+        if (representativeCameraStream) representativeScanFrame = requestAnimationFrame(scan);
+      };
+      representativeScanFrame = requestAnimationFrame(scan);
+    } catch (error) {
+      stopRepresentativeCamera();
+      message.textContent = cameraErrorMessage(error);
+    }
   }
   function showAttendancePreview(code, app = getApplication()) {
     scannedSession = code;
@@ -521,6 +625,7 @@
   });
   byId("signout").addEventListener("click", async () => {
     stopCamera();
+    stopRepresentativeCamera();
     if (studentChannel) { await db.removeChannel(studentChannel); studentChannel = null; }
     // Remove this device's push endpoint before the session closes, so another
     // student using the same browser can register it safely on their account.
@@ -559,18 +664,21 @@
     void requestCampusNotifications(byId("notification-settings-message"));
   });
   byId("rep-mark-attendance").addEventListener("click", async event => {
-    const button = event.currentTarget;
-    const studentId = byId("rep-student-select").value;
-    const message = byId("rep-attendance-message");
-    if (!studentId) { message.textContent = "Sélectionnez un étudiant de votre groupe."; return; }
-    button.disabled = true; message.textContent = "Enregistrement de la présence…";
-    try {
-      const { error } = await db.rpc("mark_classmate_attendance", { p_student_id: studentId });
-      if (error) throw error;
-      message.textContent = "Présence enregistrée pour cet étudiant.";
-      await loadStudentData(); renderAttendance(); await loadRepresentativeGroupmates();
-    } catch (error) { message.textContent = error.message || "La présence n’a pas pu être enregistrée."; }
-    finally { button.disabled = false; }
+    event.currentTarget.disabled = true;
+    await startRepresentativeCamera();
+    event.currentTarget.disabled = !selectedRepresentativeStudent;
+  });
+  byId("rep-absent-list").addEventListener("click", event => {
+    const choice = event.target.closest("[data-rep-student]");
+    if (!choice || representativeCameraStream) return;
+    selectedRepresentativeStudent = representativeGroupmates.find(row => row.student_id === choice.dataset.repStudent) || null;
+    byId("rep-attendance-message").textContent = selectedRepresentativeStudent ? `Étudiant sélectionné : ${selectedRepresentativeStudent.last_name} ${selectedRepresentativeStudent.first_name}. Scannez son QR pour confirmer.` : "";
+    renderRepresentativeGroupmates();
+  });
+  byId("rep-stop-scan").addEventListener("click", () => {
+    stopRepresentativeCamera();
+    byId("rep-mark-attendance").disabled = !selectedRepresentativeStudent;
+    byId("rep-attendance-message").textContent = "Scan annulé. Aucune présence n’a été modifiée.";
   });
 
   byId("request-photo").addEventListener("change", async event => {
