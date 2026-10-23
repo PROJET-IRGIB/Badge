@@ -319,7 +319,7 @@
     if (password.length < 8 || !draft.phone) { byId("signup-message").textContent = "Renseignez le téléphone et un mot de passe d’au moins 8 caractères."; return; }
     const button = event.currentTarget.querySelector('[type="submit"]'); button.disabled = true;
     try {
-      const { data, error } = await db.auth.signUp({ email: draft.email, password, options: { emailRedirectTo: `${window.location.origin}/etudiant/`, data: { account_type: "student", first_name: draft.firstName, last_name: draft.lastName, phone: draft.phone, sex: draft.sex, program: draft.program, level: draft.level, site: draft.site } } });
+      const { data, error } = await db.auth.signUp({ email: draft.email, password, options: { data: { account_type: "student", first_name: draft.firstName, last_name: draft.lastName, phone: draft.phone, sex: draft.sex, program: draft.program, level: draft.level, site: draft.site } } });
       if (error) throw error;
       if (data.session) { currentUser = data.user; byId("signup-form").reset(); await activatePortal(); }
       else {
