@@ -40,8 +40,29 @@
   let representativeLastQr = "";
   let representativeHasPin = false;
   let blockedAccountNotice = "";
+  let renderedCardKey = "";
+  let photoSignedUrl = "";
+  let photoSignedPath = "";
+  let photoSignedUntil = 0;
 
   const getApplication = () => application;
+  const cardKey = app => app ? [app.id, app.status, app.finalMatricule, app.photoPath, app.firstName, app.lastName, app.birthDate, app.sex, app.program, app.level, app.site].join("|") : "";
+  const attendanceKey = rows => (rows || []).map(row => `${row.sessionId}:${row.status}:${row.createdAt}`).join(",");
+  async function attachPhotoUrl(app) {
+    if (!app?.photoPath) {
+      if (app) app.photo = "";
+      return;
+    }
+    if (photoSignedUrl && photoSignedPath === app.photoPath && photoSignedUntil - Date.now() > 120000) {
+      app.photo = photoSignedUrl;
+      return;
+    }
+    const { data } = await db.storage.from("student-photos").createSignedUrl(app.photoPath, 3600);
+    photoSignedUrl = data?.signedUrl || "";
+    photoSignedPath = app.photoPath;
+    photoSignedUntil = Date.now() + 3600 * 1000;
+    app.photo = photoSignedUrl;
+  }
   const fromProfileRow = row => row && ({ userId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, bannedAt: row.banned_at || null, banReason: row.ban_reason || "" });
   const fromApplicationRow = row => row && ({ id: row.id, studentId: row.student_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, birthDate: row.birth_date, program: row.program, level: row.level, site: row.site, status: row.status, temporaryMatricule: row.temporary_matricule, finalMatricule: row.final_matricule, photoPath: row.photo_path, rejectionReason: row.rejection_reason, submittedAt: row.submitted_at, decidedAt: row.decided_at });
   function readableAccountError(error) {
@@ -65,10 +86,7 @@
     const { data: apps, error: appError } = await db.from("badge_applications").select("*").eq("student_id", currentUser.id).order("submitted_at", { ascending: false }).limit(1);
     if (appError) throw appError;
     application = fromApplicationRow(apps?.[0]);
-    if (application?.photoPath) {
-      const { data } = await db.storage.from("student-photos").createSignedUrl(application.photoPath, 600);
-      application.photo = data?.signedUrl || "";
-    }
+    await attachPhotoUrl(application);
     const { data: records, error: attendanceError } = await db.from("attendance_records").select("status,attended_at,session_id,marked_by,attendance_sessions!inner(site,program,level,session_day,course_title)").eq("student_id", currentUser.id).order("attended_at", { ascending: false, nullsFirst: false });
     if (attendanceError) throw attendanceError;
     attendanceRows = (records || []).map(row => ({ sessionId: row.session_id, markedBy: row.marked_by, createdAt: row.attended_at, sessionCode: row.session_id.slice(0, 8), courseTitle: row.attendance_sessions.course_title || "Séance du jour", status: row.status, site: row.attendance_sessions.site, program: row.attendance_sessions.program, level: row.attendance_sessions.level, day: row.attendance_sessions.session_day }));
@@ -154,8 +172,19 @@
   }
 
   function drawCard(app) {
+    const zone = byId("student-card-zone");
+    const key = cardKey(app);
+    if (renderedCardKey === key && zone.querySelector(".card-v2-front")) {
+      const photo = zone.querySelector(".card-v2-portrait img");
+      if (app.photo && !photo) {
+        const placeholder = zone.querySelector(".card-v2-photo-placeholder");
+        if (placeholder) placeholder.outerHTML = `<img src="${esc(app.photo)}" alt="Photo de ${esc(app.firstName)} ${esc(app.lastName)}">`;
+      }
+      return;
+    }
+    renderedCardKey = key;
     const qrPayload = `IRGIB-CARTE:${app.finalMatricule}`;
-    byId("student-card-zone").innerHTML = D.cardHtml(app, "card-qr");
+    zone.innerHTML = D.cardHtml(app, "card-qr");
     const qrHost = byId("card-qr");
     if (window.QRCode && app.finalMatricule) {
       qrHost.innerHTML = "";
@@ -179,11 +208,13 @@
     const actions = byId("card-print-actions");
     zone.closest(".student-card-panel")?.classList.toggle("has-approved-card", Boolean(app && app.status === "approved"));
     if (!app || app.status !== "approved") {
+      renderedCardKey = "";
       zone.style.display = "none";
       actions.style.display = "none";
       status.innerHTML = app ? `<div class="pending-card"><span class="status ${app.status === "rejected" ? "rejected" : "pending"}">${app.status === "rejected" ? "Demande rejetée" : "En attente d’approbation"}</span><h3>${app.status === "rejected" ? "Votre carte n’est pas encore disponible." : "La carte apparaîtra après validation."}</h3><p>Matricule temporaire : <b>${esc(app.temporaryMatricule)}</b></p><p class="small muted">Le matricule définitif et le QR de la carte sont créés après approbation.</p></div>` : `<div class="pending-card"><h3>Envoyez d’abord votre demande de badge.</h3><p class="small muted">Un matricule temporaire sera créé à l’envoi. La carte et son QR seront disponibles après approbation.</p></div>`;
       return;
     }
+    if (zone.style.display !== "none" && renderedCardKey === cardKey(app) && zone.querySelector(".card-v2-front")) return;
     status.innerHTML = `<div class="notice" style="margin-bottom:14px"><strong>Carte approuvée.</strong> Matricule définitif : ${esc(app.finalMatricule)}. Le QR du recto contient un identifiant de carte, sans nom ni données personnelles.</div>`;
     zone.style.display = "block";
     actions.style.display = "flex";
@@ -923,7 +954,7 @@
     const printWindow = window.open("", "irgib-card-print", "popup,width=980,height=820");
     if (!printWindow) { byId("my-card-status").insertAdjacentHTML("beforeend", '<p class="form-message" role="status">Autorisez l’ouverture de la fenêtre d’impression pour créer le PDF.</p>'); return; }
     printWindow.opener = null;
-    const stylesUrl = new URL("../assets/styles.css?v=20261025f", location.href).href;
+    const stylesUrl = new URL("../assets/styles.css?v=20261025g", location.href).href;
     const sheets = faces.map(face => {
       const clone = face.cloneNode(true);
       clone.querySelectorAll("canvas").forEach(canvas => {
@@ -948,7 +979,7 @@
   });
   db.auth.onAuthStateChange((event, session) => {
     if (event === "SIGNED_OUT") {
-      hideRepresentativeDailyQr(); representativeHasPin = false; currentUser = null; profile = null; application = null; attendanceRows = [];
+      hideRepresentativeDailyQr(); representativeHasPin = false; currentUser = null; profile = null; application = null; attendanceRows = []; renderedCardKey = ""; photoSignedUrl = ""; photoSignedPath = ""; photoSignedUntil = 0;
       if (blockedAccountNotice) { setScreen("banned-screen"); byId("banned-account-message").textContent = blockedAccountNotice; }
       else { setScreen("auth-screen"); showAuthPage("login"); }
     }
@@ -967,9 +998,15 @@
   window.setInterval(async () => {
     if (!currentUser || byId("portal-screen").style.display === "none") return;
     try {
+      const beforeApp = cardKey(application);
+      const beforeAttendance = attendanceKey(attendanceRows);
       await loadStudentData();
-      if (application) applicationSummary(application);
-      renderNotification(application); renderMyCard(); renderAttendance();
+      if (beforeApp !== cardKey(application)) {
+        if (application) applicationSummary(application);
+        renderNotification(application);
+        renderMyCard();
+      }
+      if (beforeAttendance !== attendanceKey(attendanceRows)) renderAttendance();
       if (Date.now() - lastNewsRefresh > 120000) void loadAnnouncements();
     }
     catch (error) { if (error?.name === "AccountBannedError") showBlockedAccount(error.message); /* a short network interruption does not invalidate the signed-in session */ }
