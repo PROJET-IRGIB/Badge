@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#12315a"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <title>Espace étudiant · IRGIB AFRICA</title><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/assets/pwa-192.png"><link rel="stylesheet" href="../assets/styles.css?v=20261023e">
+  <title>Espace étudiant · IRGIB AFRICA</title><link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/assets/pwa-192.png"><link rel="stylesheet" href="../assets/styles.css?v=20261023f">
 </head>
 <body>
   <header class="topbar"><a class="brand" href="./"><img src="../assets/blason.jpg" alt="Blason IRGIB AFRICA"><span>IRGIB AFRICA<small>Portail étudiant</small></span></a><div class="top-actions"><span class="pill"><span class="dot"></span> Espace sécurisé</span><button id="signout" class="btn ghost sm" style="display:none">Déconnexion</button></div></header>
@@ -45,7 +45,7 @@
     <section id="portal-screen" style="display:none">
       <div class="portal-hero compact-hero"><div><div class="eyebrow">Espace étudiant</div><h1>Bonjour <span id="hello-name">Étudiant</span></h1><p>Suivez votre demande de carte, votre profil et vos présences depuis le même espace.</p></div><div class="hero-mark"><img src="../assets/blason.jpg" alt="Blason de l’université"></div></div>
       <div id="notification-banner" class="notice notification-banner" style="display:none;margin-top:15px"></div>
-      <nav class="student-tabs" aria-label="Espace étudiant"><button class="active" data-student-view="request">Ma demande</button><button data-student-view="attendance">Présences</button><button data-student-view="card">Ma carte</button><button data-student-view="profile">Profil</button></nav>
+      <nav class="student-tabs" aria-label="Espace étudiant"><button class="active" data-student-view="request">Accueil</button><button data-student-view="news">Actualités</button><button data-student-view="attendance">Présences</button><button data-student-view="card">Ma carte</button><button data-student-view="profile">Profil</button></nav>
 
       <section class="student-view active" id="student-view-request"><div class="portal-grid student-main-grid">
         <div class="panel"><div class="panel-head"><div><div class="eyebrow">Carte étudiant</div><h2>Ma demande de badge</h2><p>Vérifiez soigneusement les champs avant l’envoi.</p></div></div>
@@ -67,11 +67,13 @@
         <aside class="panel"><div class="eyebrow">Avant l’envoi</div><h2>Relisez tout</h2><p class="muted small" style="line-height:1.6">Après l’envoi, les informations deviennent en lecture seule. Si vous remarquez une erreur, contactez l’administration de votre site d’apprentissage dans les 24 heures, avant l’approbation, pour demander une correction.</p><div id="request-status-box" class="info-row"><span>Statut</span><strong>Pas encore envoyée</strong></div><div class="info-row"><span>Matricule</span><strong>Attribué à l’envoi</strong></div><div class="info-row"><span>Validation</span><strong>Par l’administration</strong></div></aside>
       </div></section>
 
+      <section class="student-view" id="student-view-news"><div class="news-heading"><div><div class="eyebrow">La vie du campus</div><h2>Dernières nouvelles</h2><p>Informations publiées par l’administration de votre établissement.</p></div><span class="news-campus-pill" id="news-campus-label"></span></div><div class="news-list" id="news-list" aria-live="polite"><article class="news-empty"><span class="news-empty-icon" aria-hidden="true">✦</span><strong>Chargement des actualités…</strong><p>Nous récupérons les informations de votre campus.</p></article></div></section>
+
       <section class="student-view" id="student-view-attendance"><div class="panel"><div class="panel-head"><div><div class="eyebrow">Présence du jour</div><h2>Scanner le QR de présence</h2><p>Scannez le code de la séance, vérifiez les informations préremplies, puis validez votre présence.</p></div></div>
         <div class="notice"><strong>Votre identité est préremplie.</strong> Aucune identification d’enseignant n’est demandée dans l’espace étudiant.</div>
         <div class="attendance-grid"><div><div class="scanner-frame"><video id="camera-video" playsinline muted></video><div class="scanner-placeholder" id="scanner-placeholder"><div class="scan-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8"/><path d="M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8"/><path d="M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16"/><path d="M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/><path d="M4 12h16"/></svg></div><strong>Lecteur QR</strong><span>Autorisez la caméra pour scanner le code de la séance.</span></div></div><div class="form-actions"><button class="btn" id="start-scan" type="button">Ouvrir le scanner</button><button class="btn secondary" id="stop-scan" type="button" style="display:none">Fermer la caméra</button></div><p class="field-help">Si la caméra n’est pas disponible, saisissez le code inscrit dans le QR ci-dessous.</p><div class="field"><label for="session-code">Code de séance (solution de secours)</label><input id="session-code" placeholder="Ex. SEANCE-2026-10-22-AB12"></div><button class="btn secondary sm" id="load-session" type="button" style="margin-top:10px">Charger le code</button></div>
           <div><div class="eyebrow">Informations de présence</div><div class="attendance-preview" id="attendance-preview"><div class="muted small">Scannez ou saisissez un QR de séance pour préremplir cette fiche.</div></div><button class="btn" id="submit-attendance" type="button" disabled style="margin-top:14px">Valider ma présence</button><p id="attendance-message" class="form-message" aria-live="polite"></p></div></div>
-        <div class="section-title"><div><div class="eyebrow">Aujourd’hui</div><h2>Mes présences validées</h2></div><span class="pill" id="today-label"></span></div><div class="table-panel"><div class="table-scroll"><table><thead><tr><th>Heure</th><th>Séance</th><th>Filière · niveau</th><th>Ville / site</th><th>Statut</th></tr></thead><tbody id="my-attendance-rows"></tbody></table></div></div>
+        <div class="section-title"><div><div class="eyebrow">Aujourd’hui</div><h2>Mon appel du jour</h2></div><span class="pill" id="today-label"></span></div><div class="table-panel"><div class="table-scroll"><table><thead><tr><th>Heure</th><th>Séance</th><th>Filière · niveau</th><th>Ville / site</th><th>Statut</th></tr></thead><tbody id="my-attendance-rows"></tbody></table></div></div>
       </div></section>
 
       <section class="student-view" id="student-view-card"><div class="portal-grid student-main-grid"><div class="panel student-card-panel"><div class="panel-head"><div><div class="eyebrow">Carte étudiante</div><h2>Ma carte</h2><p>Le recto s’affiche ici en grand. Téléchargez le PDF complet avec le verso pour l’envoyer à l’impression.</p></div></div><div id="my-card-status"></div><div class="student-card-wrap print-zone" id="student-card-zone" style="display:none"></div><div class="print-actions no-print" id="card-print-actions" style="display:none;margin-top:18px"><span class="small muted">PDF en deux pages au format CR80 (85,60 × 53,98 mm). Dans la fenêtre qui s’ouvre, choisissez « Enregistrer au format PDF ».</span><button class="btn" id="print-my-card" type="button">Télécharger le PDF recto-verso</button></div></div><aside class="panel student-site-panel"><div class="eyebrow">Votre campus</div><h2>Contacts de mon site</h2><div id="my-site-info"></div><div class="info-row"><span>Format d’impression</span><strong>85,60 × 53,98 mm</strong></div><div class="info-row"><span>Épaisseur</span><strong>0,76 mm</strong></div></aside></div></section>
@@ -80,11 +82,11 @@
     </section>
   </main>
   <footer class="footer"><span>IRGIB AFRICA · Espace étudiant</span><a href="https://irgibafrica.university/catalogue-formations.html" target="_blank" rel="noreferrer">Catalogue officiel des formations</a></footer>
-  <script src="../assets/catalog.js?v=20261023e"></script>
+  <script src="../assets/catalog.js?v=20261023f"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-  <script src="/assets/pwa-install.js?v=20261023b" defer></script>
-  <script src="/assets/bootstrap.js?v=backend2" data-entry="/etudiant/student.js?v=backend4" data-error-target="login-message"></script>
+  <script src="/assets/pwa-install.js?v=20261023f" defer></script>
+  <script src="/assets/bootstrap.js?v=backend2" data-entry="/etudiant/student.js?v=backend5" data-error-target="login-message"></script>
 </body>
 </html>

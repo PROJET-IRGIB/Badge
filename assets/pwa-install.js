@@ -1,6 +1,18 @@
 (() => {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => {});
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let reloadingForUpdate = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!hadController || reloadingForUpdate) return;
+    reloadingForUpdate = true;
+    window.location.reload();
+  });
+  navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).then(registration => {
+    const checkForUpdate = () => { if (document.visibilityState === "visible") void registration.update().catch(() => {}); };
+    checkForUpdate();
+    document.addEventListener("visibilitychange", checkForUpdate);
+    window.setInterval(checkForUpdate, 30 * 60 * 1000);
+  }).catch(() => {});
 
   const isStandalone = () => window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
   if (isStandalone()) return;

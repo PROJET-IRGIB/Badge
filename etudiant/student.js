@@ -25,6 +25,8 @@
   let selectedPhotoName = "";
   let selectedPhotoBlob = null;
   let scannedSession = "";
+  let announcements = [];
+  let lastNewsRefresh = 0;
   let cameraStream = null;
   let scanFrame = 0;
   let lastScanTime = 0;
@@ -45,7 +47,7 @@
     }
     const { data: records, error: attendanceError } = await db.from("attendance_records").select("status,attended_at,session_id,attendance_sessions!inner(site,program,level,session_day,course_title)").eq("student_id", currentUser.id).order("attended_at", { ascending: false, nullsFirst: false });
     if (attendanceError) throw attendanceError;
-    attendanceRows = (records || []).map(row => ({ createdAt: row.attended_at, sessionCode: row.session_id.slice(0, 8), courseTitle: row.attendance_sessions.course_title || "Séance du jour", status: row.status, site: row.attendance_sessions.site, program: row.attendance_sessions.program, level: row.attendance_sessions.level, day: row.attendance_sessions.session_day }));
+    attendanceRows = (records || []).map(row => ({ sessionId: row.session_id, createdAt: row.attended_at, sessionCode: row.session_id.slice(0, 8), courseTitle: row.attendance_sessions.course_title || "Séance du jour", status: row.status, site: row.attendance_sessions.site, program: row.attendance_sessions.program, level: row.attendance_sessions.level, day: row.attendance_sessions.session_day }));
   }
   const showAuthPage = page => {
     const login = page === "login";
@@ -66,6 +68,7 @@
     document.querySelectorAll(".student-view").forEach(section => section.classList.toggle("active", section.id === `student-view-${view}`));
     document.querySelectorAll(".student-tabs [data-student-view]").forEach(button => button.classList.toggle("active", button.dataset.studentView === view));
     if (view === "attendance") { renderAttendance(); }
+    if (view === "news") { void loadAnnouncements(); }
     if (view === "card") { renderMyCard(); }
     if (view === "profile") { renderProfile(); }
   };
@@ -167,7 +170,39 @@
     byId("today-label").textContent = D.todayKey();
     const rows = todayAttendance();
     byId("my-attendance-rows").innerHTML = rows.length ? rows.map(item => `<tr><td>${item.createdAt ? new Date(item.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—"}</td><td>${esc(item.courseTitle)}</td><td>${esc(D.getProgram(item.program).shortName)} · ${esc(item.level)}</td><td>${esc(D.getSite(item.site).city)}</td><td><span class="status ${item.status === "present" ? "active" : "absent"}">${item.status === "present" ? "Présent" : "Absent"}</span></td></tr>`).join("") : `<tr><td colspan="5" class="table-empty">Aucune séance créée pour votre groupe aujourd’hui.</td></tr>`;
+    const todayGroup = rows.find(item => item.site === (app || profile)?.site && item.program === (app || profile)?.program && item.level === (app || profile)?.level);
+    const alreadyPresent = todayGroup?.status === "present";
     if (scannedSession) showAttendancePreview(scannedSession, app);
+    byId("start-scan").disabled = alreadyPresent;
+    byId("load-session").disabled = alreadyPresent;
+    byId("session-code").disabled = alreadyPresent;
+    if (alreadyPresent) {
+      byId("attendance-message").textContent = "Votre présence du jour est déjà enregistrée. Le QR ne peut être validé qu’une fois.";
+      byId("submit-attendance").disabled = true;
+    }
+  }
+  function renderAnnouncements() {
+    const node = byId("news-list");
+    if (!announcements.length) {
+      node.innerHTML = `<article class="news-empty"><span class="news-empty-icon" aria-hidden="true">✦</span><strong>Rien de nouveau pour le moment</strong><p>Les annonces importantes de votre campus apparaîtront ici.</p></article>`;
+      return;
+    }
+    node.innerHTML = announcements.map(item => `<article class="news-card"><div class="news-card-top"><span class="news-tag">${item.site ? esc(D.getSite(item.site).city) : "Tous les campus"}</span><time datetime="${esc(item.published_at)}">${new Date(item.published_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}</time></div><h3>${esc(item.title)}</h3><p>${esc(item.body)}</p></article>`).join("");
+  }
+  async function loadAnnouncements() {
+    if (!profile) return;
+    const node = byId("news-list");
+    if (!lastNewsRefresh) node.innerHTML = `<article class="news-empty"><span class="news-empty-icon" aria-hidden="true">✦</span><strong>Chargement des actualités…</strong><p>Nous récupérons les informations de votre campus.</p></article>`;
+    const { data, error } = await db.from("campus_announcements").select("id,title,body,site,published_at,expires_at").eq("status", "published").or(`site.is.null,site.eq.${profile.site}`).or(`expires_at.is.null,expires_at.gte.${D.todayKey()}`).order("published_at", { ascending: false }).limit(15);
+    if (error) {
+      node.innerHTML = `<article class="news-empty"><strong>Actualités indisponibles</strong><p>La connexion aux informations du campus a échoué. Réessayez dans quelques instants.</p><button class="btn secondary sm" id="retry-news" type="button">Réessayer</button></article>`;
+      byId("retry-news").addEventListener("click", () => void loadAnnouncements());
+      return;
+    }
+    announcements = data || [];
+    lastNewsRefresh = Date.now();
+    byId("news-campus-label").textContent = D.getSite(profile.site).city;
+    renderAnnouncements();
   }
   function showAttendancePreview(code, app = getApplication()) {
     scannedSession = code;
@@ -207,6 +242,11 @@
   }
   async function startCamera() {
     byId("attendance-message").textContent = "";
+    if (todayAttendance().some(item => item.status === "present" && item.site === (application || profile)?.site && item.program === (application || profile)?.program && item.level === (application || profile)?.level)) {
+      byId("attendance-message").textContent = "Votre présence du jour est déjà enregistrée.";
+      renderAttendance();
+      return;
+    }
     if (!navigator.mediaDevices?.getUserMedia) {
       byId("attendance-message").textContent = window.isSecureContext
         ? "Ce navigateur ne permet pas d’ouvrir la caméra. Essayez un navigateur récent ou saisissez le code de séance manuellement."
@@ -278,6 +318,8 @@
     try { await loadStudentData(); }
     catch (error) { setScreen("auth-screen"); byId("login-message").textContent = error.message || "Impossible de charger votre dossier. Réessayez."; return; }
     setScreen("portal-screen");
+    byId("news-campus-label").textContent = D.getSite(profile.site).city;
+    void loadAnnouncements();
     if (!studentChannel) studentChannel = db.channel(`student-${currentUser.id}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "badge_applications", filter: `student_id=eq.${currentUser.id}` }, async () => {
         try { await loadStudentData(); if (application) applicationSummary(application); renderNotification(application); renderMyCard(); }
@@ -457,23 +499,36 @@
   byId("start-scan").addEventListener("click", startCamera);
   byId("stop-scan").addEventListener("click", stopCamera);
   byId("load-session").addEventListener("click", () => {
-    try { showAttendancePreview(decodeSession(byId("session-code").value)); byId("attendance-message").textContent = "Séance chargée. Vérifiez vos informations avant validation."; }
+    try {
+      if (todayAttendance().some(item => item.status === "present" && item.site === (application || profile).site && item.program === (application || profile).program && item.level === (application || profile).level)) throw new Error("Votre présence du jour est déjà enregistrée.");
+      showAttendancePreview(decodeSession(byId("session-code").value)); byId("attendance-message").textContent = "Séance chargée. Vérifiez vos informations avant validation.";
+    }
     catch (error) { byId("attendance-message").textContent = error.message; }
   });
   byId("submit-attendance").addEventListener("click", async () => {
     if (!scannedSession) return;
     const button = byId("submit-attendance"); button.disabled = true;
     byId("attendance-message").textContent = "Enregistrement sécurisé de votre présence…";
-    const { error } = await db.rpc("submit_attendance", { p_token: scannedSession });
+    const tokenBeingSubmitted = scannedSession;
+    let error;
+    try { ({ error } = await db.rpc("submit_attendance", { p_token: tokenBeingSubmitted })); }
+    catch { error = new Error("La connexion a été interrompue. Vérifiez votre appel avant de réessayer."); }
     if (error) {
       byId("attendance-message").textContent = /déjà enregistrée/i.test(error.message) ? "Votre présence à cette séance est déjà enregistrée." : error.message || "Présence non enregistrée. Vérifiez que le QR est actif et correspond à votre groupe.";
-      button.disabled = false;
+      if (/déjà enregistrée/i.test(error.message)) {
+        scannedSession = "";
+        try { await loadStudentData(); }
+        catch { byId("attendance-message").textContent = "La présence semble déjà validée, mais l’appel n’a pas pu être actualisé. Rechargez la page pour vérifier."; }
+        byId("attendance-preview").innerHTML = `<div class="attendance-done"><strong>Présence déjà validée</strong><span>Ce QR a déjà été utilisé pour enregistrer votre présence aujourd’hui.</span></div>`;
+        renderAttendance();
+      } else { button.disabled = false; }
       return;
     }
     byId("attendance-message").textContent = "Présence enregistrée dans la liste du jour.";
-    await loadStudentData();
+    try { await loadStudentData(); }
+    catch { byId("attendance-message").textContent = "Présence enregistrée. L’actualisation de l’appel est temporairement indisponible."; }
     scannedSession = "";
-    byId("attendance-preview").innerHTML = `<div class="muted small">Votre présence est enregistrée. Scannez le prochain QR de séance si nécessaire.</div>`;
+    byId("attendance-preview").innerHTML = `<div class="attendance-done"><strong>Présence enregistrée</strong><span>Votre présence est confirmée pour la séance du jour.</span></div>`;
     renderAttendance();
     button.disabled = true;
   });
@@ -495,7 +550,12 @@
   }).catch(() => { setScreen("auth-screen"); byId("login-message").textContent = "Connexion au service impossible. Rechargez la page ou contactez l’administration."; });
   window.setInterval(async () => {
     if (!currentUser || byId("portal-screen").style.display === "none") return;
-    try { await loadStudentData(); if (application) applicationSummary(application); renderNotification(application); renderMyCard(); }
+    try {
+      await loadStudentData();
+      if (application) applicationSummary(application);
+      renderNotification(application); renderMyCard(); renderAttendance();
+      if (Date.now() - lastNewsRefresh > 120000) void loadAnnouncements();
+    }
     catch { /* a short network interruption does not invalidate the signed-in session */ }
   }, 30000);
 })();

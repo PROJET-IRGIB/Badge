@@ -10,7 +10,9 @@
   let applicationsCache = [];
   let studentProfilesCache = [];
   let attendanceCache = [];
+  let announcementsCache = [];
   let adminSite = null;
+  let currentAdminId = "";
   const applications = () => applicationsCache;
   const approved = () => applications().filter(item => item.status === "approved");
   const siteName = id => D.getSite(id).city;
@@ -66,9 +68,9 @@
     currentView = view;
     document.querySelectorAll(".view").forEach(node => node.classList.toggle("active", node.id === `view-${view}`));
     document.querySelectorAll(".side-nav [data-view]").forEach(node => node.classList.toggle("active", node.dataset.view === view));
-    const labels = { dashboard: "Vue d’ensemble", requests: "Demandes de badge", students: "Étudiants", attendance: "Présences", groups: "Groupes", catalog: "Catalogue", cards: "Cartes" };
+    const labels = { dashboard: "Vue d’ensemble", requests: "Demandes de badge", students: "Étudiants", attendance: "Présences", groups: "Groupes", catalog: "Catalogue", announcements: "Actualités", cards: "Cartes" };
     byId("breadcrumb").textContent = `Campus / ${labels[view]}`;
-    ({ dashboard: renderDashboard, requests: renderRequests, students: renderStudents, attendance: renderAttendance, groups: renderGroups, catalog: renderCatalog, cards: renderCards })[view]?.();
+    ({ dashboard: renderDashboard, requests: renderRequests, students: renderStudents, attendance: renderAttendance, groups: renderGroups, catalog: renderCatalog, announcements: () => void loadAnnouncements(), cards: renderCards })[view]?.();
   }
   function requestTableRows(list, recent = false) {
     const count = recent ? 6 : 7;
@@ -190,6 +192,57 @@
     byId("program-grid").innerHTML = D.programs.map(program => `<article class="program-card"><span class="program-code">${esc(program.code)}</span><div class="program-title">${esc(program.name)}</div><div class="program-meta"><span>${esc(program.note)}</span><span class="status ${program.status === "Confirmé" ? "active" : "pending"}">${esc(program.status)}</span></div></article>`).join("");
     byId("site-grid").innerHTML = D.sites.map(site => `<article class="site-card"><span class="site-code">ZONE ${esc(site.zone)} · ${esc(site.id)}</span><strong>${esc(site.city)}</strong>${site.points.map(point => `<p><b>${esc(point.name)}</b> · ${esc(point.address)}<br>${esc(point.phone)}</p>`).join("")}</article>`).join("");
   }
+  function renderAnnouncements() {
+    const host = byId("announcement-admin-rows");
+    if (!announcementsCache.length) {
+      host.innerHTML = `<div class="news-empty"><strong>Aucune publication pour le moment</strong><p>Les annonces que vous publiez apparaîtront ici.</p></div>`;
+      return;
+    }
+    host.innerHTML = announcementsCache.map(item => `<article class="announcement-admin-item"><div class="announcement-admin-meta"><span class="news-tag">${item.site ? esc(siteName(item.site)) : "Tous les campus"}</span><span class="status ${item.status === "published" ? "active" : "pending"}">${item.status === "published" ? "Publiée" : item.status === "archived" ? "Archivée" : "Brouillon"}</span></div><h3>${esc(item.title)}</h3><p>${esc(item.body)}</p><small>${item.published_at ? new Date(item.published_at).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "Pas encore publiée"}</small><button class="btn secondary sm" type="button" data-announcement-toggle="${esc(item.id)}">${item.status === "published" ? "Retirer de l’espace étudiant" : "Publier maintenant"}</button></article>`).join("");
+  }
+  async function loadAnnouncements() {
+    const host = byId("announcement-admin-rows");
+    host.innerHTML = `<div class="news-empty"><strong>Chargement…</strong></div>`;
+    const { data, error } = await adminClient.from("campus_announcements").select("id,title,body,site,status,published_at,expires_at,created_at").order("created_at", { ascending: false }).limit(50);
+    if (error) { host.innerHTML = `<div class="notice">Impossible de charger les actualités. Vérifiez que la migration des annonces est appliquée.</div>`; return; }
+    announcementsCache = data || [];
+    renderAnnouncements();
+  }
+  async function publishAnnouncement(event) {
+    event.preventDefault();
+    const form = byId("announcement-form");
+    const button = byId("announcement-submit");
+    const message = byId("announcement-message");
+    const title = byId("announcement-title").value.trim();
+    const body = byId("announcement-body").value.trim();
+    if (title.length < 4 || body.length < 10) { message.textContent = "Ajoutez un titre précis et une information d’au moins 10 caractères."; return; }
+    button.disabled = true;
+    message.textContent = "Publication en cours…";
+    try {
+      const { error } = await adminClient.from("campus_announcements").insert({ title, body, site: byId("announcement-site").value || null, status: "published", published_at: new Date().toISOString(), expires_at: byId("announcement-expiry").value || null, created_by: currentAdminId });
+      if (error) { message.textContent = error.message || "La publication n’a pas pu être enregistrée."; return; }
+      form.reset();
+      message.textContent = "Actualité publiée dans l’espace étudiant.";
+      await loadAnnouncements();
+    } catch {
+      message.textContent = "Connexion interrompue : l’actualité n’a pas pu être publiée. Réessayez.";
+    } finally {
+      button.disabled = false;
+    }
+  }
+  async function toggleAnnouncement(id) {
+    const item = announcementsCache.find(row => row.id === id);
+    if (!item) return;
+    const publish = item.status !== "published";
+    try {
+      const { data, error } = await adminClient.from("campus_announcements").update({ status: publish ? "published" : "draft", published_at: publish ? (item.published_at || new Date().toISOString()) : item.published_at }).eq("id", id).select("id").maybeSingle();
+      if (error || !data) { toast(error?.message || "Cette actualité n’a pas pu être modifiée. Vérifiez les droits du site."); return; }
+      await loadAnnouncements();
+      toast(publish ? "Actualité publiée." : "Actualité retirée de l’espace étudiant.");
+    } catch {
+      toast("Connexion interrompue : cette actualité n’a pas pu être modifiée.");
+    }
+  }
   function renderCards() {
     const query = (byId("card-search").value || "").trim().toLowerCase();
     const list = approved().filter(item => [fullName(item), item.finalMatricule, programName(item.program), siteName(item.site)].join(" ").toLowerCase().includes(query));
@@ -263,7 +316,7 @@
   async function refreshCurrent() {
     try { await loadAdminData(); }
     catch (error) { toast(error.message || "Les données ne sont pas joignables. Réessayez."); return; }
-    renderDashboard(); if (currentView === "requests") renderRequests(); if (currentView === "students") renderStudents(); if (currentView === "attendance") renderAttendance(); if (currentView === "groups") renderGroups(); if (currentView === "cards") renderCards();
+    renderDashboard(); if (currentView === "requests") renderRequests(); if (currentView === "students") renderStudents(); if (currentView === "attendance") renderAttendance(); if (currentView === "groups") renderGroups(); if (currentView === "announcements") await loadAnnouncements(); if (currentView === "cards") renderCards();
   }
   async function drawAdminCard(item) {
     const { data: signedPhoto, error } = await adminClient.storage.from("student-photos").createSignedUrl(item.photoPath, 600);
@@ -315,9 +368,12 @@
     byId("card-search").addEventListener("input", renderCards);
     ["group-site", "group-program", "group-level"].forEach(id => byId(id).addEventListener("change", renderGroups));
     byId("download-daily-qrs").addEventListener("click", () => void downloadDailyQrDocument());
+    byId("announcement-form").addEventListener("submit", event => void publishAnnouncement(event));
     byId("group-search").addEventListener("input", renderGroups);
     document.addEventListener("click", event => {
       const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+      const announcementToggle = target?.closest("[data-announcement-toggle]");
+      if (announcementToggle) void toggleAnnouncement(announcementToggle.dataset.announcementToggle);
       const review = target?.closest("[data-review]");
       if (review) void openReview(review.dataset.review);
       const preview = target?.closest("[data-preview-card]");
@@ -331,10 +387,15 @@
       showAdminGate(error ? "La déconnexion a échoué. Réessayez." : "Vous êtes déconnecté.");
     });
     initGroupFilters();
+    const announcementSite = byId("announcement-site");
+    announcementSite.innerHTML = adminSite
+      ? `<option value="${esc(adminSite)}">${esc(siteName(adminSite))} uniquement</option>`
+      : `<option value="">Tous les campus</option>${D.sites.map(site => `<option value="${esc(site.id)}">${esc(site.city)}</option>`).join("")}`;
     renderDashboard();
   }
   async function authorizeAdmin(session) {
     if (!session) { showAdminGate("Connectez-vous avec votre compte administrateur."); return false; }
+    currentAdminId = session.user.id;
     const { data: globalMembership, error: globalError } = await adminClient.from("admin_members").select("user_id").eq("user_id", session.user.id).maybeSingle();
     if (globalError) { showAdminGate("La vérification du rôle admin Supabase a échoué."); return false; }
     if (globalMembership) adminSite = null;
