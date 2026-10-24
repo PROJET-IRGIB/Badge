@@ -34,13 +34,13 @@
           ? "Installation lancée. Ouvrez IRGIB Admin depuis l’icône installée."
           : "Installation annulée. Vous pourrez la lancer plus tard avec ce bouton.";
       } catch {
-        message.textContent = "Installation indisponible. Utilisez le menu du navigateur puis Installer l’application.";
+        message.textContent = "Installation indisponible. Utilisez le menu du navigateur puis « Installer l’application ».";
       }
       return;
     }
     const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
     message.textContent = isIos
-      ? "Dans Safari, touchez Partager puis Sur l’écran d’accueil."
-      : "Dans le menu de Chrome ou Edge, choisissez Installer l’application ou Installer IRGIB Admin.";
+      ? "Dans Safari, touchez Partager puis « Sur l’écran d’accueil »."
+      : "Dans le menu de Chrome ou Edge, choisissez « Installer l’application » ou « Installer IRGIB Admin ».";
   });
 })();

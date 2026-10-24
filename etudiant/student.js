@@ -40,45 +40,14 @@
   let representativeLastQr = "";
   let representativeHasPin = false;
   let blockedAccountNotice = "";
-  let renderedCardKey = "";
-  let photoSignedUrl = "";
-  let photoSignedPath = "";
-  let photoSignedUntil = 0;
 
   const getApplication = () => application;
-  const cardKey = app => app ? [app.id, app.status, app.finalMatricule, app.photoPath, app.firstName, app.lastName, app.birthDate, app.sex, app.program, app.level, app.site].join("|") : "";
-  const attendanceKey = rows => (rows || []).map(row => `${row.sessionId}:${row.status}:${row.createdAt}`).join(",");
-  async function attachPhotoUrl(app) {
-    if (!app?.photoPath) {
-      if (app) app.photo = "";
-      return;
-    }
-    if (photoSignedUrl && photoSignedPath === app.photoPath && photoSignedUntil - Date.now() > 120000) {
-      app.photo = photoSignedUrl;
-      return;
-    }
-    const { data } = await db.storage.from("student-photos").createSignedUrl(app.photoPath, 3600);
-    photoSignedUrl = data?.signedUrl || "";
-    photoSignedPath = app.photoPath;
-    photoSignedUntil = Date.now() + 3600 * 1000;
-    app.photo = photoSignedUrl;
-  }
   const fromProfileRow = row => row && ({ userId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, bannedAt: row.banned_at || null, banReason: row.ban_reason || "" });
   const fromApplicationRow = row => row && ({ id: row.id, studentId: row.student_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, birthDate: row.birth_date, program: row.program, level: row.level, site: row.site, status: row.status, temporaryMatricule: row.temporary_matricule, finalMatricule: row.final_matricule, photoPath: row.photo_path, rejectionReason: row.rejection_reason, submittedAt: row.submitted_at, decidedAt: row.decided_at });
-  function readableAccountError(error) {
-    const message = error?.message || "";
-    if (/coerce|single JSON object|PGRST116/i.test(message)) return "Ce compte n’a pas de dossier étudiant complet. Ouvrez Inscription avec la même adresse, ou contactez l’administration.";
-    return message || "Impossible de charger votre dossier. Réessayez.";
-  }
   async function loadStudentData() {
-    const { data: profileRow, error: profileError } = await db.from("student_profiles").select("*").eq("user_id", currentUser.id).maybeSingle();
+    const { data: profileRow, error: profileError } = await db.from("student_profiles").select("*").eq("user_id", currentUser.id).single();
     if (profileError) throw profileError;
-    if (!profileRow) {
-      const repaired = await db.rpc("ensure_student_profile");
-      const retry = repaired.error ? { data: null } : await db.from("student_profiles").select("*").eq("user_id", currentUser.id).maybeSingle();
-      if (!retry.data) throw Object.assign(new Error("Ce compte n’a pas de dossier étudiant. Utilisez Inscription avec cette adresse, ou contactez l’administration de votre site."), { name: "MissingProfileError" });
-      profile = fromProfileRow(retry.data);
-    } else profile = fromProfileRow(profileRow);
+    profile = fromProfileRow(profileRow);
     if (profile.bannedAt) {
       const site = D.getSite(profile.site)?.city || "votre site";
       throw Object.assign(new Error(profile.banReason || `Votre compte a été banni par l’administration de ${site}.`), { name: "AccountBannedError" });
@@ -86,7 +55,10 @@
     const { data: apps, error: appError } = await db.from("badge_applications").select("*").eq("student_id", currentUser.id).order("submitted_at", { ascending: false }).limit(1);
     if (appError) throw appError;
     application = fromApplicationRow(apps?.[0]);
-    await attachPhotoUrl(application);
+    if (application?.photoPath) {
+      const { data } = await db.storage.from("student-photos").createSignedUrl(application.photoPath, 600);
+      application.photo = data?.signedUrl || "";
+    }
     const { data: records, error: attendanceError } = await db.from("attendance_records").select("status,attended_at,session_id,marked_by,attendance_sessions!inner(site,program,level,session_day,course_title)").eq("student_id", currentUser.id).order("attended_at", { ascending: false, nullsFirst: false });
     if (attendanceError) throw attendanceError;
     attendanceRows = (records || []).map(row => ({ sessionId: row.session_id, markedBy: row.marked_by, createdAt: row.attended_at, sessionCode: row.session_id.slice(0, 8), courseTitle: row.attendance_sessions.course_title || "Séance du jour", status: row.status, site: row.attendance_sessions.site, program: row.attendance_sessions.program, level: row.attendance_sessions.level, day: row.attendance_sessions.session_day }));
@@ -141,7 +113,7 @@
     const node = byId("notification-banner");
     if (!app) { node.style.display = "none"; return; }
     if (app.status === "approved") {
-      node.innerHTML = `<strong>Votre carte est approuvée.</strong> Votre matricule définitif est <b>${esc(app.finalMatricule)}</b>. Votre carte est disponible dans Ma carte.`;
+      node.innerHTML = `<strong>Votre carte est approuvée.</strong> Votre matricule définitif est <b>${esc(app.finalMatricule)}</b>. Votre carte est disponible dans « Ma carte ».`;
     } else if (app.status === "rejected") {
       node.innerHTML = `<strong>Votre demande a été rejetée.</strong> ${esc(app.rejectionReason || "Consultez l’administration de votre site d’apprentissage pour la suite.")}`;
     } else {
@@ -172,33 +144,11 @@
   }
 
   function drawCard(app) {
-    const zone = byId("student-card-zone");
-    const key = cardKey(app);
-    if (renderedCardKey === key && zone.querySelector(".card-v2-front")) {
-      const photo = zone.querySelector(".card-v2-portrait img");
-      if (app.photo && !photo) {
-        const placeholder = zone.querySelector(".card-v2-photo-placeholder");
-        if (placeholder) placeholder.outerHTML = `<img src="${esc(app.photo)}" alt="Photo de ${esc(app.firstName)} ${esc(app.lastName)}">`;
-      }
-      return;
-    }
-    renderedCardKey = key;
     const qrPayload = `IRGIB-CARTE:${app.finalMatricule}`;
-    zone.innerHTML = D.cardHtml(app, "card-qr");
+    byId("student-card-zone").innerHTML = D.cardHtml(app, "card-qr");
     const qrHost = byId("card-qr");
-    if (window.QRCode && app.finalMatricule) {
-      qrHost.innerHTML = "";
-      new QRCode(qrHost, { text: qrPayload, width: 180, height: 180, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
-      const canvas = qrHost.querySelector("canvas");
-      if (canvas) {
-        const image = document.createElement("img");
-        image.className = "card-qr-image";
-        image.alt = "QR de vérification du badge";
-        image.src = canvas.toDataURL("image/png");
-        qrHost.querySelectorAll("canvas, img").forEach(node => node.remove());
-        qrHost.append(image);
-      }
-    } else qrHost.innerHTML = `<div class="qr-fallback">${app.finalMatricule ? "QR indisponible" : "QR après approbation"}</div>`;
+    if (window.QRCode && app.finalMatricule) new QRCode(qrHost, { text: qrPayload, width: 128, height: 128, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+    else qrHost.innerHTML = `<div class="qr-fallback">${app.finalMatricule ? "QR indisponible" : "QR après approbation"}</div>`;
   }
 
   function renderMyCard() {
@@ -208,13 +158,11 @@
     const actions = byId("card-print-actions");
     zone.closest(".student-card-panel")?.classList.toggle("has-approved-card", Boolean(app && app.status === "approved"));
     if (!app || app.status !== "approved") {
-      renderedCardKey = "";
       zone.style.display = "none";
       actions.style.display = "none";
       status.innerHTML = app ? `<div class="pending-card"><span class="status ${app.status === "rejected" ? "rejected" : "pending"}">${app.status === "rejected" ? "Demande rejetée" : "En attente d’approbation"}</span><h3>${app.status === "rejected" ? "Votre carte n’est pas encore disponible." : "La carte apparaîtra après validation."}</h3><p>Matricule temporaire : <b>${esc(app.temporaryMatricule)}</b></p><p class="small muted">Le matricule définitif et le QR de la carte sont créés après approbation.</p></div>` : `<div class="pending-card"><h3>Envoyez d’abord votre demande de badge.</h3><p class="small muted">Un matricule temporaire sera créé à l’envoi. La carte et son QR seront disponibles après approbation.</p></div>`;
       return;
     }
-    if (zone.style.display !== "none" && renderedCardKey === cardKey(app) && zone.querySelector(".card-v2-front")) return;
     status.innerHTML = `<div class="notice" style="margin-bottom:14px"><strong>Carte approuvée.</strong> Matricule définitif : ${esc(app.finalMatricule)}. Le QR du recto contient un identifiant de carte, sans nom ni données personnelles.</div>`;
     zone.style.display = "block";
     actions.style.display = "flex";
@@ -258,7 +206,7 @@
   function renderAnnouncements() {
     const node = byId("news-list");
     if (!announcements.length) {
-      node.innerHTML = `<article class="news-empty"><span class="news-empty-icon" aria-hidden="true"></span><strong>Rien de nouveau pour le moment</strong><p>Les annonces importantes de votre campus apparaîtront ici.</p></article>`;
+      node.innerHTML = `<article class="news-empty"><span class="news-empty-icon" aria-hidden="true">✦</span><strong>Rien de nouveau pour le moment</strong><p>Les annonces importantes de votre campus apparaîtront ici.</p></article>`;
       return;
     }
     node.innerHTML = announcements.map(item => `<article class="news-card"><div class="news-card-top"><span class="news-tag">${item.site ? esc(D.getSite(item.site).city) : "Tous les campus"}</span><time datetime="${esc(item.published_at)}">${new Date(item.published_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}</time></div><h3>${esc(item.title)}</h3><p>${esc(item.body)}</p>${item.mediaUrl ? (item.media_type === "video" ? `<video class="news-media" src="${esc(item.mediaUrl)}" controls playsinline preload="metadata" aria-label="Vidéo : ${esc(item.title)}"></video>` : `<img class="news-media" src="${esc(item.mediaUrl)}" alt="Illustration : ${esc(item.title)}" loading="lazy">`) : ""}</article>`).join("");
@@ -273,7 +221,7 @@
   async function loadAnnouncements() {
     if (!profile) return;
     const node = byId("news-list");
-    if (!lastNewsRefresh) node.innerHTML = `<article class="news-empty"><span class="news-empty-icon" aria-hidden="true"></span><strong>Chargement des actualités…</strong><p>Nous récupérons les informations de votre campus.</p></article>`;
+    if (!lastNewsRefresh) node.innerHTML = `<article class="news-empty"><span class="news-empty-icon" aria-hidden="true">✦</span><strong>Chargement des actualités…</strong><p>Nous récupérons les informations de votre campus.</p></article>`;
     const { data, error } = await db.from("campus_announcements").select("id,title,body,site,published_at,expires_at,media_path,media_type").eq("status", "published").or(`site.is.null,site.eq.${profile.site}`).or(`expires_at.is.null,expires_at.gte.${D.todayKey()}`).order("published_at", { ascending: false }).limit(15);
     if (error) {
       node.innerHTML = `<article class="news-empty"><strong>Actualités indisponibles</strong><p>La connexion aux informations du campus a échoué. Réessayez dans quelques instants.</p><button class="btn secondary sm" id="retry-news" type="button">Réessayer</button></article>`;
@@ -290,7 +238,7 @@
 
   async function showCampusNotification(title, body, tag, url) {
     if (!("Notification" in window) || Notification.permission !== "granted") return;
-    const options = { body, icon: "/assets/pwa-192-v3.png", badge: "/assets/pwa-192-v3.png", tag, data: { url } };
+    const options = { body, icon: "/assets/pwa-192-v2.png", badge: "/assets/pwa-192-v2.png", tag, data: { url } };
     try {
       if ("serviceWorker" in navigator) (await navigator.serviceWorker.ready).showNotification(title, options);
       else { const notification = new Notification(title, options); notification.onclick = () => { window.focus(); window.location.href = url; }; }
@@ -458,27 +406,6 @@
     renderAttendance();
     await loadRepresentativeGroupmates();
   }
-  async function openUserCamera() {
-    const attempts = [
-      { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
-      { video: { facingMode: "environment" }, audio: false },
-      { video: true, audio: false },
-    ];
-    let lastError;
-    for (const constraints of attempts) {
-      try { return await navigator.mediaDevices.getUserMedia(constraints); }
-      catch (error) {
-        lastError = error;
-        if (error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError") throw error;
-      }
-    }
-    throw lastError;
-  }
-  function prepareCameraVideo(video) {
-    video.muted = true;
-    video.setAttribute("playsinline", "");
-    video.setAttribute("webkit-playsinline", "");
-  }
   async function startRepresentativeCamera() {
     const message = byId("rep-attendance-message");
     if (!selectedRepresentativeStudent) { message.textContent = "Sélectionnez d’abord un étudiant absent."; return; }
@@ -487,13 +414,12 @@
     try {
       byId("rep-badge-scanner").hidden = false;
       message.textContent = "Présentez le QR du badge de l’étudiant sélectionné devant la caméra.";
-      representativeCameraStream = await openUserCamera();
+      representativeCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
       const video = byId("rep-camera-video");
       video.srcObject = representativeCameraStream;
-      prepareCameraVideo(video);
       video.style.display = "block";
+      await video.play();
       byId("rep-scanner-placeholder").style.display = "none";
-      try { await video.play(); } catch { /* Le flux est déjà ouvert. */ }
       let detector = null;
       if ("BarcodeDetector" in window) { try { detector = new BarcodeDetector({ formats: ["qr_code"] }); } catch { detector = null; } }
       const canvas = document.createElement("canvas");
@@ -523,10 +449,8 @@
       };
       representativeScanFrame = requestAnimationFrame(scan);
     } catch (error) {
-      if (!representativeCameraStream) {
-        stopRepresentativeCamera();
-        message.textContent = cameraErrorMessage(error);
-      } else message.textContent = "Le lecteur est ouvert. Présentez le QR du badge devant la caméra.";
+      stopRepresentativeCamera();
+      message.textContent = cameraErrorMessage(error);
     }
   }
   function showAttendancePreview(code, app = getApplication()) {
@@ -558,7 +482,7 @@
     byId("start-scan").style.display = "inline-flex";
   }
   function cameraErrorMessage(error) {
-    if (error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError") return "L’accès à la caméra est refusé. Ouvrez les réglages de ce site dans le navigateur, autorisez la caméra, puis réessayez.";
+    if (error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError") return "L’accès à la caméra est refusé. Autorisez la caméra pour ce site dans les réglages du navigateur, puis réessayez.";
     if (error?.name === "NotFoundError" || error?.name === "DevicesNotFoundError") return "Aucune caméra n’a été détectée sur cet appareil.";
     if (error?.name === "NotReadableError" || error?.name === "TrackStartError") return "La caméra est utilisée par une autre application. Fermez cette application puis réessayez.";
     if (error?.name === "SecurityError" || !window.isSecureContext) return "La caméra exige une connexion sécurisée HTTPS. Ouvrez le site avec son adresse https://.";
@@ -581,28 +505,12 @@
       byId("attendance-message").textContent = "Le lecteur QR n’a pas pu se charger. Vérifiez votre connexion, puis rechargez la page.";
       return;
     }
-    let stream;
     try {
-      if (navigator.permissions?.query) {
-        const status = await navigator.permissions.query({ name: "camera" }).catch(() => null);
-        if (status?.state === "denied") {
-          byId("attendance-message").textContent = "La caméra est bloquée pour ce site. Ouvrez les réglages du site (cadenas ou informations de la page), autorisez la caméra, puis rouvrez le scanner. Le navigateur ne redemande l’accès tant qu’il reste bloqué.";
-          return;
-        }
-      }
-      stream = await openUserCamera();
-    } catch (error) {
-      byId("attendance-message").textContent = cameraErrorMessage(error);
-      return;
-    }
-    try {
-      cameraStream = stream;
+      cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
       const video = byId("camera-video");
       video.srcObject = cameraStream;
-      prepareCameraVideo(video);
       video.style.display = "block";
-      byId("scanner-placeholder").style.display = "none";
-      try { await video.play(); } catch { /* Le flux est déjà autorisé : on continue même si la lecture automatique est retardée. */ }
+      await video.play();
       byId("scanner-placeholder").style.display = "none";
       byId("start-scan").style.display = "none";
       byId("stop-scan").style.display = "inline-flex";
@@ -648,7 +556,8 @@
       };
       scanFrame = requestAnimationFrame(scan);
     } catch (error) {
-      byId("attendance-message").textContent = "Le lecteur est ouvert, mais le décodage du QR a échoué. Rapprochez le code et réessayez.";
+      byId("attendance-message").textContent = cameraErrorMessage(error);
+      stopCamera();
     }
   }
 
@@ -657,7 +566,7 @@
     try { await loadStudentData(); }
     catch (error) {
       if (error.name === "AccountBannedError") { showBlockedAccount(error.message); return; }
-      setScreen("auth-screen"); byId("login-message").textContent = readableAccountError(error); return;
+      setScreen("auth-screen"); byId("login-message").textContent = error.message || "Impossible de charger votre dossier. Réessayez."; return;
     }
     setScreen("portal-screen");
     byId("news-campus-label").textContent = D.getSite(profile.site).city;
@@ -713,7 +622,7 @@
       await activatePortal();
     } catch (error) {
       if (/bann|ban|suspend/i.test(error?.message || "")) showBlockedAccount("Votre compte a été banni par l’administration de votre établissement. Contactez l’administration de votre site.");
-      else byId("login-message").textContent = /coerce|single JSON object|PGRST116/i.test(error?.message || "") ? readableAccountError(error) : "Connexion impossible. Vérifiez vos identifiants et confirmez votre e-mail.";
+      else byId("login-message").textContent = "Connexion impossible. Vérifiez vos identifiants et confirmez votre e-mail.";
     }
     finally { button.disabled = false; }
   });
@@ -954,13 +863,13 @@
     const printWindow = window.open("", "irgib-card-print", "popup,width=980,height=820");
     if (!printWindow) { byId("my-card-status").insertAdjacentHTML("beforeend", '<p class="form-message" role="status">Autorisez l’ouverture de la fenêtre d’impression pour créer le PDF.</p>'); return; }
     printWindow.opener = null;
-    const stylesUrl = new URL("../assets/styles.css?v=20261025g", location.href).href;
+    const stylesUrl = new URL("../assets/styles.css?v=20261025b", location.href).href;
     const sheets = faces.map(face => {
       const clone = face.cloneNode(true);
       clone.querySelectorAll("canvas").forEach(canvas => {
         try { const image = document.createElement("img"); image.src = canvas.toDataURL("image/png"); image.alt = "QR de vérification du badge"; canvas.replaceWith(image); } catch { /* Le QR reste dans sa représentation originale si le navigateur bloque la copie. */ }
       });
-      clone.querySelectorAll("img").forEach(image => { const src = image.getAttribute("src") || ""; if (src.startsWith("data:") || src.startsWith("blob:")) return; image.src = new URL(src, location.href).href; });
+      clone.querySelectorAll("img").forEach(image => { image.src = new URL(image.getAttribute("src"), location.href).href; });
       return `<section class="card-print-sheet">${clone.outerHTML}</section>`;
     }).join("");
     printWindow.document.open();
@@ -979,7 +888,7 @@
   });
   db.auth.onAuthStateChange((event, session) => {
     if (event === "SIGNED_OUT") {
-      hideRepresentativeDailyQr(); representativeHasPin = false; currentUser = null; profile = null; application = null; attendanceRows = []; renderedCardKey = ""; photoSignedUrl = ""; photoSignedPath = ""; photoSignedUntil = 0;
+      hideRepresentativeDailyQr(); representativeHasPin = false; currentUser = null; profile = null; application = null; attendanceRows = [];
       if (blockedAccountNotice) { setScreen("banned-screen"); byId("banned-account-message").textContent = blockedAccountNotice; }
       else { setScreen("auth-screen"); showAuthPage("login"); }
     }
@@ -998,15 +907,9 @@
   window.setInterval(async () => {
     if (!currentUser || byId("portal-screen").style.display === "none") return;
     try {
-      const beforeApp = cardKey(application);
-      const beforeAttendance = attendanceKey(attendanceRows);
       await loadStudentData();
-      if (beforeApp !== cardKey(application)) {
-        if (application) applicationSummary(application);
-        renderNotification(application);
-        renderMyCard();
-      }
-      if (beforeAttendance !== attendanceKey(attendanceRows)) renderAttendance();
+      if (application) applicationSummary(application);
+      renderNotification(application); renderMyCard(); renderAttendance();
       if (Date.now() - lastNewsRefresh > 120000) void loadAnnouncements();
     }
     catch (error) { if (error?.name === "AccountBannedError") showBlockedAccount(error.message); /* a short network interruption does not invalidate the signed-in session */ }

@@ -39,13 +39,13 @@
   function updateDialog() {
     if (!dialog) return;
     if (ios) {
-      status.textContent = "Sur iPhone ou iPad : touchez Partager dans Safari, puis Sur l’écran d’accueil. Après l’ajout, ouvrez ESPACE ETUDIANT IRGIB depuis la nouvelle icône.";
+      status.textContent = "Sur iPhone ou iPad : touchez Partager dans Safari, puis « Sur l’écran d’accueil ». Après l’ajout, ouvrez ESPACE ETUDIANT IRGIB depuis la nouvelle icône.";
       installButton.textContent = "Vérifier l’installation";
     } else if (installPrompt) {
       status.textContent = "Installez ESPACE ETUDIANT IRGIB sur votre appareil pour continuer. L’application apparaîtra ensuite sur votre écran d’accueil ou dans vos applications.";
       installButton.textContent = "Installer l’application";
     } else {
-      status.textContent = "L’installation n’est pas proposée par ce navigateur. Ouvrez cette page dans Chrome ou Edge, puis utilisez son menu Installer l’application. Après l’installation, ouvrez-la depuis son icône.";
+      status.textContent = "L’installation n’est pas proposée par ce navigateur. Ouvrez cette page dans Chrome ou Edge, puis utilisez son menu « Installer l’application ». Après l’installation, ouvrez-la depuis son icône.";
       installButton.textContent = "Vérifier l’installation";
     }
   }
@@ -59,7 +59,7 @@
     dialog.setAttribute("aria-modal", "true");
     dialog.setAttribute("aria-labelledby", "pwa-install-title");
     document.querySelectorAll("body > *").forEach(node => { node.inert = true; });
-    dialog.innerHTML = `<div class="pwa-install-card"><img src="/assets/apple-touch-icon.png" alt=""><div class="eyebrow">Application officielle IRGIB AFRICA</div><h2 id="pwa-install-title">Installez ESPACE ETUDIANT IRGIB</h2><p class="pwa-install-status" aria-live="polite"></p><button class="btn pwa-install-button" type="button"></button><p class="pwa-install-footnote">Votre espace étudiant est disponible depuis cette application.</p></div>`;
+    dialog.innerHTML = `<div class="pwa-install-card"><img src="/assets/pwa-192-v2.png" alt=""><div class="eyebrow">Application officielle IRGIB AFRICA</div><h2 id="pwa-install-title">Installez ESPACE ETUDIANT IRGIB</h2><p class="pwa-install-status" aria-live="polite"></p><button class="btn pwa-install-button" type="button"></button><p class="pwa-install-footnote">Votre espace étudiant est disponible depuis cette application.</p></div>`;
     document.body.append(dialog);
     status = dialog.querySelector(".pwa-install-status");
     installButton = dialog.querySelector(".pwa-install-button");
@@ -87,7 +87,7 @@
         return;
       }
       if (ios) {
-        status.textContent = "Dans Safari, touchez Partager, puis Sur l’écran d’accueil et Ajouter. Ouvrez ensuite l’application depuis son icône.";
+        status.textContent = "Dans Safari, touchez Partager, puis « Sur l’écran d’accueil » et « Ajouter ». Ouvrez ensuite l’application depuis son icône.";
         return;
       }
       status.textContent = "Si vous venez de l’installer, ouvrez l’application depuis son icône. Sinon, installez-la avec le menu de votre navigateur.";

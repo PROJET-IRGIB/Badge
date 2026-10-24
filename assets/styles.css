@@ -22,13 +22,13 @@
 .auth-switch{display:flex;gap:7px;padding:5px;background:#e8edf3;border-radius:11px;margin:20px 0 22px}.auth-switch button{flex:1;border:0;border-radius:8px;padding:11px 14px;background:transparent;color:#5c6b78;font-size:13px;font-weight:800}.auth-switch button.active{background:#fff;color:var(--navy);box-shadow:0 2px 8px rgba(12,35,68,.08)}.auth-page>h2{margin:0 0 8px}.auth-page .subhead{font-size:13px}.auth-single-column{grid-template-columns:1fr;max-width:510px}.auth-switch-hint{margin:18px 0 0}.text-button{border:0;background:transparent;padding:0;color:var(--teal);font:inherit;font-weight:800;text-decoration:underline;text-underline-offset:2px}.account-security{border-top:1px solid var(--line);margin-top:25px;padding-top:23px}.account-security h3{margin:7px 0 16px}.field select{appearance:auto;pointer-events:auto;position:relative;z-index:1;cursor:pointer}
 
 /* IRGIB student card: photo column 32 percent, both faces in their own rows. */
-.card-v2{container-type:inline-size;width:min(100%,560px);height:auto;aspect-ratio:85.6/53.98;border:1px solid rgba(255,255,255,.16);border-radius:2.4cqw;padding:2.4% 2.8%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;gap:1%;overflow:hidden;position:relative;background:linear-gradient(118deg,#0c2344 0%,#12315a 57%,#1a4480 100%);color:#f4f7fb;box-shadow:0 14px 30px rgba(12,35,68,.2);isolation:isolate}
+.card-v2{container-type:inline-size;width:min(100%,560px);height:auto;aspect-ratio:85.6/53.98;border:1px solid rgba(255,255,255,.16);border-radius:2.4cqw;padding:2.4% 2.8%;display:grid;grid-template-rows:16.5% minmax(0,1fr) 8.5%;gap:1%;overflow:hidden;position:relative;background:linear-gradient(118deg,#0c2344 0%,#12315a 57%,#1a4480 100%);color:#f4f7fb;box-shadow:0 14px 30px rgba(12,35,68,.2);isolation:isolate}
 .card-v2:before,.card-v2:after{content:"";position:absolute;z-index:-1;pointer-events:none;border-radius:50%}
 .card-v2:before{width:44%;aspect-ratio:1;right:-12%;top:-52%;border:1px solid rgba(255,255,255,.14);box-shadow:0 0 0 13px rgba(255,255,255,.04),0 0 0 31px rgba(255,255,255,.03)}
 .card-v2:after{width:35%;aspect-ratio:1;right:26%;bottom:-38%;background:rgba(255,255,255,0)}
 .card-v2-header,.card-v2-main,.card-v2-footer,.card-v2-details,.card-v2-portrait,.card-v2-verification{min-width:0;min-height:0}
-.card-v2-header{display:flex;align-items:flex-start;gap:2cqw;border-bottom:1px solid rgba(255,255,255,.22);padding:0 0 1.6% }
-.card-v2-logo{width:8.4cqw;height:8.4cqw;object-fit:contain;border-radius:4px;background:#fff;padding:1px;flex:none;align-self:flex-start}
+.card-v2-header{display:flex;align-items:center;gap:2cqw;border-bottom:1px solid rgba(255,255,255,.22);padding-bottom:.4%}
+.card-v2-logo{width:11cqw;height:11cqw;object-fit:contain;border-radius:50%;background:#fff;padding:1px;flex:none}
 .card-v2-brand{display:grid;gap:.15cqw;min-width:0}
 .card-v2-brand strong{font:800 3.1cqw/1.05 Manrope,sans-serif;letter-spacing:.02em;color:#fff}
 .card-v2-brand span{font-size:1.45cqw;font-weight:700;letter-spacing:.05em;color:#c5d4e6}
@@ -434,6 +434,7 @@ body:has(#portal-screen[style*="display: block"])>.notice{max-width:1100px;margi
 .account-blocked-panel{max-width:680px;margin:7vh auto;border-top:4px solid #b42318}
 .account-blocked-panel h1{color:#9f1c13}
 
+/* Card artwork matched to the supplied teal reference; do not substitute the portal navy palette. */
 .card-v2,.card-v2.card-back{background:linear-gradient(112deg,#08394a 0%,#064e5a 56%,#08706c 100%)!important;color:#f7fbfc!important;border-color:rgba(235,250,248,.18)!important}
 .card-v2 .card-v2-logo{border-radius:50%!important}
 .card-v2:before,.card-v2:after{content:""!important;display:block;position:absolute;z-index:-1;pointer-events:none;border-radius:50%}
@@ -453,52 +454,3 @@ body:has(#portal-screen[style*="display: block"])>.notice{max-width:1100px;margi
 .student-loading-spinner{width:24px;height:24px;border:3px solid #dce5ed;border-top-color:var(--navy);border-radius:50%;animation:student-space-spin .8s linear infinite}
 @keyframes student-space-spin{to{transform:rotate(360deg)}}
 @media(prefers-reduced-motion:reduce){.student-loading-spinner{animation-duration:2s}}
-
-.card-v2-header { min-height: 0; }
-.card-qr-image, .card-v2-qr img, .card-v2-qr canvas { display: block; width: 100%; height: 100%; object-fit: contain; background: #fff; }
-@media print {
-  .card-v2-qr img, .card-qr-image { visibility: visible !important; opacity: 1 !important; }
-}
-
-/* Quiet the template look. Sections stay; only the decoration changes. */
-html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
-body{background:#f4f6f8}
-a,button,input,select,textarea{-webkit-tap-highlight-color:transparent}
-.text-button{text-decoration:none}
-.eyebrow{letter-spacing:.06em}
-.btn:not(.secondary):not(.ghost):not(.danger),.btn.gold,.student-view .btn:not(.secondary):not(.ghost):not(.danger){background:#12315a;box-shadow:none}
-.btn:not(.secondary):not(.ghost):not(.danger):hover{background:#0c2344;transform:none}
-.btn.danger{box-shadow:none}
-.portal-hero,.portal-hero.compact-hero,.card-back{background:#12315a!important;box-shadow:none!important}
-.portal-hero.compact-hero .hero-mark,.admin-auth-mark,.pwa-install-card,.pwa-install-card>img,.news-card,.news-empty,.student-view>.panel,.student-view .panel,.student-card-wrap .card-v2-front{box-shadow:none}
-.student-site-panel,.daily-qr-panel,.rep-attendance-panel,.notification-optin,.news-card:first-child,.student-view .notice,body:has(#portal-screen[style*="display: block"]){background:#fff}
-body:has(#portal-screen[style*="display: block"]){background:#f4f6f8}
-.pwa-install-overlay{background:rgba(12,35,68,.72);backdrop-filter:none}
-.student-tabs{box-shadow:none;backdrop-filter:none;background:#fff}
-.student-tabs button,.student-tabs button.active,.student-tabs button.active:hover{box-shadow:none}
-.student-tabs button.active{background:#e8eef5;color:#12315a}
-.student-tabs button[data-student-view]::before,.news-campus-pill::before,.news-empty-icon,.notification-optin-icon{content:none;display:none}
-.student-tabs .nav-icon{display:grid;place-items:center;width:20px;height:20px;flex:none;color:currentColor}
-.student-tabs .nav-icon svg{width:18px;height:18px;display:block;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.student-tabs .nav-text{display:block}
-.news-campus-pill,.news-tag{border-radius:4px;background:#e8eef5;color:#12315a}
-.scanner-frame{position:relative;overflow:hidden;min-height:240px;border-radius:8px;background:#0c2344}
-.scanner-frame video{display:none;width:100%;height:240px;object-fit:cover;background:#000}
-.app-shell,.admin-auth-screen{min-height:100dvh}
-.sidebar{height:100dvh}
-@media(max-width:800px){
-  input,select,textarea{font-size:16px}
-  .student-view .field input,.student-view .field select,.field input,.field select{font-size:16px;height:48px}
-  .student-tabs{position:fixed;top:auto;left:0;right:0;bottom:0;z-index:50;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;margin:0;padding:6px 4px calc(6px + env(safe-area-inset-bottom));border:0;border-top:1px solid #d5deea;border-radius:0;background:#fff}
-  .student-tabs button{min-width:0;min-height:48px;padding:6px 2px;border-radius:6px;color:#3d5166;font-size:11px;line-height:1.15;background:transparent}
-  .student-tabs button.active,.student-tabs button.active:hover{background:#e8eef5;color:#12315a}
-  .student-tabs .nav-icon{width:22px;height:22px}
-  .student-tabs .nav-icon svg{width:20px;height:20px}
-  body:has(#portal-screen[style*="display: block"]) .content{padding-bottom:calc(88px + env(safe-area-inset-bottom))}
-  .sidebar{position:fixed;z-index:40;top:auto;bottom:0;left:0;width:100%;height:auto;padding:0;background:#12315a}
-  .sidebar .brand,.side-label,.side-bottom{display:none}
-  .side-nav{display:flex;height:auto;overflow-x:auto;overscroll-behavior-x:contain;gap:0;padding-bottom:env(safe-area-inset-bottom)}
-  .side-nav button{flex:1 0 76px;min-width:76px;min-height:56px;display:flex;flex-direction:column;justify-content:center;gap:3px;padding:8px 4px;font-size:10px;color:#d5e0ea}
-  .side-nav button .nav-text{display:block!important}
-  .admin-content{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
-}

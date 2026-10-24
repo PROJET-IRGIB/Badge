@@ -166,7 +166,7 @@
   }
   function initGroupFilters() {
     const scopedSites = D.sites.filter(item => !adminSite || item.id === adminSite);
-    byId("group-site").innerHTML = `<option value="">Toutes les villes</option>${D.sites.map(item => `<option value="${item.id}">${esc(item.city)}</option>`).join("")}`;
+    byId("group-site").innerHTML = `${adminSite ? "" : `<option value="">Tous les sites</option>`}${scopedSites.map(item => `<option value="${item.id}">${esc(item.city)}</option>`).join("")}`;
     byId("group-program").innerHTML = `<option value="">Toutes les filières</option>${D.programs.map(item => `<option value="${item.code}">${item.code} · ${esc(item.shortName)}</option>`).join("")}`;
     byId("group-level").innerHTML = `<option value="">Tous les niveaux</option>${D.levels.map(level => `<option value="${level}">${level} · ${careerYear[level] || level}</option>`).join("")}`;
     byId("attendance-site").innerHTML = `${adminSite ? "" : `<option value="">Tous les sites · 200 QR</option>`}${scopedSites.map(item => `<option value="${item.id}">${esc(item.city)} · 40 QR</option>`).join("")}`;
@@ -185,7 +185,7 @@
   }
   function renderCatalog() {
     byId("program-grid").innerHTML = D.programs.map(program => `<article class="program-card"><span class="program-code">${esc(program.code)}</span><div class="program-title">${esc(program.name)}</div><div class="program-meta"><span>${esc(program.note)}</span><span class="status ${program.status === "Confirmé" ? "active" : "pending"}">${esc(program.status)}</span></div></article>`).join("");
-    byId("site-grid").innerHTML = D.sites.map(site => `<article class="site-card"><span class="site-code">Zone ${esc(site.zone)}</span><strong>${esc(site.city)}</strong>${site.points.map(point => `<p>${esc(point.address)}<br>${esc(point.phone)}</p>`).join("")}</article>`).join("");
+    byId("site-grid").innerHTML = D.sites.map(site => `<article class="site-card"><span class="site-code">ZONE ${esc(site.zone)} · ${esc(site.id)}</span><strong>${esc(site.city)}</strong>${site.points.map(point => `<p><b>${esc(point.name)}</b> · ${esc(point.address)}<br>${esc(point.phone)}</p>`).join("")}</article>`).join("");
   }
   function renderAnnouncements() {
     const host = byId("announcement-admin-rows");
@@ -367,7 +367,7 @@
     byId("review-subtitle").textContent = `Matricule temporaire ${item.temporaryMatricule} · reçue ${new Date(item.submittedAt).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" })}`;
     byId("review-content").innerHTML = `<div class="review-grid"><div class="review-photo-wrap">${item.photo ? `<img class="review-photo" src="${esc(item.photo)}" alt="Photo d’identité de ${esc(fullName(item))}">` : `<div class="review-photo photo-missing">Photo d’identité<br>non fournie</div>`}<span class="field-help">${esc(item.photoFileName || "Aucun nom de fichier")}</span></div><div><h3>Renseignements soumis</h3><div class="review-info"><div><span>Nom</span><strong>${esc(item.lastName)}</strong></div><div><span>Prénom(s)</span><strong>${esc(item.firstName)}</strong></div><div><span>E-mail</span><strong>${esc(item.email)}</strong></div><div><span>Téléphone</span><strong>${esc(item.phone)}</strong></div><div><span>Sexe</span><strong>${esc(item.sex)}</strong></div><div><span>Naissance</span><strong>${esc(item.birthDate || "—")}</strong></div><div><span>Filière</span><strong>${esc(D.getProgram(item.program).name)}</strong></div><div><span>Niveau</span><strong>${esc(item.level)}</strong></div><div><span>Ville / site</span><strong>${esc(site.city)}</strong></div><div><span>Clé du groupe</span><strong>${esc(keyFor(item))}</strong></div><div><span>Matricule temporaire</span><strong>${esc(item.temporaryMatricule)}</strong></div></div></div></div><div class="audit-box"><div class="audit-heading"><div><div class="eyebrow">Rapport de vérification</div><h3>Contrôles du dossier</h3></div><span class="status ${report.ok ? "active" : "pending"}">${report.ok ? "Prêt à valider" : "À corriger"}</span></div><div class="audit-list">${report.checks.map(check => `<div class="audit-check ${check.ok ? "pass" : "fail"}"><span>${check.ok ? "OK" : "Non"}</span>${esc(check.name)}</div>`).join("")}</div><p class="small muted" style="margin:10px 0 0">Le rapport aide au contrôle : l’approbation reste une décision de l’administration. Le matricule final doit être unique, tous sites et promotions confondus.</p></div>${item.status === "rejected" ? `<div class="notice" style="margin-top:12px"><strong>Motif enregistré :</strong> ${esc(item.rejectionReason || "—")}</div>` : ""}`;
     if (item.status === "pending") {
-      byId("review-actions").innerHTML = `<label class="manual-photo-check"><input type="checkbox" id="photo-check" ${report.ok ? "" : "disabled"}><span>J’ai vérifié visuellement la tenue de l’école, la netteté de la photo, le visage visible et les cheveux bien peignés.</span></label><div class="field full"><label for="reject-reason">Motif de rejet (obligatoire pour rejeter)</label><textarea id="reject-reason" rows="2" placeholder="Expliquez brièvement la décision afin que l’étudiant sache quoi faire."></textarea></div><div class="review-buttons"><button class="btn danger" id="reject-request" type="button">Rejeter la demande</button><button class="btn" id="approve-request" type="button" disabled>Valider et attribuer le matricule</button></div><span class="field-help">Après approbation ou rejet, la demande ne revient pas à l’état en attente.</span>`;
+      byId("review-actions").innerHTML = `<label class="manual-photo-check"><input type="checkbox" id="photo-check" ${report.ok ? "" : "disabled"}><span>J’ai vérifié visuellement la tenue de l’école, la netteté de la photo, le visage visible et les cheveux bien peignés.</span></label><div class="field full"><label for="reject-reason">Motif de rejet (obligatoire pour rejeter)</label><textarea id="reject-reason" rows="2" placeholder="Expliquez brièvement la décision afin que l’étudiant sache quoi faire."></textarea></div><div class="review-buttons"><button class="btn danger" id="reject-request" type="button">Rejeter la demande</button><button class="btn" id="approve-request" type="button" disabled>Valider et attribuer le matricule</button></div><span class="field-help">Après approbation ou rejet, la demande ne revient pas à l’état « en attente ».</span>`;
       byId("photo-check").addEventListener("change", event => { byId("approve-request").disabled = !event.target.checked || !report.ok; });
       byId("approve-request").addEventListener("click", approveRequest);
       byId("reject-request").addEventListener("click", rejectRequest);
@@ -416,20 +416,8 @@
     if (error || !signedPhoto?.signedUrl) { toast("La photo privée ne peut pas être chargée pour cette carte."); return; }
     item.photo = signedPhoto.signedUrl;
     byId("admin-card-zone").innerHTML = D.cardHtml(item, "admin-card-qr");
-    const qrHost = byId("admin-card-qr");
-    if (window.QRCode) {
-      qrHost.innerHTML = "";
-      new QRCode(qrHost, { text: `IRGIB-CARTE:${item.finalMatricule}`, width: 180, height: 180, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
-      const canvas = qrHost.querySelector("canvas");
-      if (canvas) {
-        const image = document.createElement("img");
-        image.className = "card-qr-image";
-        image.alt = "QR de vérification du badge";
-        image.src = canvas.toDataURL("image/png");
-        qrHost.querySelectorAll("canvas, img").forEach(node => node.remove());
-        qrHost.append(image);
-      }
-    } else qrHost.innerHTML = '<div class="qr-fallback">QR indisponible</div>';
+    if (window.QRCode) new QRCode(byId("admin-card-qr"), { text: `IRGIB-CARTE:${item.finalMatricule}`, width: 128, height: 128, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+    else byId("admin-card-qr").innerHTML = '<div class="qr-fallback">QR indisponible</div>';
     byId("card-preview-title").textContent = `${fullName(item)} · ${item.finalMatricule}`;
     byId("card-preview-panel").style.display = "block";
     byId("card-preview-panel").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -439,7 +427,7 @@
     let filename = "";
     if (kind === "groups") {
       const counts = approved().reduce((memo, item) => { const key = keyFor(item); memo[key] = (memo[key] || 0) + 1; return memo; }, {});
-      rows = [["cle_groupe", "ville", "code_filiere", "filiere", "niveau", "effectif"], ...D.allGroups().map(group => [group.key, siteName(group.site), group.program, programName(group.program), group.level, counts[group.key] || 0])]; filename = "groupes-irgib.csv";
+      rows = [["cle_groupe", "ville", "code_filiere", "filiere", "niveau", "effectif"], ...D.allGroups().filter(group => !adminSite || group.site === adminSite).map(group => [group.key, siteName(group.site), group.program, programName(group.program), group.level, counts[group.key] || 0])]; filename = "groupes-irgib.csv";
     } else if (kind === "attendance") {
       rows = [["date", "heure", "cours", "etudiant", "matricule", "statut", "saisi_par", "cycle", "annee", "code_filiere", "filiere", "niveau", "site"], ...attendanceRoster().map(item => [D.todayKey(), item.createdAt ? new Date(item.createdAt).toLocaleTimeString("fr-FR") : "", item.courseTitle, fullName(item), item.matricule, item.present ? "present" : "absent", item.markedByName || "", item.level.startsWith("M") ? "Master" : "Licence", careerYear[item.level] || item.level, item.program, programName(item.program), item.level, siteName(item.site)])]; filename = "presences-jour.csv";
     } else {
