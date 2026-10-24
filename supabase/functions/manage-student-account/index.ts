@@ -104,7 +104,7 @@ Deno.serve(async req => {
     if (deleteError) return reply(500, { error: "Le compte est bloqué, mais Supabase n’a pas pu supprimer l’utilisateur. Réessayez." });
     return reply(200, { ok: true, action: "delete" });
   } catch (error) {
-    console.error("Account cleanup failed", error);
+    console.error("Account cleanup failed");
     return reply(500, { error: "Le compte est bloqué, mais le nettoyage n’a pas pu aboutir. Réessayez." });
   }
 });
