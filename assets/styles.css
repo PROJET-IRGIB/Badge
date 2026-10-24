@@ -489,37 +489,46 @@ body:has(#portal-screen[style*="display: block"])>.notice{max-width:1100px;margi
 .account-security .form-actions{flex-wrap:wrap}
 @media(max-width:700px){.account-security{margin-top:19px;padding:16px 14px;border-radius:15px}.account-security .form-actions{align-items:stretch;flex-direction:column}.account-security .form-actions .btn{width:100%;min-height:44px}.password-step{max-width:none}}
 
-/* Student page background: the bright poster colors, still, seen through a glass sheet. The badge stays as it is. */
+/* Student page background: slow light built from the portal navy, blue and card teal. The badge artwork stays as it is. */
 body:has(#portal-screen[style*="display: block"]){
-  background-color:#16a34a;
-  background-image:
-    radial-gradient(circle at 8% 16%, #16a34a 0 24%, transparent 24.3%),
-    radial-gradient(circle at 24% 6%, #ef4444 0 18%, transparent 18.3%),
-    radial-gradient(circle at 42% 18%, #f97316 0 14%, transparent 14.3%),
-    radial-gradient(circle at 54% 58%, #f5c400 0 12%, transparent 12.3%),
-    radial-gradient(circle at 86% 24%, #6d28d9 0 30%, transparent 30.3%),
-    radial-gradient(circle at 92% 78%, #ef4444 0 15%, transparent 15.3%),
-    linear-gradient(118deg, #16a34a 0 32%, #ef4444 32% 46%, #f97316 46% 56%, #f5c400 56% 64%, #6d28d9 64% 100%);
-  background-attachment:fixed;
-  background-position:center;
-  background-size:cover
+  background-color:#f4f6f8;
+  background-image:linear-gradient(165deg,#f7f9fb 0%,#e8eef5 55%,#f4f6f8 100%);
+  background-attachment:fixed
 }
-body:has(#portal-screen[style*="display: block"])::before{
+body:has(#portal-screen[style*="display: block"])::before,
+body:has(#portal-screen[style*="display: block"])::after{
   content:"";
   position:fixed;
-  inset:0;
   z-index:0;
   pointer-events:none;
-  background:
-    linear-gradient(115deg, rgba(255,255,255,.55) 0%, rgba(255,255,255,.08) 18%, rgba(255,255,255,0) 36%),
-    linear-gradient(180deg, rgba(255,255,255,.34), rgba(255,255,255,.2) 40%, rgba(255,255,255,.28));
-  border-top:1px solid rgba(255,255,255,.75);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.9), inset 0 -40px 80px rgba(255,255,255,.18);
-  backdrop-filter:blur(16px) saturate(1.25);
-  -webkit-backdrop-filter:blur(16px) saturate(1.25)
+  border-radius:50%;
+  filter:blur(28px)
 }
-body:has(#portal-screen[style*="display: block"])>.topbar,
-body:has(#portal-screen[style*="display: block"])>.content,
+body:has(#portal-screen[style*="display: block"])::before{
+  width:min(52vw,640px);
+  height:min(52vw,640px);
+  left:-8vw;
+  top:12vh;
+  background:radial-gradient(circle, rgba(18,49,90,.42) 0%, rgba(26,68,128,.16) 46%, rgba(26,68,128,0) 72%);
+  animation:irgib-portal-navy 24s ease-in-out infinite alternate
+}
+body:has(#portal-screen[style*="display: block"])::after{
+  width:min(46vw,560px);
+  height:min(46vw,560px);
+  right:-10vw;
+  bottom:8vh;
+  background:radial-gradient(circle, rgba(8,112,108,.38) 0%, rgba(61,108,168,.18) 48%, rgba(61,108,168,0) 74%);
+  animation:irgib-portal-teal 31s ease-in-out infinite alternate
+}
+@keyframes irgib-portal-navy{
+  from{transform:translate3d(0,0,0) scale(1)}
+  to{transform:translate3d(18vw,10vh,0) scale(1.12)}
+}
+@keyframes irgib-portal-teal{
+  from{transform:translate3d(0,0,0) scale(1.05)}
+  to{transform:translate3d(-16vw,-12vh,0) scale(.92)}
+}
+body:has(#portal-screen[style*="display: block"])>.content{position:relative;z-index:2}
 body:has(#portal-screen[style*="display: block"])>.footer{position:relative;z-index:1}
 #portal-screen{color:#1a2733}
 #portal-screen .portal-hero,
@@ -569,12 +578,20 @@ body:has(#portal-screen[style*="display: block"])>.footer{position:relative;z-in
 #portal-screen .panel h3{color:#12315a}
 @media(max-width:700px){
   body:has(#portal-screen[style*="display: block"]){background-attachment:scroll}
-  #portal-screen .student-tabs{background:#12315a;border-color:#12315a}
+  body:has(#portal-screen[style*="display: block"])::before{width:78vw;height:78vw;left:-24vw;top:6vh}
+  body:has(#portal-screen[style*="display: block"])::after{width:70vw;height:70vw;right:-28vw;bottom:4vh}
+  body:has(#portal-screen[style*="display: block"])>.footer{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+  #portal-screen .student-tabs{z-index:60;background:#12315a;border-color:#12315a}
   #portal-screen .student-tabs button{color:#f4f7fb}
   #portal-screen .student-tabs button.active,
   #portal-screen .student-tabs button.active:hover{background:#fff;color:#12315a}
 }
+@media(prefers-reduced-motion:reduce){
+  body:has(#portal-screen[style*="display: block"])::before,
+  body:has(#portal-screen[style*="display: block"])::after{animation:none}
+}
 @media print{
   body:has(#portal-screen[style*="display: block"]){background:#fff!important}
-  body:has(#portal-screen[style*="display: block"])::before{display:none!important}
+  body:has(#portal-screen[style*="display: block"])::before,
+  body:has(#portal-screen[style*="display: block"])::after{display:none!important}
 }
