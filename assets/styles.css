@@ -501,8 +501,7 @@ body:has(#portal-screen[style*="display: block"])::after{
   position:fixed;
   z-index:0;
   pointer-events:none;
-  border-radius:50%;
-  filter:blur(28px)
+  border-radius:50%
 }
 body:has(#portal-screen[style*="display: block"])::before{
   width:min(52vw,640px);
