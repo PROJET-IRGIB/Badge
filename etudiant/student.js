@@ -156,8 +156,20 @@
     const qrPayload = `IRGIB-CARTE:${app.finalMatricule}`;
     byId("student-card-zone").innerHTML = D.cardHtml(app, "card-qr");
     const qrHost = byId("card-qr");
-    if (window.QRCode && app.finalMatricule) new QRCode(qrHost, { text: qrPayload, width: 128, height: 128, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
-    else qrHost.innerHTML = `<div class="qr-fallback">${app.finalMatricule ? "QR indisponible" : "QR après approbation"}</div>`;
+    if (window.QRCode && app.finalMatricule) {
+      new QRCode(qrHost, { text: qrPayload, width: 256, height: 256, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+      const canvas = qrHost.querySelector("canvas");
+      try {
+        if (canvas?.width && canvas?.height) {
+          const image = document.createElement("img");
+          image.src = canvas.toDataURL("image/png");
+          image.alt = "QR de vérification du badge";
+          image.style.cssText = "display:block;width:100%;height:100%;object-fit:contain;background:#fff";
+          qrHost.replaceChildren(image);
+        }
+      } catch { /* La sortie QR reste disponible via l’image créée par la bibliothèque. */ }
+      if (!qrHost.querySelector("img")) qrHost.innerHTML = `<div class="qr-fallback">QR indisponible</div>`;
+    } else qrHost.innerHTML = `<div class="qr-fallback">${app.finalMatricule ? "QR indisponible" : "QR après approbation"}</div>`;
   }
 
   function renderMyCard() {
@@ -253,29 +265,20 @@
       else { const notification = new Notification(title, options); notification.onclick = () => { window.focus(); window.location.href = url; }; }
     } catch { /* Notifications remain optional; the in-app feed still updates. */ }
   }
-  function configureNotificationOptIn() {
-    const banner = byId("notification-optin");
-    if (!("Notification" in window)) { banner.hidden = false; byId("notification-optin-message").textContent = "Ce navigateur ne prend pas en charge les notifications. Consultez les actualités dans votre espace étudiant."; byId("enable-notifications").hidden = true; byId("dismiss-notifications").textContent = "Compris"; }
-    else if (Notification.permission === "granted") { banner.hidden = true; }
-    else if (Notification.permission === "denied") { banner.hidden = false; byId("notification-optin-message").textContent = "Les notifications sont bloquées dans les réglages du navigateur. Vous pouvez quand même consulter les actualités et le statut de votre badge ici."; byId("enable-notifications").textContent = "Voir les réglages"; }
-    else {
-      let seen = false;
-      try { seen = localStorage.getItem(`irgib-notification-optin-${currentUser.id}`) === "1"; } catch {}
-      if (!seen) banner.hidden = false;
+  let notificationPermissionRequested = false;
+  function requestNotificationPermissionFromFirstInteraction(event) {
+    if (!("Notification" in window) || Notification.permission !== "default") {
+      document.removeEventListener("click", requestNotificationPermissionFromFirstInteraction, true);
+      return;
     }
-  }
-  async function requestCampusNotifications(messageTarget = byId("notification-optin-message")) {
-    if (!("Notification" in window)) { messageTarget.textContent = "Ce navigateur ne prend pas en charge les notifications."; return; }
-    if (Notification.permission === "denied") { messageTarget.textContent = "Autorisez les notifications dans les réglages du navigateur, puis revenez ici."; return; }
-    try {
-      const permission = await Notification.requestPermission();
-      try { localStorage.setItem(`irgib-notification-optin-${currentUser.id}`, "1"); } catch {}
-      byId("notification-optin").hidden = true;
-      if (permission === "granted") {
-        const subscribed = await registerPushSubscription();
-        byId("notification-settings-message").textContent = subscribed ? "Notifications activées sur cet appareil, même lorsque l’application est en arrière-plan." : "Notifications activées pendant que l’application est ouverte. L’activation en arrière-plan sera terminée dès que le service sera prêt.";
-      } else byId("notification-settings-message").textContent = "Vous pourrez activer les notifications depuis les réglages du navigateur.";
-    } catch { messageTarget.textContent = "La demande de permission n’a pas abouti. Réessayez depuis les réglages du navigateur."; }
+    if (!currentUser || !profile || byId("portal-screen").style.display === "none" || event.target.closest?.("#signout")) return;
+    if (notificationPermissionRequested) return;
+    notificationPermissionRequested = true;
+    document.removeEventListener("click", requestNotificationPermissionFromFirstInteraction, true);
+    // Browsers require a real user gesture before showing the system permission dialog.
+    void Notification.requestPermission().then(permission => {
+      if (permission === "granted" && currentUser && profile) void registerPushSubscription();
+    }).catch(() => {});
   }
   function base64UrlBytes(value) {
     const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
@@ -579,7 +582,7 @@
     }
     setScreen("portal-screen");
     byId("news-campus-label").textContent = D.getSite(profile.site).city;
-    configureNotificationOptIn();
+    if ("Notification" in window && Notification.permission === "granted") void registerPushSubscription();
     void loadAnnouncements();
     void loadRepresentativeGroupmates();
     if (!studentChannel) studentChannel = db.channel(`student-${currentUser.id}`)
@@ -719,26 +722,7 @@
     setScreen("auth-screen");
     showAuthPage("login");
   });
-  byId("enable-notifications").addEventListener("click", () => {
-    if ("Notification" in window && Notification.permission === "denied") {
-      byId("notification-optin-message").textContent = "Ouvrez les réglages du navigateur pour autoriser les notifications de ce site.";
-      return;
-    }
-    void requestCampusNotifications();
-  });
-  byId("dismiss-notifications").addEventListener("click", () => {
-    if (currentUser) { try { localStorage.setItem(`irgib-notification-optin-${currentUser.id}`, "1"); } catch {} }
-    byId("notification-optin").hidden = true;
-  });
-  byId("notification-settings").addEventListener("click", () => {
-    if ("Notification" in window && Notification.permission === "granted") {
-      byId("notification-settings-message").textContent = "Activation des notifications en arrière-plan…";
-      void registerPushSubscription().then(ok => { byId("notification-settings-message").textContent = ok ? "Notifications activées sur cet appareil, même lorsque l’application est en arrière-plan." : "Notifications visibles lorsque l’application est ouverte. La configuration des alertes en arrière-plan n’est pas encore terminée."; });
-      return;
-    }
-    if ("Notification" in window && Notification.permission === "denied") { byId("notification-settings-message").textContent = "Autorisez les notifications dans les réglages du navigateur."; return; }
-    void requestCampusNotifications(byId("notification-settings-message"));
-  });
+  document.addEventListener("click", requestNotificationPermissionFromFirstInteraction, true);
   byId("rep-mark-attendance").addEventListener("click", async event => {
     event.currentTarget.disabled = true;
     await startRepresentativeCamera();
@@ -872,7 +856,7 @@
     const printWindow = window.open("", "irgib-card-print", "popup,width=980,height=820");
     if (!printWindow) { byId("my-card-status").insertAdjacentHTML("beforeend", '<p class="form-message" role="status">Autorisez l’ouverture de la fenêtre d’impression pour créer le PDF.</p>'); return; }
     printWindow.opener = null;
-    const stylesUrl = new URL("../assets/styles.css?v=20261025c", location.href).href;
+    const stylesUrl = new URL("../assets/styles.css?v=20261024d", location.href).href;
     const sheets = faces.map(face => {
       const clone = face.cloneNode(true);
       clone.querySelectorAll(".card-v2-qr").forEach(qrHost => {
