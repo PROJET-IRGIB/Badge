@@ -489,57 +489,43 @@ body:has(#portal-screen[style*="display: block"])>.notice{max-width:1100px;margi
 .account-security .form-actions{flex-wrap:wrap}
 @media(max-width:700px){.account-security{margin-top:19px;padding:16px 14px;border-radius:15px}.account-security .form-actions{align-items:stretch;flex-direction:column}.account-security .form-actions .btn{width:100%;min-height:44px}.password-step{max-width:none}}
 
-/* Student page background: poster palette, badge artwork left unchanged. */
-body:has(#portal-screen){
-  --campus-green:#22a85a;
-  --campus-violet:#6b45c9;
-  --campus-coral:#ef5364;
-  --campus-yellow:#f2b632;
-  --campus-orange:#ef8a2c;
-  --campus-blue:#3478c4;
-  background-color:#f6f3fb;
-  background-image:radial-gradient(ellipse 46% 36% at 6% 10%,rgba(34,168,90,.22),transparent 70%),radial-gradient(ellipse 40% 34% at 94% 16%,rgba(107,69,201,.2),transparent 70%),radial-gradient(ellipse 34% 30% at 12% 82%,rgba(239,83,100,.12),transparent 68%),radial-gradient(ellipse 38% 32% at 88% 90%,rgba(242,182,50,.18),transparent 70%),linear-gradient(155deg,#fff8ef 0%,#f4effc 48%,#eef8f3 100%);
-  background-attachment:fixed
-}
+/* Student page background: the poster colors at full strength. The badge artwork stays as it is. */
+body:has(#portal-screen),
 body:has(#portal-screen[style*="display: block"]){
-  background-image:radial-gradient(ellipse 48% 38% at 4% 8%,rgba(34,168,90,.3),transparent 68%),radial-gradient(ellipse 42% 36% at 96% 14%,rgba(107,69,201,.26),transparent 68%),radial-gradient(ellipse 36% 32% at 10% 78%,rgba(239,83,100,.16),transparent 66%),radial-gradient(ellipse 40% 34% at 90% 92%,rgba(242,182,50,.22),transparent 68%),radial-gradient(ellipse 28% 22% at 50% 46%,rgba(52,120,196,.1),transparent 70%),linear-gradient(155deg,#fff7ec 0%,#f3eefc 46%,#eaf8f1 100%)
+  background-color:#16a34a;
+  background-image:
+    radial-gradient(circle at 8% 16%, #16a34a 0 24%, transparent 24.3%),
+    radial-gradient(circle at 24% 6%, #ef4444 0 18%, transparent 18.3%),
+    radial-gradient(circle at 42% 18%, #f97316 0 14%, transparent 14.3%),
+    radial-gradient(circle at 54% 58%, #f5c400 0 12%, transparent 12.3%),
+    radial-gradient(circle at 86% 24%, #6d28d9 0 30%, transparent 30.3%),
+    radial-gradient(circle at 92% 78%, #ef4444 0 15%, transparent 15.3%),
+    linear-gradient(118deg, #16a34a 0 32%, #ef4444 32% 46%, #f97316 46% 56%, #f5c400 56% 64%, #6d28d9 64% 100%);
+  background-size:130% 130%;
+  background-position:0% 40%;
+  background-attachment:fixed;
+  animation:campus-color-drift 22s ease-in-out infinite alternate
 }
-#portal-screen .portal-hero.compact-hero{
-  background:radial-gradient(circle at 10% 100%,rgba(34,168,90,.28),transparent 28%),radial-gradient(circle at 90% 0%,rgba(242,182,50,.22),transparent 30%),radial-gradient(circle at 88% 0%,rgba(85,145,209,.4),transparent 36%),linear-gradient(120deg,#0b2443 0%,#174b80 65%,#24669a 100%)
+@keyframes campus-color-drift{
+  from{background-position:0% 40%}
+  to{background-position:100% 60%}
 }
-#portal-screen .student-tabs{border-color:#ddd6ee;background:rgba(255,255,255,.94)}
-#portal-screen .student-tabs button{transition:background .16s ease,color .16s ease,transform .16s ease,box-shadow .16s ease}
-#portal-screen .student-tabs button:hover{transform:translateY(-1px)}
-#portal-screen .student-tabs button[data-student-view="request"]::before{background:#e5f7ec;color:#168a4f}
-#portal-screen .student-tabs button[data-student-view="news"]::before{background:#efe8ff;color:#6b45c9}
-#portal-screen .student-tabs button[data-student-view="attendance"]::before{background:#e5f1ff;color:#3478c4}
-#portal-screen .student-tabs button[data-student-view="card"]::before{background:#fff3d6;color:#c88814}
-#portal-screen .student-tabs button[data-student-view="profile"]::before{background:#ffe8ec;color:#d94c5b}
-#portal-screen .student-tabs button.active{background:#fff;color:#12315a;box-shadow:0 4px 12px rgba(18,49,90,.08)}
 #portal-screen .student-view:not(#student-view-card)>.panel,
-#portal-screen .student-view:not(#student-view-card) .student-main-grid>.panel{background:rgba(255,255,255,.96)}
-#portal-screen .student-card-panel{background:#fff}
-#portal-screen .news-card,#portal-screen .news-empty{background:rgba(255,255,255,.96);transition:transform .18s ease,box-shadow .18s ease}
-#portal-screen .news-card:hover{transform:translateY(-2px);box-shadow:0 14px 28px rgba(18,49,90,.1)}
-#portal-screen .news-campus-pill{background:#efe8ff;color:#5a38b0}
-#portal-screen .news-campus-pill::before{background:var(--campus-violet)}
-#portal-screen .news-tag{background:#e5f7ec;color:#168a4f}
+#portal-screen .student-view:not(#student-view-card) .student-main-grid>.panel,
+#portal-screen .news-card,
+#portal-screen .news-empty,
+#portal-screen .student-card-panel,
+#portal-screen .table-panel,
+#portal-screen .auth-panel{background:#fff}
 @media(max-width:700px){
-  body:has(#portal-screen),body:has(#portal-screen[style*="display: block"]){background-attachment:scroll}
-  #portal-screen .student-tabs{background:rgba(11,34,62,.97);border-color:rgba(255,255,255,.8)}
-  #portal-screen .student-tabs button[data-student-view]::before{background:transparent}
-  #portal-screen .student-tabs button[data-student-view="request"]::before{color:#8ee0b0}
-  #portal-screen .student-tabs button[data-student-view="news"]::before{color:#c9b6ff}
-  #portal-screen .student-tabs button[data-student-view="attendance"]::before{color:#9cc7ff}
-  #portal-screen .student-tabs button[data-student-view="card"]::before{color:#ffd56a}
-  #portal-screen .student-tabs button[data-student-view="profile"]::before{color:#ff9eab}
-  #portal-screen .student-tabs button.active{background:linear-gradient(145deg,#fff,#e6f1fb);color:#174b80}
-  #portal-screen .news-card:hover{transform:none}
+  body:has(#portal-screen),
+  body:has(#portal-screen[style*="display: block"]){background-attachment:scroll;background-size:180% 180%}
 }
 @media(prefers-reduced-motion:reduce){
-  #portal-screen .student-tabs button,#portal-screen .news-card{transition:none}
-  #portal-screen .student-tabs button:hover,#portal-screen .news-card:hover{transform:none}
+  body:has(#portal-screen),
+  body:has(#portal-screen[style*="display: block"]){animation:none}
 }
 @media print{
-  body:has(#portal-screen),body:has(#portal-screen[style*="display: block"]){background:#fff!important}
+  body:has(#portal-screen),
+  body:has(#portal-screen[style*="display: block"]){background:#fff!important;animation:none!important}
 }
