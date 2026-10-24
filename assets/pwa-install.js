@@ -15,12 +15,8 @@
     }).catch(() => {});
   }
 
-  const installMarkerKey = "irgib-student-app-installed-v1";
   const isStandalone = () => window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
-  const hasInstallMarker = () => { try { return localStorage.getItem(installMarkerKey) === "yes"; } catch { return false; } };
-  const saveInstallMarker = () => { try { localStorage.setItem(installMarkerKey, "yes"); } catch {} };
-  if (isStandalone()) { saveInstallMarker(); return; }
-  if (hasInstallMarker()) return;
+  if (isStandalone()) return;
 
   let installPrompt = null;
   let installed = false;
@@ -36,15 +32,18 @@
   });
   window.addEventListener("appinstalled", () => {
     installed = true;
-    saveInstallMarker();
-    if (dialog) dialog.remove();
-    document.body.classList.remove("pwa-install-locked");
-    document.querySelectorAll("body > :not(.pwa-install-overlay)").forEach(node => { node.inert = false; });
+    if (dialog) {
+      status.textContent = "Installation réussie. Fermez cette page, puis ouvrez ESPACE ETUDIANT IRGIB depuis son icône pour accéder au portail.";
+      installButton.hidden = true;
+    }
   });
 
   function updateDialog() {
     if (!dialog) return;
-    if (ios) {
+    if (installed) {
+      status.textContent = "L’application est installée. Ouvrez ESPACE ETUDIANT IRGIB depuis son icône pour accéder au portail.";
+      installButton.hidden = true;
+    } else if (ios) {
       status.textContent = "Sur iPhone ou iPad : touchez Partager dans Safari, puis « Sur l’écran d’accueil ». Après l’ajout, ouvrez ESPACE ETUDIANT IRGIB depuis la nouvelle icône.";
       installButton.textContent = "Vérifier l’installation";
     } else if (installPrompt) {
@@ -72,7 +71,8 @@
     updateDialog();
     installButton.focus();
     installButton.addEventListener("click", async () => {
-      if (isStandalone() || installed) { dialog.remove(); document.body.classList.remove("pwa-install-locked"); return; }
+      if (isStandalone()) { window.location.reload(); return; }
+      if (installed) return;
       if (installPrompt) {
         installButton.disabled = true;
         try {
@@ -81,11 +81,8 @@
           await promptEvent.prompt();
           const choice = await promptEvent.userChoice;
           if (choice?.outcome === "accepted") {
-            installed = true;
-            saveInstallMarker();
-            dialog.remove();
-            document.body.classList.remove("pwa-install-locked");
-            document.querySelectorAll("body > :not(.pwa-install-overlay)").forEach(node => { node.inert = false; });
+            status.textContent = "Installation acceptée. Pour continuer, ouvrez ESPACE ETUDIANT IRGIB depuis l’icône qui vient d’être ajoutée.";
+            installButton.textContent = "Vérifier l’installation";
           } else {
             status.textContent = "L’installation est nécessaire pour accéder à l’espace étudiant. Vous pourrez réessayer depuis ce bouton.";
           }
