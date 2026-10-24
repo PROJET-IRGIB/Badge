@@ -540,6 +540,34 @@ body:has(#portal-screen[style*="display: block"]){background:radial-gradient(ell
 }
 @media(prefers-reduced-motion:reduce){#portal-screen .student-tabs button[data-student-view]::before,#portal-screen .news-card{transition:none}}
 
+/* Stronger campus color pass: make the student workspace itself lively, not just its icons. */
+body:has(#portal-screen[style*="display: block"]){background-color:#f7f4ff;background-image:radial-gradient(ellipse at 0% 16%,rgba(17,190,112,.26) 0,rgba(17,190,112,.12) 18%,transparent 39%),radial-gradient(ellipse at 100% 22%,rgba(137,69,220,.23) 0,rgba(137,69,220,.1) 21%,transparent 43%),radial-gradient(ellipse at 14% 72%,rgba(255,72,69,.18) 0,transparent 34%),radial-gradient(ellipse at 85% 87%,rgba(255,178,20,.22) 0,transparent 37%),linear-gradient(145deg,#fff7f1 0%,#f7f5ff 47%,#effaf5 100%)}
+body:has(#portal-screen[style*="display: block"]) .topbar{border-bottom:3px solid transparent;border-image:linear-gradient(90deg,#1dbb70 0 24%,#f04c4f 24% 48%,#f5b82e 48% 72%,#8050d7 72% 100%) 1}
+#portal-screen .portal-hero.compact-hero{background:radial-gradient(circle at 4% 100%,rgba(20,202,116,.83),transparent 30%),radial-gradient(circle at 87% 5%,rgba(235,62,76,.72),transparent 29%),radial-gradient(circle at 66% 115%,rgba(255,183,28,.65),transparent 30%),radial-gradient(circle at 52% 0%,rgba(124,74,213,.55),transparent 34%),linear-gradient(115deg,#0b2443 0%,#174b80 57%,#193b71 100%);box-shadow:0 18px 42px rgba(32,31,90,.2),0 7px 22px rgba(235,62,76,.09)}
+#portal-screen .student-tabs{background:linear-gradient(100deg,#fff5e9 0%,#fff 23%,#f1ebff 54%,#e9f8f0 100%);border-color:#d9d5eb}
+#portal-screen .student-tabs button.active{background:linear-gradient(125deg,#fff,#fff0d5 34%,#f4eaff 70%,#e3f8ed);box-shadow:inset 0 0 0 1px rgba(91,75,156,.15),0 5px 14px rgba(91,75,156,.12)}
+#portal-screen .student-view:not(#student-view-card)>.panel,
+#portal-screen .student-view:not(#student-view-card) .student-main-grid>.panel{background:linear-gradient(145deg,rgba(255,255,255,.97) 4%,rgba(255,248,239,.96) 52%,rgba(245,240,255,.97) 100%);border-color:#e6dcef;box-shadow:0 16px 38px rgba(91,54,128,.1)}
+#portal-screen #student-view-request .panel:first-child{background:linear-gradient(135deg,#fff8f1 0%,#fff3ed 53%,#fff 100%);border-top-color:#f05255}
+#portal-screen #student-view-request .panel:last-child{background:linear-gradient(145deg,#fff9df 0%,#fff6e7 50%,#f0fbf4 100%);border-top-color:#f2b52c}
+#portal-screen #student-view-request .quality-notice{background:linear-gradient(115deg,#ffe3d7 0%,#fff0cf 55%,#ffe8ed 100%);border-color:#f4c4ad}
+#portal-screen #student-view-news .news-card{background:linear-gradient(135deg,#fff 0%,#ecfaef 100%);border-color:#d9eadf}
+#portal-screen #student-view-news .news-card:nth-child(4n+2){background:linear-gradient(135deg,#fff 0%,#ffe9eb 100%);border-color:#f4d5d9}
+#portal-screen #student-view-news .news-card:nth-child(4n+3){background:linear-gradient(135deg,#fff 0%,#fff3d7 100%);border-color:#f0e0bd}
+#portal-screen #student-view-news .news-card:nth-child(4n+4){background:linear-gradient(135deg,#fff 0%,#eee8ff 100%);border-color:#ded5f3}
+#portal-screen #student-view-news .news-card:first-child{background:radial-gradient(circle at 96% 4%,rgba(128,74,213,.25),transparent 35%),linear-gradient(120deg,#fff0e2 0%,#f0eaff 55%,#e8f9ed 100%);border-top-color:#8050d7}
+#portal-screen #student-view-news .news-empty{background:linear-gradient(125deg,#eff9ff 0%,#f4ecff 52%,#fff2e5 100%);border-color:#ddd4f0}
+#portal-screen #student-view-attendance>.panel{background:linear-gradient(145deg,#edf6ff 0%,#f2edff 54%,#fff 100%);border-top-color:#3285dc}
+#portal-screen #student-view-attendance .attendance-preview{background:linear-gradient(135deg,#e8f4ff 0%,#f4ecff 100%);border-color:#cfc8ef}
+#portal-screen #student-view-profile .profile-panel{background:linear-gradient(145deg,#fff0ee 0%,#fff6e9 50%,#f2edff 100%);border-top-color:#ef5364}
+@media(max-width:700px){
+  body:has(#portal-screen[style*="display: block"]){background-image:radial-gradient(ellipse at 0% 14%,rgba(17,190,112,.22),transparent 47%),radial-gradient(ellipse at 100% 38%,rgba(137,69,220,.2),transparent 48%),radial-gradient(ellipse at 2% 82%,rgba(255,72,69,.15),transparent 38%),radial-gradient(ellipse at 95% 92%,rgba(255,178,20,.2),transparent 42%),linear-gradient(145deg,#fff7f1,#f7f5ff 55%,#effaf5)}
+  #portal-screen .student-tabs{background:linear-gradient(100deg,rgba(12,35,68,.98),rgba(40,42,101,.98) 56%,rgba(19,82,75,.98));border-color:rgba(255,255,255,.7)}
+  #portal-screen .student-tabs button.active{background:linear-gradient(125deg,#fff6df,#f4eaff 60%,#e2f8ec);color:#12315a}
+  #portal-screen .student-view:not(#student-view-card)>.panel,
+  #portal-screen .student-view:not(#student-view-card) .student-main-grid>.panel{background:linear-gradient(145deg,rgba(255,255,255,.96),rgba(255,247,239,.97) 52%,rgba(246,239,255,.97))}
+}
+
 /* Clear visual warning for actions that change account or campus data. */
 .btn.danger,#signout,#password-open,#password-form button[type="submit"],#signup-form button[type="submit"],#verify-form button[type="submit"],#request-form button[type="submit"],#submit-attendance,#rep-pin-submit,#rep-confirm-attendance,#admin-logout,#announcement-submit,.site-contact-form button[type="submit"],[data-rep-reset-pin],[data-rep-assign],[data-rep-remove],[data-student-role],[data-announcement-toggle],[data-card-suspension],#approve-request,#reject-request{background:#c62828!important;color:#fff!important;border:1px solid #b71c1c!important;box-shadow:0 5px 14px rgba(198,40,40,.16)!important}
 .btn.danger:hover,#signout:hover,#password-open:hover,#password-form button[type="submit"]:hover,#signup-form button[type="submit"]:hover,#verify-form button[type="submit"]:hover,#request-form button[type="submit"]:hover,#submit-attendance:hover,#rep-pin-submit:hover,#rep-confirm-attendance:hover,#admin-logout:hover,#announcement-submit:hover,.site-contact-form button[type="submit"]:hover,[data-rep-reset-pin]:hover,[data-rep-assign]:hover,[data-rep-remove]:hover,[data-student-role]:hover,[data-announcement-toggle]:hover,[data-card-suspension]:hover,#approve-request:hover,#reject-request:hover{background:#a71919!important;transform:translateY(-1px)}
