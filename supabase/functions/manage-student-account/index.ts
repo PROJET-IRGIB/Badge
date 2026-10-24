@@ -33,10 +33,16 @@ Deno.serve(async req => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!authorization || !url || !anonKey || !serviceKey) return reply(503, { error: "Le service de gestion des comptes n’est pas configuré." });
 
-  let body: { action?: string; studentId?: string };
-  try { body = await req.json(); }
+  let input: unknown;
+  try { input = await req.json(); }
   catch { return reply(400, { error: "Requête invalide." }); }
-  if (!["ban", "delete"].includes(body.action || "") || !body.studentId || !/^[0-9a-f-]{36}$/i.test(body.studentId)) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return reply(400, { error: "Requête invalide." });
+  }
+  const body = input as { action?: unknown; studentId?: unknown };
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (typeof body.action !== "string" || !["ban", "delete"].includes(body.action)
+      || typeof body.studentId !== "string" || !uuidPattern.test(body.studentId)) {
     return reply(400, { error: "Action ou identifiant étudiant invalide." });
   }
 
