@@ -132,6 +132,22 @@
     profile = null;
     void db.auth.signOut();
   }
+  function dayGreeting(date = new Date()) {
+    const hour = date.getHours();
+    if (hour < 12) return "Bonjour";
+    if (hour < 19) return "Bon après-midi";
+    return "Bonsoir";
+  }
+  function showHeroGreeting(name) {
+    const greeting = byId("hello-greeting");
+    if (greeting) greeting.textContent = dayGreeting();
+    if (name) byId("hello-name").textContent = name;
+    const hero = document.querySelector(".portal-hero");
+    if (!hero) return;
+    hero.classList.remove("hero-in");
+    void hero.offsetWidth;
+    hero.classList.add("hero-in");
+  }
   const selectStudentView = view => {
     if (view === "request" && application?.status === "approved") view = "card";
     hideRepresentativeDailyQr();
@@ -814,7 +830,7 @@
         try { await loadStudentData(); renderSiteInfo(); renderMyCard(); }
         catch { /* L’actualisation périodique récupérera les coordonnées en cas d’interruption. */ }
       }).subscribe();
-    byId("hello-name").textContent = profile.firstName;
+    showHeroGreeting(profile.firstName);
     const app = getApplication();
     configureStudentNavigation(app);
     renderNotification(getApplication());

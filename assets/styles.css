@@ -259,6 +259,10 @@ body:has(#portal-screen[style*="display: block"])>.notice{max-width:1100px;margi
 .portal-hero.compact-hero{min-height:190px;padding:30px 34px;border-radius:22px;background:radial-gradient(circle at 88% 0%,rgba(85,145,209,.45),transparent 36%),linear-gradient(120deg,#0b2443 0%,#174b80 65%,#24669a 100%);box-shadow:0 20px 48px rgba(16,48,82,.16)}
 .portal-hero.compact-hero h1{font-size:clamp(28px,3.5vw,40px);line-height:1.12;margin:9px 0}
 .portal-hero.compact-hero p{font-size:15px;line-height:1.65;margin:0;color:#dbe9f7}
+.portal-hero.hero-in .hero-line{animation:hero-text-in .7s ease both}
+.portal-hero.hero-in .hero-welcome{animation-delay:.22s}
+@keyframes hero-text-in{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@media(prefers-reduced-motion:reduce){.portal-hero.hero-in .hero-line{animation:none}}
 .portal-hero.compact-hero .hero-mark{width:112px;padding:10px;border-radius:22px;background:rgba(255,255,255,.96);box-shadow:0 12px 28px rgba(0,0,0,.12)}
 .student-tabs{position:sticky;top:72px;z-index:8;display:flex;gap:6px;padding:7px;border:1px solid #e2eaf2;border-radius:16px;margin:18px 0 22px;background:rgba(255,255,255,.92);box-shadow:0 8px 24px rgba(18,49,90,.07);backdrop-filter:blur(12px)}
 .student-tabs button{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:10px 16px;border:1px solid transparent;border-radius:11px;color:#506477;font-size:13px;font-weight:700;white-space:nowrap;transition:background .16s ease,color .16s ease,box-shadow .16s ease}
