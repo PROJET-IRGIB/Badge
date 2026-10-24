@@ -298,7 +298,7 @@
 
   async function showCampusNotification(title, body, tag, url) {
     if (!("Notification" in window) || Notification.permission !== "granted") return;
-    const options = { body, icon: "/assets/pwa-192-v2.png", badge: "/assets/pwa-192-v2.png", tag, data: { url } };
+    const options = { body, icon: "/assets/pwa-192-v4.png", badge: "/assets/pwa-192-v4.png", tag, data: { url } };
     try {
       if ("serviceWorker" in navigator) (await navigator.serviceWorker.ready).showNotification(title, options);
       else { const notification = new Notification(title, options); notification.onclick = () => { window.focus(); window.location.href = url; }; }

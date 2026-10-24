@@ -1,16 +1,16 @@
-const CACHE_NAME = "irgib-student-shell-v16";
+const CACHE_NAME = "irgib-student-shell-v17";
 const APP_SHELL = [
   "/etudiant/",
   "/assets/styles.css?v=20261026a",
   "/assets/catalog.js?v=20261026a",
-  "/assets/pwa-install.js?v=20261024b",
+  "/assets/pwa-install.js?v=20261026c",
   "/assets/password-visibility.js?v=1",
-  "/etudiant/student.js?v=backend18",
-  "/assets/pwa-192-v3.png",
-  "/assets/pwa-512-v3.png",
+  "/etudiant/student.js?v=backend19",
+  "/assets/pwa-192-v4.png",
+  "/assets/pwa-512-v4.png",
   "/assets/push-config.js?v=20261024c",
   "/assets/bootstrap.js?v=backend3",
-  "/manifest.webmanifest",
+  "/manifest.webmanifest?v=4",
 ];
 
 self.addEventListener("install", event => {
@@ -36,8 +36,8 @@ self.addEventListener("push", event => {
   catch { message = { body: event.data?.text() || "Une information est disponible dans votre espace étudiant." }; }
   event.waitUntil(self.registration.showNotification(message.title || "ESPACE ETUDIANT IRGIB", {
     body: message.body || "Une information est disponible dans votre espace étudiant.",
-    icon: "/assets/pwa-192-v2.png",
-    badge: "/assets/pwa-192-v2.png",
+    icon: "/assets/pwa-192-v4.png",
+    badge: "/assets/pwa-192-v4.png",
     tag: message.tag || "irgib-notification",
     data: { url: message.url || "/etudiant/" },
   }));

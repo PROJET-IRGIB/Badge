@@ -59,7 +59,7 @@
     dialog.setAttribute("aria-modal", "true");
     dialog.setAttribute("aria-labelledby", "pwa-install-title");
     document.querySelectorAll("body > *").forEach(node => { node.inert = true; });
-    dialog.innerHTML = `<div class="pwa-install-card"><img src="/assets/pwa-192-v2.png" alt=""><div class="eyebrow">Application officielle IRGIB AFRICA</div><h2 id="pwa-install-title">Installez ESPACE ETUDIANT IRGIB</h2><p class="pwa-install-status" aria-live="polite"></p><button class="btn pwa-install-button" type="button"></button><p class="pwa-install-footnote">Votre espace étudiant est disponible depuis cette application.</p></div>`;
+    dialog.innerHTML = `<div class="pwa-install-card"><img src="/assets/pwa-192-v4.png" alt="Blason IRGIB AFRICA"><div class="eyebrow">Application officielle IRGIB AFRICA</div><h2 id="pwa-install-title">Installez ESPACE ETUDIANT IRGIB</h2><p class="pwa-install-status" aria-live="polite"></p><button class="btn pwa-install-button" type="button"></button><p class="pwa-install-footnote">Votre espace étudiant est disponible depuis cette application.</p></div>`;
     document.body.append(dialog);
     status = dialog.querySelector(".pwa-install-status");
     installButton = dialog.querySelector(".pwa-install-button");
