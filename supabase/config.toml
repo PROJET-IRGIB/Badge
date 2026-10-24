@@ -30,3 +30,6 @@ subject = "Code de confirmation de votre compte IRGIB AFRICA"
 content_path = "./supabase/templates/confirmation.html"
 [functions.send-campus-push]
 verify_jwt = true
+
+[functions.manage-student-account]
+verify_jwt = true
