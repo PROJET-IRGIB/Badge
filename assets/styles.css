@@ -489,43 +489,88 @@ body:has(#portal-screen[style*="display: block"])>.notice{max-width:1100px;margi
 .account-security .form-actions{flex-wrap:wrap}
 @media(max-width:700px){.account-security{margin-top:19px;padding:16px 14px;border-radius:15px}.account-security .form-actions{align-items:stretch;flex-direction:column}.account-security .form-actions .btn{width:100%;min-height:44px}.password-step{max-width:none}}
 
-/* Student page background: the poster colors at full strength. The badge artwork stays as it is. */
-body:has(#portal-screen),
+/* Student page background: quieter poster colors, still, under a glass sheet. The badge stays as it is. */
 body:has(#portal-screen[style*="display: block"]){
-  background-color:#16a34a;
+  background-color:#2f8f55;
   background-image:
-    radial-gradient(circle at 8% 16%, #16a34a 0 24%, transparent 24.3%),
-    radial-gradient(circle at 24% 6%, #ef4444 0 18%, transparent 18.3%),
-    radial-gradient(circle at 42% 18%, #f97316 0 14%, transparent 14.3%),
-    radial-gradient(circle at 54% 58%, #f5c400 0 12%, transparent 12.3%),
-    radial-gradient(circle at 86% 24%, #6d28d9 0 30%, transparent 30.3%),
-    radial-gradient(circle at 92% 78%, #ef4444 0 15%, transparent 15.3%),
-    linear-gradient(118deg, #16a34a 0 32%, #ef4444 32% 46%, #f97316 46% 56%, #f5c400 56% 64%, #6d28d9 64% 100%);
-  background-size:130% 130%;
-  background-position:0% 40%;
+    radial-gradient(circle at 8% 16%, #2f8f55 0 24%, transparent 24.3%),
+    radial-gradient(circle at 24% 6%, #c44747 0 18%, transparent 18.3%),
+    radial-gradient(circle at 42% 18%, #d67a32 0 14%, transparent 14.3%),
+    radial-gradient(circle at 54% 58%, #c9a227 0 12%, transparent 12.3%),
+    radial-gradient(circle at 86% 24%, #6246b0 0 30%, transparent 30.3%),
+    radial-gradient(circle at 92% 78%, #c44747 0 15%, transparent 15.3%),
+    linear-gradient(118deg, #2f8f55 0 32%, #c44747 32% 46%, #d67a32 46% 56%, #c9a227 56% 64%, #6246b0 64% 100%);
   background-attachment:fixed;
-  animation:campus-color-drift 22s ease-in-out infinite alternate
+  background-position:center;
+  background-size:cover
 }
-@keyframes campus-color-drift{
-  from{background-position:0% 40%}
-  to{background-position:100% 60%}
+body:has(#portal-screen[style*="display: block"])::before{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:0;
+  pointer-events:none;
+  background:rgba(255,255,255,.62);
+  backdrop-filter:blur(18px) saturate(.9);
+  -webkit-backdrop-filter:blur(18px) saturate(.9)
 }
+body:has(#portal-screen[style*="display: block"])>.topbar,
+body:has(#portal-screen[style*="display: block"])>.content,
+body:has(#portal-screen[style*="display: block"])>.footer{position:relative;z-index:1}
+#portal-screen{color:#1a2733}
+#portal-screen .portal-hero,
+#portal-screen .portal-hero h1{color:#fff}
+#portal-screen .portal-hero p{color:#e7eef6}
+#portal-screen .portal-hero .eyebrow{color:#d5e0ea}
+#portal-screen .student-tabs{background:#fff;border-color:#e3e8ee}
+#portal-screen .student-tabs button{color:#243140}
+#portal-screen .student-tabs button.active{background:#e8eef5;color:#12315a}
+#portal-screen .news-heading,
+#portal-screen .section-title{
+  margin-left:0;
+  margin-right:0;
+  padding:14px 16px;
+  border:1px solid rgba(255,255,255,.8);
+  border-radius:16px;
+  background:rgba(255,255,255,.94);
+  color:#1a2733
+}
+#portal-screen .news-heading h2,
+#portal-screen .section-title h2,
+#portal-screen .news-heading .eyebrow,
+#portal-screen .section-title .eyebrow{color:#12315a}
+#portal-screen .news-heading p,
+#portal-screen .section-title p,
+#portal-screen .news-heading .muted,
+#portal-screen .section-title .muted{color:#3e5164}
 #portal-screen .student-view:not(#student-view-card)>.panel,
 #portal-screen .student-view:not(#student-view-card) .student-main-grid>.panel,
 #portal-screen .news-card,
 #portal-screen .news-empty,
 #portal-screen .student-card-panel,
 #portal-screen .table-panel,
-#portal-screen .auth-panel{background:#fff}
+#portal-screen .rep-daily-qr,
+#portal-screen .rep-delegated-checkin{background:#fff;color:#1a2733}
+#portal-screen .panel h2,
+#portal-screen .panel h3,
+#portal-screen .news-card h3,
+#portal-screen .news-empty strong{color:#12315a}
+#portal-screen .panel p,
+#portal-screen .panel .muted,
+#portal-screen .news-card p,
+#portal-screen .field label,
+#portal-screen .field-help,
+#portal-screen .info-row span:first-child{color:#3e5164}
+#portal-screen .info-row strong,
+#portal-screen .panel h3{color:#12315a}
 @media(max-width:700px){
-  body:has(#portal-screen),
-  body:has(#portal-screen[style*="display: block"]){background-attachment:scroll;background-size:180% 180%}
-}
-@media(prefers-reduced-motion:reduce){
-  body:has(#portal-screen),
-  body:has(#portal-screen[style*="display: block"]){animation:none}
+  body:has(#portal-screen[style*="display: block"]){background-attachment:scroll}
+  #portal-screen .student-tabs{background:#12315a;border-color:#12315a}
+  #portal-screen .student-tabs button{color:#f4f7fb}
+  #portal-screen .student-tabs button.active,
+  #portal-screen .student-tabs button.active:hover{background:#fff;color:#12315a}
 }
 @media print{
-  body:has(#portal-screen),
-  body:has(#portal-screen[style*="display: block"]){background:#fff!important;animation:none!important}
+  body:has(#portal-screen[style*="display: block"]){background:#fff!important}
+  body:has(#portal-screen[style*="display: block"])::before{display:none!important}
 }
