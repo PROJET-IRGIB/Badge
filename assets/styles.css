@@ -284,6 +284,7 @@ body:has(#portal-screen[style*="display: block"])>.notice{max-width:1100px;margi
 .news-card,.news-empty{min-width:0;padding:21px 22px;border:1px solid #e1e9f1;border-radius:17px;background:#fff;box-shadow:0 9px 25px rgba(17,48,82,.055)}
 .news-card:first-child{grid-column:1/-1;background:linear-gradient(130deg,#fff 45%,#edf5fd)}
 .news-card-top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}
+.news-publisher{min-width:0;flex:1;color:#526b84;font-size:11px;font-weight:750;line-height:1.4;text-align:center;overflow-wrap:anywhere}
 .news-card time,.announcement-admin-item small{color:#738398;font-size:11px}
 .news-card h3{font-size:18px;line-height:1.35;margin:0 0 8px;overflow-wrap:anywhere}
 .news-card p{margin:0;color:#526476;line-height:1.7;white-space:pre-line;overflow-wrap:anywhere}

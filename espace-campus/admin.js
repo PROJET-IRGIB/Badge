@@ -199,7 +199,7 @@
       host.innerHTML = `<div class="news-empty"><strong>Aucune publication pour le moment</strong><p>Les annonces que vous publiez apparaîtront ici.</p></div>`;
       return;
     }
-    host.innerHTML = announcementsCache.map(item => `<article class="announcement-admin-item"><div class="announcement-admin-meta"><span class="news-tag">${item.site ? esc(siteName(item.site)) : "Tous les campus"}</span><span class="status ${item.status === "published" ? "active" : "pending"}">${item.status === "published" ? "Publiée" : item.status === "archived" ? "Archivée" : "Brouillon"}</span></div><h3>${esc(item.title)}</h3><p>${esc(item.body)}</p>${item.mediaUrl ? (item.media_type === "video" ? `<video class="news-media" src="${esc(item.mediaUrl)}" controls playsinline preload="metadata"></video>` : `<img class="news-media" src="${esc(item.mediaUrl)}" alt="Aperçu : ${esc(item.title)}" loading="lazy">`) : ""}<small>${item.published_at ? new Date(item.published_at).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "Pas encore publiée"}</small><button class="btn secondary sm" type="button" data-announcement-toggle="${esc(item.id)}">${item.status === "published" ? "Retirer de l’espace étudiant" : "Publier maintenant"}</button></article>`).join("");
+    host.innerHTML = announcementsCache.map(item => `<article class="announcement-admin-item"><div class="announcement-admin-meta"><span class="news-tag">${item.site ? esc(siteName(item.site)) : "Tous les sites"}</span><span class="status ${item.status === "published" ? "active" : "pending"}">${item.status === "published" ? "Publiée" : item.status === "archived" ? "Archivée" : "Brouillon"}</span></div><small class="announcement-publisher">${item.published_by_site ? `Publié par l’administration de ${esc(siteName(item.published_by_site))}` : "Publié par l’administration générale"}</small><h3>${esc(item.title)}</h3><p>${esc(item.body)}</p>${item.mediaUrl ? (item.media_type === "video" ? `<video class="news-media" src="${esc(item.mediaUrl)}" controls playsinline preload="metadata"></video>` : `<img class="news-media" src="${esc(item.mediaUrl)}" alt="Aperçu : ${esc(item.title)}" loading="lazy">`) : ""}<small>${item.published_at ? new Date(item.published_at).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "Pas encore publiée"}</small><button class="btn secondary sm" type="button" data-announcement-toggle="${esc(item.id)}">${item.status === "published" ? "Retirer de l’espace étudiant" : "Publier maintenant"}</button></article>`).join("");
   }
   async function signedAnnouncementRows(rows) {
     return Promise.all((rows || []).map(async item => {
@@ -211,7 +211,7 @@
   async function loadAnnouncements() {
     const host = byId("announcement-admin-rows");
     host.innerHTML = `<div class="news-empty"><strong>Chargement…</strong></div>`;
-    const { data, error } = await adminClient.from("campus_announcements").select("id,title,body,site,status,published_at,expires_at,created_at,media_path,media_type").order("created_at", { ascending: false }).limit(50);
+    const { data, error } = await adminClient.from("campus_announcements").select("id,title,body,site,published_by_site,status,published_at,expires_at,created_at,media_path,media_type").order("created_at", { ascending: false }).limit(50);
     if (error) { host.innerHTML = `<div class="notice">Les actualités ne sont pas disponibles pour le moment. Réessayez plus tard.</div>`; return; }
     announcementsCache = await signedAnnouncementRows(data || []);
     renderAnnouncements();
@@ -231,14 +231,16 @@
     let mediaPath = null;
     try {
       const id = crypto.randomUUID();
-      const site = byId("announcement-site").value || null;
+      const selectedSite = byId("announcement-site").value;
+      const site = selectedSite === "all" ? null : selectedSite;
+      const publisherSite = adminSite || null;
       if (file) {
         const extension = ({ "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "video/mp4": "mp4", "video/webm": "webm" })[file.type];
-        mediaPath = `${site || "all"}/${id}/${crypto.randomUUID()}.${extension}`;
+        mediaPath = `${publisherSite || site || "all"}/${id}/${crypto.randomUUID()}.${extension}`;
         const { error: uploadError } = await adminClient.storage.from("campus-announcement-media").upload(mediaPath, file, { contentType: file.type, cacheControl: "3600", upsert: false });
         if (uploadError) throw uploadError;
       }
-      const { error } = await adminClient.from("campus_announcements").insert({ id, title, body, site, status: "published", published_at: new Date().toISOString(), expires_at: byId("announcement-expiry").value || null, created_by: currentAdminId, media_path: mediaPath, media_type: file?.type.startsWith("video/") ? "video" : file ? "image" : null });
+      const { error } = await adminClient.from("campus_announcements").insert({ id, title, body, site, published_by_site: publisherSite, status: "published", published_at: new Date().toISOString(), expires_at: byId("announcement-expiry").value || null, created_by: currentAdminId, media_path: mediaPath, media_type: file?.type.startsWith("video/") ? "video" : file ? "image" : null });
       if (error) {
         if (mediaPath) await adminClient.storage.from("campus-announcement-media").remove([mediaPath]).catch(() => {});
         message.textContent = friendlyError(error, "La publication n’a pas pu être enregistrée. Réessayez."); return;
@@ -508,8 +510,8 @@
     ["rep-site", "rep-program", "rep-level"].forEach(id => byId(id).addEventListener("change", renderRepresentativeManager));
     const announcementSite = byId("announcement-site");
     announcementSite.innerHTML = adminSite
-      ? `<option value="${esc(adminSite)}">${esc(siteName(adminSite))} uniquement</option>`
-      : `<option value="">Tous les campus</option>${D.sites.map(site => `<option value="${esc(site.id)}">${esc(site.city)}</option>`).join("")}`;
+      ? `<option value="${esc(adminSite)}">${esc(siteName(adminSite))} uniquement</option><option value="all">Tous les sites</option>`
+      : `<option value="all">Tous les sites</option>${D.sites.map(site => `<option value="${esc(site.id)}">${esc(site.city)} uniquement</option>`).join("")}`;
     renderDashboard();
   }
   async function authorizeAdmin(session) {

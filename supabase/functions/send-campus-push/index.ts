@@ -47,14 +47,17 @@ Deno.serve(async req => {
 
   if (event.kind === "announcement" && typeof event.id === "string") {
     const { data: announcement, error } = await serviceClient.from("campus_announcements")
-      .select("id,title,body,site,status,published_at,expires_at")
+      .select("id,title,body,site,published_by_site,status,published_at,expires_at")
       .eq("id", event.id).maybeSingle();
     if (error || !announcement || announcement.status !== "published" || !announcement.published_at || new Date(announcement.published_at) > new Date()) {
       return response(404, { error: "Actualité introuvable ou non publiée." });
     }
-    const { data: allowed } = announcement.site
-      ? await userClient.rpc("is_admin_for_site", { p_site: announcement.site })
-      : await userClient.rpc("is_admin");
+    const { data: globalAdmin } = await userClient.rpc("is_admin");
+    const scopeSite = announcement.site || announcement.published_by_site;
+    const { data: siteAdmin } = !globalAdmin && scopeSite
+      ? await userClient.rpc("is_admin_for_site", { p_site: scopeSite })
+      : { data: false };
+    const allowed = Boolean(globalAdmin || siteAdmin);
     if (!allowed) return response(403, { error: "Vous ne pouvez pas notifier les destinataires de cette actualité." });
     if (announcement.expires_at && announcement.expires_at < beninDate()) return response(409, { error: "Cette actualité a expiré." });
     targetSite = announcement.site;
