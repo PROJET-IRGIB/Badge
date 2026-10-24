@@ -219,6 +219,11 @@
   .scanner-frame{min-height:230px;border-radius:16px}
   .attendance-grid .form-actions{flex-direction:row}
   .attendance-grid .form-actions .btn{flex:1}
+  #student-view-attendance .attendance-grid > div:first-child{display:flex;flex-direction:column}
+  #student-view-attendance .scanner-frame{order:2;height:200px;min-height:0}
+  #student-view-attendance .attendance-grid .form-actions{order:1;margin-top:0}
+  #student-view-attendance .attendance-grid .field-help{order:3}
+  #start-scan,#stop-scan{scroll-margin-bottom:calc(96px + env(safe-area-inset-bottom))}
   .student-view .section-title{align-items:center;margin:23px 0 11px}
   .student-view .section-title h2{font-size:19px}
   .student-view .table-panel{overflow:hidden;border-radius:13px}
@@ -489,46 +494,12 @@ body:has(#portal-screen[style*="display: block"])>.notice{max-width:1100px;margi
 .account-security .form-actions{flex-wrap:wrap}
 @media(max-width:700px){.account-security{margin-top:19px;padding:16px 14px;border-radius:15px}.account-security .form-actions{align-items:stretch;flex-direction:column}.account-security .form-actions .btn{width:100%;min-height:44px}.password-step{max-width:none}}
 
-/* Student page background: slow light built from the portal navy, blue and card teal. The badge artwork stays as it is. */
-body:has(#portal-screen[style*="display: block"]){
-  background-color:#f4f6f8;
-  background-image:linear-gradient(165deg,#f7f9fb 0%,#e8eef5 55%,#f4f6f8 100%);
-  background-attachment:fixed
-}
-body:has(#portal-screen[style*="display: block"])::before,
-body:has(#portal-screen[style*="display: block"])::after{
-  content:"";
-  position:fixed;
-  z-index:0;
-  pointer-events:none;
-  border-radius:50%
-}
-body:has(#portal-screen[style*="display: block"])::before{
-  width:min(52vw,640px);
-  height:min(52vw,640px);
-  left:-8vw;
-  top:12vh;
-  background:radial-gradient(circle, rgba(18,49,90,.42) 0%, rgba(26,68,128,.16) 46%, rgba(26,68,128,0) 72%);
-  animation:irgib-portal-navy 24s ease-in-out infinite alternate
-}
-body:has(#portal-screen[style*="display: block"])::after{
-  width:min(46vw,560px);
-  height:min(46vw,560px);
-  right:-10vw;
-  bottom:8vh;
-  background:radial-gradient(circle, rgba(8,112,108,.38) 0%, rgba(61,108,168,.18) 48%, rgba(61,108,168,0) 74%);
-  animation:irgib-portal-teal 31s ease-in-out infinite alternate
-}
-@keyframes irgib-portal-navy{
-  from{transform:translate3d(0,0,0) scale(1)}
-  to{transform:translate3d(18vw,10vh,0) scale(1.12)}
-}
-@keyframes irgib-portal-teal{
-  from{transform:translate3d(0,0,0) scale(1.05)}
-  to{transform:translate3d(-16vw,-12vh,0) scale(.92)}
-}
+/* Student page background: a slow fluid current in the portal navy, blue and card teal. The badge artwork stays as it is. */
+#portal-flow{position:fixed;inset:0;z-index:0;width:100%;height:100%;pointer-events:none;display:none}
+body:has(#portal-screen[style*="display: block"]){background:#f4f6f8}
+body:has(#portal-screen[style*="display: block"]) #portal-flow{display:block}
 body:has(#portal-screen[style*="display: block"])>.content{position:relative;z-index:2}
-body:has(#portal-screen[style*="display: block"])>.footer{position:relative;z-index:1}
+body:has(#portal-screen[style*="display: block"])>.footer{position:relative;z-index:1;background:rgba(244,246,248,.94)}
 #portal-screen{color:#1a2733}
 #portal-screen .portal-hero,
 #portal-screen .portal-hero h1{color:#fff}
@@ -576,21 +547,13 @@ body:has(#portal-screen[style*="display: block"])>.footer{position:relative;z-in
 #portal-screen .info-row strong,
 #portal-screen .panel h3{color:#12315a}
 @media(max-width:700px){
-  body:has(#portal-screen[style*="display: block"]){background-attachment:scroll}
-  body:has(#portal-screen[style*="display: block"])::before{width:78vw;height:78vw;left:-24vw;top:6vh}
-  body:has(#portal-screen[style*="display: block"])::after{width:70vw;height:70vw;right:-28vw;bottom:4vh}
   body:has(#portal-screen[style*="display: block"])>.footer{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
   #portal-screen .student-tabs{z-index:60;background:#12315a;border-color:#12315a}
   #portal-screen .student-tabs button{color:#f4f7fb}
   #portal-screen .student-tabs button.active,
   #portal-screen .student-tabs button.active:hover{background:#fff;color:#12315a}
 }
-@media(prefers-reduced-motion:reduce){
-  body:has(#portal-screen[style*="display: block"])::before,
-  body:has(#portal-screen[style*="display: block"])::after{animation:none}
-}
 @media print{
   body:has(#portal-screen[style*="display: block"]){background:#fff!important}
-  body:has(#portal-screen[style*="display: block"])::before,
-  body:has(#portal-screen[style*="display: block"])::after{display:none!important}
+  #portal-flow{display:none!important}
 }
