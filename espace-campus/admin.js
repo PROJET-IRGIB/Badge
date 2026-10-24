@@ -126,8 +126,7 @@
     byId("student-rows").innerHTML = list.map(person => {
       const app = applications().find(item => item.studentId === person.studentId);
       const rep = representativesCache.find(item => item.user_id === person.studentId);
-      const inGroupRep = representativesCache.some(item => item.site === person.site && item.program === person.program && item.level === person.level);
-      return `<tr><td>${app ? photoCell(app) : `<span class="table-photo photo-empty">—</span>`}</td><td><strong>${esc(fullName(person))}</strong><span class="sub">${esc(person.email)}</span>${person.bannedAt ? `<span class="sub status rejected">Compte banni</span>` : ""}${person.cardSuspendedAt ? `<span class="sub status rejected">Carte désactivée</span>` : ""}</td><td><strong>${esc(app?.finalMatricule || app?.temporaryMatricule || "—")}</strong><span class="sub">${app ? statusText(app.status) : "Inscrit · demande non envoyée"}</span></td><td>${esc(person.sex)}</td><td>${esc(programName(person.program))}<span class="sub">${esc(person.level)}</span></td><td>${esc(siteName(person.site))}</td><td>${esc(keyFor(person))}</td><td class="student-admin-actions"><button class="btn secondary sm" type="button" data-student-role="${esc(person.studentId)}" ${person.bannedAt || person.cardSuspendedAt || rep ? "disabled" : ""}>${rep ? "Déjà responsable" : inGroupRep ? "Remplacer responsable" : "Nommer responsable"}</button>${person.bannedAt ? `<span class="small muted">Banni</span>` : `<button class="btn danger sm" type="button" data-student-ban="${esc(person.studentId)}">Bannir</button>`}<button class="btn danger sm" type="button" data-student-delete="${esc(person.studentId)}">Supprimer</button></td></tr>`;
+      return `<tr><td>${app ? photoCell(app) : `<span class="table-photo photo-empty">—</span>`}</td><td><strong>${esc(fullName(person))}</strong><span class="sub">${esc(person.email)}</span>${person.bannedAt ? `<span class="sub status rejected">Compte banni</span>` : ""}${person.cardSuspendedAt ? `<span class="sub status rejected">Carte désactivée</span>` : ""}</td><td><strong>${esc(app?.finalMatricule || app?.temporaryMatricule || "—")}</strong><span class="sub">${app ? statusText(app.status) : "Inscrit · demande non envoyée"}</span></td><td>${esc(person.sex)}</td><td>${esc(programName(person.program))}<span class="sub">${esc(person.level)}</span></td><td>${esc(siteName(person.site))}</td><td>${esc(keyFor(person))}</td><td class="student-admin-actions"><button class="btn secondary sm" type="button" data-student-role="${esc(person.studentId)}" ${person.bannedAt || person.cardSuspendedAt || rep ? "disabled" : ""}>${rep ? "Déjà responsable" : "Nommer responsable"}</button>${person.bannedAt ? `<span class="small muted">Banni</span>` : `<button class="btn danger sm" type="button" data-student-ban="${esc(person.studentId)}">Bannir</button>`}<button class="btn danger sm" type="button" data-student-delete="${esc(person.studentId)}">Supprimer</button></td></tr>`;
     }).join("") || `<tr><td colspan="8" class="table-empty">Aucun étudiant inscrit trouvé.</td></tr>`;
   }
   const careerCycles = [
@@ -283,11 +282,17 @@
     const site = byId("rep-site").value || adminSite || D.sites[0].id;
     const program = byId("rep-program").value || D.programs[0].code;
     const level = byId("rep-level").value || D.levels[0];
-    const assignment = representativesCache.find(item => item.site === site && item.program === program && item.level === level);
-    const candidates = studentProfilesCache.filter(item => item.site === site && item.program === program && item.level === level && !item.bannedAt && !item.cardSuspendedAt);
-    const current = assignment && studentProfilesCache.find(item => item.studentId === assignment.user_id);
-    const select = `<label for="rep-student">Étudiant du groupe</label><select id="rep-student"><option value="">${candidates.length ? "Choisir dans le groupe" : "Aucun étudiant disponible"}</option>${candidates.map(item => `<option value="${esc(item.studentId)}" ${assignment?.user_id === item.studentId ? "selected" : ""}>${esc(fullName(item))} · ${esc(applications().find(app => app.studentId === item.studentId)?.finalMatricule || applications().find(app => app.studentId === item.studentId)?.temporaryMatricule || "Sans matricule")}</option>`).join("")}</select>`;
-    byId("representative-manager").innerHTML = `<div class="representative-group-summary"><span class="news-tag">${esc(siteName(site))}</span><span class="news-tag">${esc(programName(program))}</span><span class="news-tag">${esc(level)}</span></div>${assignment ? `<div class="representative-current"><div><small>Responsable actuel</small><strong>${esc(current ? fullName(current) : "Compte affecté, étudiant non trouvé")}</strong><span>${esc(applications().find(app => app.studentId === assignment.user_id)?.finalMatricule || "")}</span></div><button class="btn secondary sm" type="button" data-rep-reset-pin="${esc(`${site}|${program}|${level}`)}">Réinitialiser son code QR</button><button class="btn danger sm" type="button" data-rep-remove="${esc(`${site}|${program}|${level}`)}">Retirer</button></div>` : `<div class="notice">Aucun responsable n’est encore désigné pour ce groupe.</div>`}<div class="representative-assign">${select}<button class="btn" type="button" data-rep-assign="${esc(`${site}|${program}|${level}`)}">${assignment ? "Remplacer le responsable" : "Désigner le responsable"}</button></div><p class="field-help">L’administrateur peut désigner tout étudiant actif de ce groupe, même si sa carte n’est pas encore approuvée. Un responsable actif est associé à un seul groupe.</p>`;
+    const assignments = representativesCache.filter(item => item.site === site && item.program === program && item.level === level);
+    const assignedIds = new Set(assignments.map(item => item.user_id));
+    const candidates = studentProfilesCache.filter(item => item.site === site && item.program === program && item.level === level && !item.bannedAt && !item.cardSuspendedAt && !assignedIds.has(item.studentId));
+    const select = `<label for="rep-student">Étudiant du groupe</label><select id="rep-student"><option value="">${candidates.length ? "Choisir dans le groupe" : "Aucun autre étudiant disponible"}</option>${candidates.map(item => `<option value="${esc(item.studentId)}">${esc(fullName(item))} · ${esc(applications().find(app => app.studentId === item.studentId)?.finalMatricule || applications().find(app => app.studentId === item.studentId)?.temporaryMatricule || "Sans matricule")}</option>`).join("")}</select>`;
+    const cards = assignments.map(assignment => {
+      const current = studentProfilesCache.find(item => item.studentId === assignment.user_id);
+      const matricule = applications().find(app => app.studentId === assignment.user_id)?.finalMatricule || applications().find(app => app.studentId === assignment.user_id)?.temporaryMatricule || "";
+      const key = `${site}|${program}|${level}|${assignment.user_id}`;
+      return `<div class="representative-current"><div><small>Responsable</small><strong>${esc(current ? fullName(current) : "Compte affecté, étudiant non trouvé")}</strong><span>${esc(matricule)}</span></div><button class="btn secondary sm" type="button" data-rep-reset-pin="${esc(key)}">Réinitialiser son code QR</button><button class="btn danger sm" type="button" data-rep-remove="${esc(key)}">Retirer</button></div>`;
+    }).join("");
+    byId("representative-manager").innerHTML = `<div class="representative-group-summary"><span class="news-tag">${esc(siteName(site))}</span><span class="news-tag">${esc(programName(program))}</span><span class="news-tag">${esc(level)}</span></div>${cards ? `<div class="representative-list">${cards}</div>` : `<div class="notice">Aucun responsable n’est encore désigné pour ce groupe.</div>`}<div class="representative-assign">${select}<button class="btn" type="button" data-rep-assign="${esc(`${site}|${program}|${level}`)}" ${candidates.length ? "" : "disabled"}>Ajouter un responsable</button></div><p class="field-help">Vous pouvez nommer plusieurs responsables pour le même groupe. Chacun garde son propre code pour afficher le QR du jour. Un étudiant ne peut être responsable que d’un seul groupe.</p>`;
   }
   async function assignRepresentative(key) {
     const [site, program, level] = key.split("|");
@@ -301,14 +306,14 @@
       toast(friendlyError(error, "Le responsable n’a pas pu être désigné. Vérifiez le groupe puis réessayez."));
       return;
     }
-    toast(`${fullName(student)} est maintenant responsable de ce groupe.`);
+    toast(`${fullName(student)} a été ajouté aux responsables de ce groupe.`);
     await loadRepresentatives();
   }
   async function assignStudentFromRegistry(userId) {
     const person = studentProfilesCache.find(item => item.studentId === userId);
     if (!person) return;
     if (person.bannedAt) { toast("Un compte banni ne peut pas être responsable."); return; }
-    if (!window.confirm(`Modifier le rôle de ${fullName(person)} et le désigner responsable de ${keyFor(person)} ?`)) return;
+    if (!window.confirm(`Désigner ${fullName(person)} comme responsable de ${keyFor(person)} ? Les autres responsables de ce groupe restent en place.`)) return;
     const { error } = await adminClient.rpc("admin_assign_class_representative", { p_student_id: person.studentId, p_site: person.site, p_program: person.program, p_level: person.level });
     if (error) { toast(friendlyError(error, "Le rôle n’a pas pu être modifié. Réessayez.")); return; }
     toast(`${fullName(person)} est maintenant responsable de ${keyFor(person)}.`);
@@ -334,17 +339,21 @@
     await refreshCurrent();
   }
   async function removeRepresentative(key) {
-    const [site, program, level] = key.split("|");
-    if (!window.confirm(`Retirer le responsable du groupe ${siteName(site)} · ${programName(program)} · ${level} ?`)) return;
-    const { error } = await adminClient.from("class_representatives").delete().eq("site", site).eq("program", program).eq("level", level);
+    const [site, program, level, userId] = key.split("|");
+    const person = studentProfilesCache.find(item => item.studentId === userId);
+    const name = person ? fullName(person) : "ce responsable";
+    if (!window.confirm(`Retirer ${name} des responsables du groupe ${siteName(site)} · ${programName(program)} · ${level} ?`)) return;
+    const { error } = await adminClient.from("class_representatives").delete().eq("site", site).eq("program", program).eq("level", level).eq("user_id", userId);
     if (error) { toast(friendlyError(error, "Le responsable n’a pas pu être retiré. Réessayez.")); return; }
     toast("Responsable retiré du groupe.");
     await loadRepresentatives();
   }
   async function resetRepresentativePin(key) {
-    if (!window.confirm("Réinitialiser le code secret du responsable ? Il devra en créer un nouveau.")) return;
-    const [site, program, level] = key.split("|");
-    const { error } = await adminClient.rpc("admin_reset_representative_daily_qr_pin", { p_site: site, p_program: program, p_level: level });
+    const [site, program, level, userId] = key.split("|");
+    const person = studentProfilesCache.find(item => item.studentId === userId);
+    const name = person ? fullName(person) : "ce responsable";
+    if (!window.confirm(`Réinitialiser le code secret de ${name} ? Cette personne devra en créer un nouveau.`)) return;
+    const { error } = await adminClient.rpc("admin_reset_representative_daily_qr_pin", { p_site: site, p_program: program, p_level: level, p_student_id: userId });
     if (error) {
       const message = String(error.message || "").toLowerCase();
       const detail = message.includes("aucun responsable") ? "Aucun responsable n’est actuellement affecté à ce groupe. Actualisez la liste." : message.includes("site") || message.includes("permission") ? "Votre compte n’est pas autorisé à réinitialiser le code de ce site." : message.includes("function") || message.includes("schema cache") ? "La migration de réinitialisation n’est pas encore appliquée dans Supabase." : friendlyError(error, "Le code secret n’a pas pu être réinitialisé. Réessayez.");

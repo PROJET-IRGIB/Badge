@@ -53,10 +53,6 @@ Les noms complets des huit formations proviennent du [catalogue officiel des for
 
 Cette version ne fournit pas d’authentification serveur, d’envoi d’e-mail, de notification distante, de serveur de matricules ou de base partagée. La connexion de démonstration ne fonctionne que dans le navigateur où le compte a été créé. Ne saisis pas de vraies données étudiantes dans cette maquette. Les approbations et présences locales servent à montrer les écrans et le flux, pas à tenir un registre officiel.
 
-Le fichier `firestore.rules` illustre la séparation des accès : custom claim Firebase `admin`, lecture étudiant limitée à son dossier, demandes/décisions/matricules/présences réservées à des fonctions de confiance, règles refusées par défaut. Il n’est pas déployé.
-
-Avant le lancement, il restera à connecter Firebase Auth avec vérification réelle d’e-mail, créer les projets dev/prod et les deux hébergements, configurer le custom claim côté serveur, implémenter la réservation transactionnelle des matricules et valider le QR de séance côté serveur.
-
 ## Fichiers
 
 - `assets/blason.jpg` : écusson seul, utilisé sur la carte et dans l’en-tête.
@@ -64,4 +60,3 @@ Avant le lancement, il restera à connecter Firebase Auth avec vérification ré
 - `assets/catalog.js` : filières, sites, niveaux et stockage local de démonstration.
 - `assets/styles.css` : affichage responsive, dimensions et impression du recto.
 - `start-demo.ps1` : serveur local Windows pour partager les données de démonstration et autoriser l’accès caméra sur localhost.
-- `firestore.rules` : règles préparatoires Firebase, non déployées.
