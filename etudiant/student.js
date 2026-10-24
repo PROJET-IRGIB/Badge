@@ -5,6 +5,14 @@
   const byId = id => document.getElementById(id);
   const esc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
   const fullName = person => `${person.firstName || ""} ${person.lastName || ""}`.trim();
+  const friendlyError = (error, fallback) => {
+    const message = String(error?.message || "").toLowerCase();
+    if (error?.name === "StudentProfileMissingError") return error.message;
+    if (/already registered|user already exists/.test(message)) return "Un compte utilise déjà cette adresse e-mail. Essayez de vous connecter.";
+    if (/permission denied|row-level security|not authorized|unauthorized/.test(message)) return "Cette action n’est pas autorisée pour votre compte.";
+    if (/network|failed to fetch|fetcherror|timeout/.test(message)) return "Connexion interrompue. Vérifiez votre connexion puis réessayez.";
+    return fallback;
+  };
   const initSelects = () => {
     const programOptions = D.programs.map(item => `<option value="${item.code}">${item.code} · ${esc(item.name)}</option>`).join("");
     const levelOptions = D.levels.map(level => `<option value="${level}">${level}</option>`).join("");
@@ -45,8 +53,9 @@
   const fromProfileRow = row => row && ({ userId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, bannedAt: row.banned_at || null, banReason: row.ban_reason || "" });
   const fromApplicationRow = row => row && ({ id: row.id, studentId: row.student_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, birthDate: row.birth_date, program: row.program, level: row.level, site: row.site, status: row.status, temporaryMatricule: row.temporary_matricule, finalMatricule: row.final_matricule, photoPath: row.photo_path, rejectionReason: row.rejection_reason, submittedAt: row.submitted_at, decidedAt: row.decided_at });
   async function loadStudentData() {
-    const { data: profileRow, error: profileError } = await db.from("student_profiles").select("*").eq("user_id", currentUser.id).single();
+    const { data: profileRow, error: profileError } = await db.from("student_profiles").select("*").eq("user_id", currentUser.id).maybeSingle();
     if (profileError) throw profileError;
+    if (!profileRow) throw Object.assign(new Error("Les informations de votre compte ne sont pas encore disponibles. Contactez l’administration de votre site."), { name: "StudentProfileMissingError" });
     profile = fromProfileRow(profileRow);
     if (profile.bannedAt) {
       const site = D.getSite(profile.site)?.city || "votre site";
@@ -307,7 +316,7 @@
     representativeHasPin = !pinError && Boolean(hasPin);
     byId("rep-pin-label").textContent = representativeHasPin ? "Code secret à 4 chiffres" : "Créer votre code secret à 4 chiffres";
     byId("rep-pin-submit").textContent = representativeHasPin ? "Voir le QR du jour" : "Créer mon code";
-    byId("rep-pin-message").textContent = pinError ? "La fonction PIN n’est pas encore disponible. Appliquez la migration Supabase puis rechargez." : "";
+    byId("rep-pin-message").textContent = pinError ? "Le code du jour n’est pas disponible pour le moment. Réessayez plus tard." : "";
     byId("rep-daily-pin").value = "";
     byId("rep-absent-list").innerHTML = `<p class="muted small">Chargement de la liste des absents…</p>`;
     const { data, error } = await db.rpc("list_representative_groupmates");
@@ -352,7 +361,7 @@
       message.textContent = "QR révélé. Masquez-le en quittant cette page ou après le pointage.";
       byId("rep-daily-pin").value = "";
     } catch (error) {
-      message.textContent = error.message || "Le QR n’a pas pu être révélé. Vérifiez le code puis réessayez.";
+      message.textContent = friendlyError(error, "Le QR n’a pas pu être révélé. Vérifiez le code puis réessayez.");
     } finally { submit.disabled = false; }
   }
   function renderRepresentativeGroupmates() {
@@ -394,7 +403,7 @@
     } catch (rpcError) { error = rpcError; }
     if (error) {
       button.disabled = false;
-      byId("rep-attendance-message").textContent = error.message || "La présence n’a pas pu être mise à jour.";
+      byId("rep-attendance-message").textContent = friendlyError(error, "La présence n’a pas pu être mise à jour. Vérifiez le QR puis réessayez.");
       window.setTimeout(() => { representativeLastQr = ""; }, 1200);
       return;
     }
@@ -548,7 +557,7 @@
               stopCamera();
               return;
             } catch (error) {
-              byId("attendance-message").textContent = error.message || "Ce QR ne contient pas un code de séance reconnu. Présentez le QR de présence.";
+              byId("attendance-message").textContent = "Ce QR ne contient pas un code de séance reconnu. Présentez le QR de présence.";
             }
           }
         }
@@ -566,7 +575,7 @@
     try { await loadStudentData(); }
     catch (error) {
       if (error.name === "AccountBannedError") { showBlockedAccount(error.message); return; }
-      setScreen("auth-screen"); byId("login-message").textContent = error.message || "Impossible de charger votre dossier. Réessayez."; return;
+      setScreen("auth-screen"); byId("login-message").textContent = friendlyError(error, "Impossible de charger votre espace. Vérifiez votre connexion ou contactez l’administration de votre site."); return;
     }
     setScreen("portal-screen");
     byId("news-campus-label").textContent = D.getSite(profile.site).city;
@@ -644,7 +653,7 @@
         byId("demo-code-note").textContent = `Un code de confirmation a été envoyé à ${draft.email}. Copiez-le depuis votre boîte e-mail et collez-le ci-dessus.`;
         setScreen("verify-screen");
       }
-    } catch (error) { byId("signup-message").textContent = error.message || "Création du compte impossible. Vérifiez les informations puis réessayez."; }
+    } catch (error) { byId("signup-message").textContent = friendlyError(error, "La création du compte a échoué. Vérifiez les informations puis réessayez."); }
     finally { button.disabled = false; }
   });
   byId("verify-form").addEventListener("submit", async event => {
@@ -663,7 +672,7 @@
       byId("verify-form").reset();
       await activatePortal();
     } catch (error) {
-      byId("verify-message").textContent = /expired|invalid|token|otp/i.test(error.message || "") ? "Code incorrect ou expiré. Vérifiez le code reçu ou demandez-en un nouveau." : error.message || "La vérification a échoué. Réessayez.";
+      byId("verify-message").textContent = /expired|invalid|token|otp/i.test(error.message || "") ? "Code incorrect ou expiré. Vérifiez le code reçu ou demandez-en un nouveau." : friendlyError(error, "La vérification a échoué. Réessayez.");
     } finally { button.disabled = false; }
   });
   byId("resend-code").addEventListener("click", async () => {
@@ -675,7 +684,7 @@
       if (error) throw error;
       byId("verify-code").value = "";
       byId("verify-message").textContent = `Un nouveau code a été envoyé à ${pendingSignupEmail}.`;
-    } catch (error) { byId("verify-message").textContent = error.message || "Le code n’a pas pu être renvoyé. Attendez un instant puis réessayez."; }
+    } catch (error) { byId("verify-message").textContent = friendlyError(error, "Le code n’a pas pu être renvoyé. Attendez un instant puis réessayez."); }
     finally { button.disabled = false; }
   });
   byId("back-to-signup").addEventListener("click", () => { setScreen("auth-screen"); showAuthPage("signup"); });
@@ -819,7 +828,7 @@
       byId("request-status-box").innerHTML = `<span>Statut</span><strong>En attente · ${esc(application.temporaryMatricule)}</strong>`;
     } catch (error) {
       if (photoPath) await db.storage.from("student-photos").remove([photoPath]);
-      byId("request-message").textContent = error.message || "La demande n’a pas pu être enregistrée. Vérifiez votre connexion puis réessayez.";
+      byId("request-message").textContent = friendlyError(error, "La demande n’a pas pu être enregistrée. Vérifiez votre connexion puis réessayez.");
     } finally { button.disabled = false; }
   });
 
@@ -839,7 +848,7 @@
     try { ({ error } = await db.rpc("submit_attendance", { p_token: tokenBeingSubmitted })); }
     catch { error = new Error("La connexion a été interrompue. Vérifiez votre appel avant de réessayer."); }
     if (error) {
-      byId("attendance-message").textContent = /déjà enregistrée/i.test(error.message) ? "Votre présence à cette séance est déjà enregistrée." : error.message || "Présence non enregistrée. Vérifiez que le QR est actif et correspond à votre groupe.";
+      byId("attendance-message").textContent = /déjà enregistrée/i.test(error.message || "") ? "Votre présence à cette séance est déjà enregistrée." : friendlyError(error, "Présence non enregistrée. Vérifiez que le QR est actif et correspond à votre groupe.");
       if (/déjà enregistrée/i.test(error.message)) {
         scannedSession = "";
         try { await loadStudentData(); }
@@ -867,15 +876,15 @@
     const sheets = faces.map(face => {
       const clone = face.cloneNode(true);
       clone.querySelectorAll("canvas").forEach(canvas => {
-        try { const image = document.createElement("img"); image.src = canvas.toDataURL("image/png"); image.alt = "QR de vérification du badge"; canvas.replaceWith(image); } catch { /* Le QR reste dans sa représentation originale si le navigateur bloque la copie. */ }
+        try { const image = document.createElement("img"); image.src = canvas.toDataURL("image/png"); image.alt = "QR de vérification du badge"; image.style.cssText = "display:block;width:100%;height:100%;object-fit:contain;background:#fff;filter:none"; canvas.replaceWith(image); } catch { /* Le QR reste dans sa représentation originale si le navigateur bloque la copie. */ }
       });
-      clone.querySelectorAll("img").forEach(image => { image.src = new URL(image.getAttribute("src"), location.href).href; });
+      clone.querySelectorAll("img").forEach(image => { const src = image.getAttribute("src"); if (src && !src.startsWith("data:")) image.src = new URL(src, location.href).href; });
       return `<section class="card-print-sheet">${clone.outerHTML}</section>`;
     }).join("");
     printWindow.document.open();
     printWindow.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Carte étudiante IRGIB AFRICA</title><link rel="stylesheet" href="${stylesUrl}"><style>
       @page{size:A4 portrait;margin:0}*{box-sizing:border-box}html,body{margin:0!important;padding:0!important;width:210mm!important;min-width:210mm!important;background:#fff!important}.card-print-sheet{width:210mm;height:297mm;display:grid;place-items:center;overflow:hidden;break-after:page;page-break-after:always}.card-print-sheet:last-child{break-after:auto;page-break-after:auto}.card-print-sheet .card-v2{width:85.6mm!important;height:53.98mm!important;min-width:85.6mm!important;max-width:85.6mm!important;aspect-ratio:auto!important;margin:0!important;padding:2.2mm 2.4mm!important;border-radius:2mm!important;box-shadow:none!important;overflow:hidden!important;break-inside:avoid!important;page-break-inside:avoid!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}.card-print-sheet .card-v2-front{break-after:auto!important;page-break-after:auto!important}.card-print-sheet .card-v2.card-back{display:grid!important;break-before:auto!important;page-break-before:auto!important}.card-print-sheet img{print-color-adjust:exact;-webkit-print-color-adjust:exact} @media print{html,body{width:210mm!important;min-width:210mm!important}.card-print-sheet{height:297mm!important;break-after:page!important;page-break-after:always!important}.card-print-sheet:last-child{break-after:auto!important;page-break-after:auto!important}}
-      </style></head><body>${sheets}<script>window.addEventListener('load',async()=>{await Promise.all([...document.images].map(i=>i.decode?.().catch(()=>{})));if(document.fonts?.ready)await document.fonts.ready;window.focus();setTimeout(()=>window.print(),150)});window.addEventListener('afterprint',()=>window.close());</script></body></html>`);
+      </style><style>.card-print-sheet .card-v2-qr{width:18mm!important;height:18mm!important;min-width:18mm!important;min-height:18mm!important;padding:.5mm!important;background:#fff!important;overflow:visible!important}.card-print-sheet .card-v2-verification{overflow:visible!important;align-content:center!important}.card-print-sheet .card-v2-qr img,.card-print-sheet .card-v2-qr canvas{display:block!important;width:100%!important;height:100%!important;object-fit:contain!important;background:#fff!important;filter:none!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}</style></head><body>${sheets}<script>window.addEventListener('load',async()=>{await Promise.all([...document.images].map(i=>i.decode?.().catch(()=>{})));if(document.fonts?.ready)await document.fonts.ready;window.focus();setTimeout(()=>window.print(),150)});window.addEventListener('afterprint',()=>window.close());</script></body></html>`);
     printWindow.document.close();
   });
 

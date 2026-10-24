@@ -3,6 +3,12 @@
   const byId = id => document.getElementById(id);
   const esc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
   const fullName = item => `${item.firstName || ""} ${item.lastName || ""}`.trim();
+  const friendlyError = (error, fallback) => {
+    const message = String(error?.message || "").toLowerCase();
+    if (/permission denied|row-level security|not authorized|unauthorized/.test(message)) return "Votre compte ne dispose pas des droits nécessaires pour cette action.";
+    if (/network|failed to fetch|fetcherror|timeout/.test(message)) return "Connexion interrompue. Vérifiez votre connexion puis réessayez.";
+    return fallback;
+  };
   const safeName = /^[\p{L}\p{M} .’'-]+$/u;
   let currentView = "dashboard";
   let reviewedId = "";
@@ -184,7 +190,7 @@
     byId("group-rows").innerHTML = list.map(group => `<tr><td><strong>${esc(group.key)}</strong></td><td>${esc(siteName(group.site))}</td><td>${esc(group.program)} · ${esc(programName(group.program))}</td><td>${esc(group.level)}</td><td>${counts[group.key] || 0}</td></tr>`).join("") || `<tr><td colspan="5" class="table-empty">Aucun groupe.</td></tr>`;
   }
   function renderCatalog() {
-    byId("program-grid").innerHTML = D.programs.map(program => `<article class="program-card"><span class="program-code">${esc(program.code)}</span><div class="program-title">${esc(program.name)}</div><div class="program-meta"><span>${esc(program.note)}</span><span class="status ${program.status === "Confirmé" ? "active" : "pending"}">${esc(program.status)}</span></div></article>`).join("");
+    byId("program-grid").innerHTML = D.programs.map(program => `<article class="program-card"><span class="program-code">${esc(program.code)}</span><div class="program-title">${esc(program.name)}</div></article>`).join("");
     byId("site-grid").innerHTML = D.sites.map(site => `<article class="site-card"><span class="site-code">ZONE ${esc(site.zone)} · ${esc(site.id)}</span><strong>${esc(site.city)}</strong>${site.points.map(point => `<p><b>${esc(point.name)}</b> · ${esc(point.address)}<br>${esc(point.phone)}</p>`).join("")}</article>`).join("");
   }
   function renderAnnouncements() {
@@ -206,7 +212,7 @@
     const host = byId("announcement-admin-rows");
     host.innerHTML = `<div class="news-empty"><strong>Chargement…</strong></div>`;
     const { data, error } = await adminClient.from("campus_announcements").select("id,title,body,site,status,published_at,expires_at,created_at,media_path,media_type").order("created_at", { ascending: false }).limit(50);
-    if (error) { host.innerHTML = `<div class="notice">Impossible de charger les actualités. Vérifiez que la migration des annonces est appliquée.</div>`; return; }
+    if (error) { host.innerHTML = `<div class="notice">Les actualités ne sont pas disponibles pour le moment. Réessayez plus tard.</div>`; return; }
     announcementsCache = await signedAnnouncementRows(data || []);
     renderAnnouncements();
   }
@@ -235,7 +241,7 @@
       const { error } = await adminClient.from("campus_announcements").insert({ id, title, body, site, status: "published", published_at: new Date().toISOString(), expires_at: byId("announcement-expiry").value || null, created_by: currentAdminId, media_path: mediaPath, media_type: file?.type.startsWith("video/") ? "video" : file ? "image" : null });
       if (error) {
         if (mediaPath) await adminClient.storage.from("campus-announcement-media").remove([mediaPath]).catch(() => {});
-        message.textContent = error.message || "La publication n’a pas pu être enregistrée."; return;
+        message.textContent = friendlyError(error, "La publication n’a pas pu être enregistrée. Réessayez."); return;
       }
       form.reset();
       byId("announcement-media-preview").innerHTML = "";
@@ -244,7 +250,7 @@
       await loadAnnouncements();
     } catch (error) {
       if (mediaPath) await adminClient.storage.from("campus-announcement-media").remove([mediaPath]).catch(() => {});
-      message.textContent = error?.message || "Connexion interrompue : l’actualité n’a pas pu être publiée. Réessayez.";
+      message.textContent = friendlyError(error, "L’actualité n’a pas pu être publiée. Vérifiez votre connexion puis réessayez.");
     } finally {
       button.disabled = false;
     }
@@ -253,7 +259,7 @@
     const host = byId("representative-manager");
     host.innerHTML = `<div class="news-empty"><strong>Chargement…</strong></div>`;
     const { data, error } = await adminClient.from("class_representatives").select("site,program,level,user_id,assigned_at").order("site").order("program").order("level");
-    if (error) { host.innerHTML = `<div class="notice">Le registre des responsables est indisponible. Appliquez la nouvelle migration Supabase.</div>`; return; }
+    if (error) { host.innerHTML = `<div class="notice">La liste des responsables n’est pas disponible pour le moment. Réessayez plus tard.</div>`; return; }
     representativesCache = data || [];
     renderRepresentativeManager();
   }
@@ -275,10 +281,7 @@
     if (!student) { toast("Cet étudiant n’appartient pas au groupe sélectionné."); return; }
     const { error } = await adminClient.rpc("admin_assign_class_representative", { p_student_id: userId, p_site: site, p_program: program, p_level: level });
     if (error) {
-      const message = /permission denied|row-level security/i.test(error.message || "")
-        ? "Votre compte admin n’est pas autorisé sur ce site."
-        : error.message || "Le responsable n’a pas pu être désigné.";
-      toast(message);
+      toast(friendlyError(error, "Le responsable n’a pas pu être désigné. Vérifiez le groupe puis réessayez."));
       return;
     }
     toast(`${fullName(student)} est maintenant responsable de ce groupe.`);
@@ -289,7 +292,7 @@
     if (!person) return;
     if (person.bannedAt) { toast("Un compte banni ne peut pas être responsable."); return; }
     const { error } = await adminClient.rpc("admin_assign_class_representative", { p_student_id: person.studentId, p_site: person.site, p_program: person.program, p_level: person.level });
-    if (error) { toast(error.message || "Le rôle n’a pas pu être modifié."); return; }
+    if (error) { toast(friendlyError(error, "Le rôle n’a pas pu être modifié. Réessayez.")); return; }
     toast(`${fullName(person)} est maintenant responsable de ${keyFor(person)}.`);
     await loadRepresentatives();
     renderStudents();
@@ -303,14 +306,14 @@
       : `Supprimer définitivement le compte de ${fullName(person)} ? Ses demandes, photos et présences liées seront supprimées. Cette action est irréversible.`;
     if (!window.confirm(warning)) return;
     const { data, error } = await adminClient.functions.invoke("manage-student-account", { body: { action, studentId: userId } });
-    if (error || data?.error) { toast(data?.error || error?.message || "L’action n’a pas abouti."); return; }
+    if (error || data?.error) { toast(data?.error || friendlyError(error, "L’action n’a pas abouti. Réessayez.")); return; }
     toast(action === "ban" ? `${fullName(person)} a été banni et déconnecté.` : `Le compte de ${fullName(person)} a été supprimé.`);
     await refreshCurrent();
   }
   async function removeRepresentative(key) {
     const [site, program, level] = key.split("|");
     const { error } = await adminClient.from("class_representatives").delete().eq("site", site).eq("program", program).eq("level", level);
-    if (error) { toast(error.message || "Le responsable n’a pas pu être retiré."); return; }
+    if (error) { toast(friendlyError(error, "Le responsable n’a pas pu être retiré. Réessayez.")); return; }
     toast("Responsable retiré du groupe.");
     await loadRepresentatives();
   }
@@ -318,7 +321,7 @@
     if (!window.confirm("Réinitialiser le code secret du responsable ? Il devra en créer un nouveau.")) return;
     const [site, program, level] = key.split("|");
     const { error } = await adminClient.rpc("admin_reset_representative_daily_qr_pin", { p_site: site, p_program: program, p_level: level });
-    if (error) { toast(error.message || "Le code secret n’a pas pu être réinitialisé."); return; }
+    if (error) { toast(friendlyError(error, "Le code secret n’a pas pu être réinitialisé. Réessayez.")); return; }
     toast("Code secret réinitialisé. Le responsable devra en créer un nouveau.");
   }
   async function toggleAnnouncement(id) {
@@ -327,7 +330,7 @@
     const publish = item.status !== "published";
     try {
       const { data, error } = await adminClient.from("campus_announcements").update({ status: publish ? "published" : "draft", published_at: publish ? (item.published_at || new Date().toISOString()) : item.published_at }).eq("id", id).select("id").maybeSingle();
-      if (error || !data) { toast(error?.message || "Cette actualité n’a pas pu être modifiée. Vérifiez les droits du site."); return; }
+      if (error || !data) { toast(friendlyError(error, "Cette actualité n’a pas pu être modifiée. Réessayez.")); return; }
       const push = publish ? await dispatchCampusPush({ kind: "announcement", id }) : null;
       await loadAnnouncements();
       toast(!publish ? "Actualité retirée de l’espace étudiant." : push?.error ? "Actualité publiée; notification en arrière-plan indisponible." : push.data?.sent ? `Actualité publiée; notification envoyée à ${push.data.sent} appareil(s).` : "Actualité publiée; aucun appareil n’a activé les notifications.");
@@ -385,7 +388,7 @@
     if (!report.ok || !byId("photo-check")?.checked) { toast("Terminez les contrôles et confirmez la vérification visuelle de la photo."); return; }
     const button = byId("approve-request"); button.disabled = true;
     const { data, error } = await adminClient.rpc("admin_decide_application", { p_application_id: item.id, p_decision: "approved", p_reason: null });
-    if (error) { button.disabled = false; toast(error.message || "La décision n’a pas pu être enregistrée."); return; }
+    if (error) { button.disabled = false; toast(friendlyError(error, "La décision n’a pas pu être enregistrée. Réessayez.")); return; }
     closeReview();
     await refreshCurrent();
     const decided = Array.isArray(data) ? data[0] : data;
@@ -400,7 +403,7 @@
     if (!reason) { toast("Indiquez un motif de rejet pour informer l’étudiant."); byId("reject-reason").focus(); return; }
     const button = byId("reject-request"); button.disabled = true;
     const { error } = await adminClient.rpc("admin_decide_application", { p_application_id: item.id, p_decision: "rejected", p_reason: reason });
-    if (error) { button.disabled = false; toast(error.message || "Le rejet n’a pas pu être enregistré."); return; }
+    if (error) { button.disabled = false; toast(friendlyError(error, "Le rejet n’a pas pu être enregistré. Réessayez.")); return; }
     closeReview();
     await refreshCurrent();
     toast(`Demande rejetée · ${item.temporaryMatricule}.`);
@@ -408,7 +411,7 @@
   function closeReview() { byId("review-modal").classList.remove("open"); reviewedId = ""; }
   async function refreshCurrent() {
     try { await loadAdminData(); }
-    catch (error) { toast(error.message || "Les données ne sont pas joignables. Réessayez."); return; }
+    catch (error) { toast(friendlyError(error, "Les informations ne sont pas disponibles pour le moment. Réessayez.")); return; }
     renderDashboard(); if (currentView === "requests") renderRequests(); if (currentView === "students") renderStudents(); if (currentView === "attendance") renderAttendance(); if (currentView === "groups") renderGroups(); if (currentView === "representatives") await loadRepresentatives(); if (currentView === "announcements") await loadAnnouncements(); if (currentView === "cards") renderCards();
   }
   async function drawAdminCard(item) {
@@ -513,11 +516,11 @@
     if (!session) { showAdminGate("Connectez-vous avec votre compte administrateur."); return false; }
     currentAdminId = session.user.id;
     const { data: globalMembership, error: globalError } = await adminClient.from("admin_members").select("user_id").eq("user_id", session.user.id).maybeSingle();
-    if (globalError) { showAdminGate("La vérification du rôle admin Supabase a échoué."); return false; }
+    if (globalError) { showAdminGate("Impossible de vérifier votre autorisation. Réessayez ou contactez l’administration principale."); return false; }
     if (globalMembership) adminSite = null;
     else {
       const { data: siteMemberships, error: siteError } = await adminClient.from("admin_site_members").select("site").eq("user_id", session.user.id);
-      if (siteError) { showAdminGate("La vérification du site administrateur a échoué. Appliquez la migration des accès par site."); return false; }
+      if (siteError) { showAdminGate("Impossible de vérifier votre site. Réessayez ou contactez l’administration principale."); return false; }
       if (siteMemberships?.length !== 1) {
         await adminClient.auth.signOut();
         showAdminGate(siteMemberships?.length ? "Ce compte est associé à plusieurs sites. Contactez l’administrateur principal." : "Ce compte n’est pas autorisé à accéder à l’administration.");
@@ -532,7 +535,7 @@
     }
     try { await loadAdminData(); }
     catch (error) {
-      showAdminGate("Base de données indisponible. Appliquez les migrations Supabase et vérifiez les autorisations RLS avant de réessayer.");
+      showAdminGate("Les informations du campus ne sont pas disponibles pour le moment. Réessayez plus tard.");
       return false;
     }
     byId("admin-user-label").textContent = adminSite ? `${session.user.email || "Administration"} · ${siteName(adminSite)}` : (session.user.email || "Administration");
@@ -553,7 +556,7 @@
   async function bootAdminAuth() {
     const config = window.IRGIB_SUPABASE_CONFIG;
     if (!config?.url || !config?.anonKey) {
-      showAdminGate("L’accès admin est verrouillé. Configurez les variables Supabase du projet Vercel et autorisez le compte dans admin_members.");
+      showAdminGate("L’espace administration n’est pas disponible pour le moment. Contactez l’administration principale.");
       return;
     }
     if (!window.supabase?.createClient) { showAdminGate("Le service d’authentification n’a pas pu se charger. Vérifiez la connexion Internet puis rechargez la page."); return; }
@@ -566,7 +569,7 @@
         if (event === "SIGNED_OUT") showAdminGate("Vous êtes déconnecté.");
       });
     } catch {
-      showAdminGate("Impossible de vérifier la session Supabase. Vérifiez l’URL et la clé publique configurées.");
+      showAdminGate("Impossible de vérifier votre session. Rechargez la page ou reconnectez-vous.");
     }
   }
   byId("admin-login-form").addEventListener("submit", async event => {
@@ -575,7 +578,7 @@
     const password = byId("admin-password").value;
     const button = byId("admin-login-submit");
     if (!email || !password) { byId("admin-auth-message").textContent = "Saisissez votre adresse e-mail et votre mot de passe."; return; }
-    if (!adminClient) { byId("admin-auth-message").textContent = "L’authentification Supabase n’est pas configurée pour ce site."; return; }
+    if (!adminClient) { byId("admin-auth-message").textContent = "Le service de connexion est momentanément indisponible. Rechargez la page puis réessayez."; return; }
     button.disabled = true;
     byId("admin-auth-message").textContent = "Vérification du compte…";
     try {
@@ -587,13 +590,13 @@
       const code = String(error?.code || "");
       const message = String(error?.message || "").toLowerCase();
       if (code === "email_not_confirmed" || message.includes("email not confirmed")) {
-        byId("admin-auth-message").textContent = "Cette adresse e-mail n’est pas encore confirmée dans Supabase.";
+        byId("admin-auth-message").textContent = "Confirmez votre adresse e-mail avant de vous connecter.";
       } else if (code === "invalid_credentials" || message.includes("invalid login credentials")) {
-        byId("admin-auth-message").textContent = "Adresse e-mail ou mot de passe incorrect. Vérifiez le compte créé dans Supabase.";
+        byId("admin-auth-message").textContent = "Adresse e-mail ou mot de passe incorrect.";
       } else if (code === "user_not_found" || message.includes("user not found")) {
-        byId("admin-auth-message").textContent = "Aucun compte Supabase ne correspond à cette adresse e-mail.";
+        byId("admin-auth-message").textContent = "Aucun compte ne correspond à cette adresse e-mail.";
       } else {
-        byId("admin-auth-message").textContent = "Connexion refusée : " + (error?.message || "erreur Supabase inconnue");
+        byId("admin-auth-message").textContent = friendlyError(error, "Connexion refusée. Vérifiez vos identifiants ou contactez l’administration principale.");
       }
     } finally { button.disabled = false; }
   });

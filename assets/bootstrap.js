@@ -20,5 +20,5 @@
       script.onerror = () => showError("Le module de l’espace n’a pas pu se charger. Rechargez la page.");
       document.body.append(script);
     })
-    .catch(() => showError("Le service sécurisé n’est pas prêt. Vérifiez les variables Supabase et la connexion, puis rechargez la page."));
+    .catch(() => showError("Le service est momentanément indisponible. Vérifiez votre connexion puis rechargez la page."));
 })();
