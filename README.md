@@ -5,7 +5,7 @@
 - Étudiants : /etudiant/
 - Administration : /espace-campus/ (connexion Supabase et autorisation par site ; /admin/ renvoie au portail étudiant)
 - Configuration publique d’exécution : /api/config lit uniquement les variables SUPABASE_URL et SUPABASE_PUBLISHABLE_KEY.
-- La clé service_role n’est jamais utilisée côté navigateur ni dans ce dépôt.
+- La clé `service_role` n’est jamais exposée au navigateur ni stockée dans le dépôt ; elle est utilisée uniquement côté serveur par la fonction Edge via une variable d’environnement secrète.
 
 ## Backend Supabase
 
