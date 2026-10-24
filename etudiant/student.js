@@ -698,9 +698,30 @@
     const confirm = byId("confirm-password").value;
     if (next.length < 8) { byId("password-message").textContent = "Le nouveau mot de passe doit contenir au moins 8 caractères."; return; }
     if (next !== confirm) { byId("password-message").textContent = "Les deux nouveaux mots de passe ne correspondent pas."; return; }
-    const { error } = await db.auth.updateUser({ password: next });
-    byId("password-message").textContent = error ? "Le mot de passe n’a pas pu être mis à jour." : "Votre mot de passe a été mis à jour.";
-    if (!error) event.currentTarget.reset();
+    const button = event.currentTarget.querySelector('button[type="submit"]');
+    button.disabled = true;
+    byId("password-message").textContent = "Vérification du mot de passe actuel…";
+    try {
+      const email = currentUser?.email;
+      if (!email || !current) {
+        byId("password-message").textContent = "Saisissez votre mot de passe actuel pour continuer.";
+        return;
+      }
+      const { data: reauthenticated, error: reauthError } = await db.auth.signInWithPassword({ email, password: current });
+      if (reauthError || !reauthenticated.user || reauthenticated.user.id !== currentUser.id) {
+        byId("password-message").textContent = "Le mot de passe actuel est incorrect. Vérifiez-le puis réessayez.";
+        return;
+      }
+      const { error } = await db.auth.updateUser({ password: next });
+      byId("password-message").textContent = error
+        ? "Le mot de passe a été vérifié, mais sa mise à jour a échoué. Réessayez."
+        : "Votre mot de passe a été mis à jour.";
+      if (!error) event.currentTarget.reset();
+    } catch {
+      byId("password-message").textContent = "La vérification n’a pas abouti. Vérifiez votre connexion puis réessayez.";
+    } finally {
+      button.disabled = false;
+    }
   });
   byId("signout").addEventListener("click", async () => {
     stopCamera();
