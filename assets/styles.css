@@ -489,17 +489,17 @@ body:has(#portal-screen[style*="display: block"])>.notice{max-width:1100px;margi
 .account-security .form-actions{flex-wrap:wrap}
 @media(max-width:700px){.account-security{margin-top:19px;padding:16px 14px;border-radius:15px}.account-security .form-actions{align-items:stretch;flex-direction:column}.account-security .form-actions .btn{width:100%;min-height:44px}.password-step{max-width:none}}
 
-/* Student page background: quieter poster colors, still, under a glass sheet. The badge stays as it is. */
+/* Student page background: the bright poster colors, still, seen through a glass sheet. The badge stays as it is. */
 body:has(#portal-screen[style*="display: block"]){
-  background-color:#2f8f55;
+  background-color:#16a34a;
   background-image:
-    radial-gradient(circle at 8% 16%, #2f8f55 0 24%, transparent 24.3%),
-    radial-gradient(circle at 24% 6%, #c44747 0 18%, transparent 18.3%),
-    radial-gradient(circle at 42% 18%, #d67a32 0 14%, transparent 14.3%),
-    radial-gradient(circle at 54% 58%, #c9a227 0 12%, transparent 12.3%),
-    radial-gradient(circle at 86% 24%, #6246b0 0 30%, transparent 30.3%),
-    radial-gradient(circle at 92% 78%, #c44747 0 15%, transparent 15.3%),
-    linear-gradient(118deg, #2f8f55 0 32%, #c44747 32% 46%, #d67a32 46% 56%, #c9a227 56% 64%, #6246b0 64% 100%);
+    radial-gradient(circle at 8% 16%, #16a34a 0 24%, transparent 24.3%),
+    radial-gradient(circle at 24% 6%, #ef4444 0 18%, transparent 18.3%),
+    radial-gradient(circle at 42% 18%, #f97316 0 14%, transparent 14.3%),
+    radial-gradient(circle at 54% 58%, #f5c400 0 12%, transparent 12.3%),
+    radial-gradient(circle at 86% 24%, #6d28d9 0 30%, transparent 30.3%),
+    radial-gradient(circle at 92% 78%, #ef4444 0 15%, transparent 15.3%),
+    linear-gradient(118deg, #16a34a 0 32%, #ef4444 32% 46%, #f97316 46% 56%, #f5c400 56% 64%, #6d28d9 64% 100%);
   background-attachment:fixed;
   background-position:center;
   background-size:cover
@@ -510,9 +510,13 @@ body:has(#portal-screen[style*="display: block"])::before{
   inset:0;
   z-index:0;
   pointer-events:none;
-  background:rgba(255,255,255,.62);
-  backdrop-filter:blur(18px) saturate(.9);
-  -webkit-backdrop-filter:blur(18px) saturate(.9)
+  background:
+    linear-gradient(115deg, rgba(255,255,255,.55) 0%, rgba(255,255,255,.08) 18%, rgba(255,255,255,0) 36%),
+    linear-gradient(180deg, rgba(255,255,255,.34), rgba(255,255,255,.2) 40%, rgba(255,255,255,.28));
+  border-top:1px solid rgba(255,255,255,.75);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9), inset 0 -40px 80px rgba(255,255,255,.18);
+  backdrop-filter:blur(16px) saturate(1.25);
+  -webkit-backdrop-filter:blur(16px) saturate(1.25)
 }
 body:has(#portal-screen[style*="display: block"])>.topbar,
 body:has(#portal-screen[style*="display: block"])>.content,
