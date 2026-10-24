@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#12315a"><meta name="robots" content="noindex,nofollow"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <title>Espace étudiant · IRGIB AFRICA</title><link rel="manifest" href="/manifest.webmanifest?v=4"><link rel="icon" type="image/png" sizes="192x192" href="/assets/pwa-192-v4.png"><link rel="apple-touch-icon" href="/assets/pwa-192-v4.png"><link rel="stylesheet" href="../assets/styles.css?v=20261027b">
+  <title>Espace étudiant · IRGIB AFRICA</title><link rel="manifest" href="/manifest.webmanifest?v=4"><link rel="icon" type="image/png" sizes="192x192" href="/assets/pwa-192-v4.png"><link rel="apple-touch-icon" href="/assets/pwa-192-v4.png"><link rel="stylesheet" href="../assets/styles.css?v=20261028a">
 </head>
 <body>
   <header class="topbar"><a class="brand" href="./"><img src="../assets/blason.jpg" alt="Blason IRGIB AFRICA"><span>IRGIB AFRICA<small>Portail étudiant</small></span></a><div class="top-actions"><span class="pill"><span class="dot"></span> Espace sécurisé</span><button id="signout" class="btn danger sm" style="display:none">Déconnexion</button></div></header>
@@ -48,7 +48,7 @@
     <section id="portal-screen" style="display:none">
       <div class="portal-hero compact-hero"><div><div class="eyebrow">Espace étudiant</div><h1>Bonjour <span id="hello-name">Étudiant</span></h1><p>Suivez votre demande de carte, votre profil et vos présences depuis le même espace.</p></div><div class="hero-mark"><img src="../assets/blason.jpg" alt="Blason de l’université"></div></div>
       <div id="notification-banner" class="notice notification-banner" style="display:none;margin-top:15px"></div>
-      <nav class="student-tabs" aria-label="Espace étudiant"><button class="active" data-student-view="request">Accueil</button><button data-student-view="news">Actualités</button><button data-student-view="attendance">Présences</button><button data-student-view="card">Ma carte</button><button data-student-view="profile">Profil</button></nav>
+      <nav class="student-tabs" aria-label="Espace étudiant"><button id="student-home-tab" class="active" data-student-view="request">Accueil</button><button data-student-view="news">Actualités</button><button data-student-view="attendance">Présences</button><button id="student-card-tab" data-student-view="card">Ma carte</button><button data-student-view="profile">Profil</button></nav>
 
       <section class="student-view active" id="student-view-request"><div class="portal-grid student-main-grid">
         <div class="panel"><div class="panel-head"><div><div class="eyebrow">Carte étudiant</div><h2>Ma demande de badge</h2><p>Vérifiez soigneusement les champs avant l’envoi.</p></div></div>
@@ -91,7 +91,7 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-  <script src="/assets/pwa-install.js?v=20261027b" defer></script>
-  <script src="/assets/bootstrap.js?v=backend3" data-entry="/etudiant/student.js?v=backend21" data-error-target="login-message"></script>
+  <script src="/assets/pwa-install.js?v=20261028a" defer></script>
+  <script src="/assets/bootstrap.js?v=backend3" data-entry="/etudiant/student.js?v=backend22" data-error-target="login-message"></script>
 </body>
 </html>

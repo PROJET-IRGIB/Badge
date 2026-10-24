@@ -129,6 +129,15 @@
     }
     if (view === "profile") { renderProfile(); }
   };
+  function configureStudentNavigation(app) {
+    const approved = app?.status === "approved";
+    const homeTab = byId("student-home-tab");
+    const cardTab = byId("student-card-tab");
+    homeTab.dataset.studentView = approved ? "card" : "request";
+    homeTab.textContent = "Accueil";
+    cardTab.dataset.studentView = approved ? "request" : "card";
+    cardTab.textContent = approved ? "Demande" : "Ma carte";
+  }
   const populateRequestForm = () => {
     const app = getApplication();
     const source = app || profile;
@@ -747,7 +756,17 @@
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "badge_applications", filter: `student_id=eq.${currentUser.id}` }, async () => {
         const oldStatus = application?.status;
-        try { await loadStudentData(); if (application) applicationSummary(application); renderNotification(application); renderMyCard(); if (oldStatus !== "approved" && application?.status === "approved") void showCampusNotification("Votre badge IRGIB est approuvé", `Votre matricule définitif est ${application.finalMatricule}. Votre carte est disponible dans votre espace.`, `badge-approved-${application.id}`, "/etudiant/#card"); }
+        try {
+          await loadStudentData();
+          if (application) applicationSummary(application);
+          configureStudentNavigation(application);
+          renderNotification(application);
+          renderMyCard();
+          if (oldStatus !== "approved" && application?.status === "approved") {
+            selectStudentView("card");
+            void showCampusNotification("Votre badge IRGIB est approuvé", `Votre matricule définitif est ${application.finalMatricule}. Votre carte est disponible dans votre espace.`, `badge-approved-${application.id}`, "/etudiant/#card");
+          }
+        }
         catch { byId("login-message").textContent = "La mise à jour de votre dossier est temporairement indisponible."; }
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "attendance_records", filter: `student_id=eq.${currentUser.id}` }, async () => {
@@ -765,16 +784,18 @@
         catch { /* L’actualisation périodique récupérera les coordonnées en cas d’interruption. */ }
       }).subscribe();
     byId("hello-name").textContent = profile.firstName;
+    const app = getApplication();
+    configureStudentNavigation(app);
     renderNotification(getApplication());
     renderSiteInfo();
     renderProfile();
-    const app = getApplication();
     if (app) applicationSummary(app);
     else { byId("request-form-wrap").style.display = "block"; byId("request-readonly").style.display = "none"; populateRequestForm(); }
     renderMyCard();
     renderAttendance();
     if (location.hash === "#news") selectStudentView("news");
     else if (location.hash === "#card") selectStudentView("card");
+    else selectStudentView(app?.status === "approved" ? "card" : "request");
   }
 
   byId("show-login").addEventListener("click", () => showAuthPage("login"));
@@ -1088,7 +1109,7 @@
     const printWindow = window.open("", "irgib-card-print", "popup,width=980,height=820");
     if (!printWindow) { byId("my-card-status").insertAdjacentHTML("beforeend", '<p class="form-message" role="status">Autorisez l’ouverture de la fenêtre d’impression pour créer le PDF.</p>'); return; }
     printWindow.opener = null;
-    const stylesUrl = new URL("../assets/styles.css?v=20261024e", location.href).href;
+    const stylesUrl = new URL("../assets/styles.css?v=20261028a", location.href).href;
     const sheets = faces.map(face => {
       const clone = face.cloneNode(true);
       clone.querySelectorAll(".card-v2-qr").forEach(qrHost => {
