@@ -2,3 +2,19 @@
 .env*
 /assets/supabase-config.js
 supabase/.temp/
+
+# Local secrets, exports, backups, and student-upload directories.
+*.pem
+*.key
+*.csv
+*.xlsx
+*.dump
+*.dump.sql
+*.backup.sql
+*.export.sql
+*_backup.sql
+*_export.sql
+/backups/
+/exports/
+/photos/
+/uploads/

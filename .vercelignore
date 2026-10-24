@@ -1,6 +1,22 @@
 # Vercel CLI deployment ignore list.
 .vercel
 .env*
+*.pem
+*.key
+*.csv
+*.xlsx
+*.dump
+*.dump.sql
+*.backup.sql
+*.export.sql
+*_backup.sql
+*_export.sql
+.env.local
+.env.*.local
+/backups/
+/exports/
+/photos/
+/uploads/
 .git
 /README.md
 /start-demo.ps1
