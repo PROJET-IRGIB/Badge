@@ -450,7 +450,20 @@
     byId("admin-auth-message").textContent = message;
   }
   function initAdminApp() {
-    if (appInitialized) return;
+    // Rebuild scope-dependent options on every login. Event handlers are
+    // installed once, but a new account must never inherit another site's filters.
+    initGroupFilters();
+    byId("rep-site").innerHTML = (adminSite ? D.sites.filter(site => site.id === adminSite) : D.sites).map(site => `<option value="${esc(site.id)}">${esc(site.city)}</option>`).join("");
+    byId("rep-program").innerHTML = D.programs.map(item => `<option value="${esc(item.code)}">${esc(item.code)} · ${esc(programName(item.code))}</option>`).join("");
+    byId("rep-level").innerHTML = D.levels.map(level => `<option value="${esc(level)}">${esc(level)}</option>`).join("");
+    const announcementSite = byId("announcement-site");
+    announcementSite.innerHTML = adminSite
+      ? `<option value="${esc(adminSite)}">${esc(siteName(adminSite))} uniquement</option><option value="all">Tous les sites</option>`
+      : `<option value="all">Tous les sites</option>${D.sites.map(site => `<option value="${esc(site.id)}">${esc(site.city)} uniquement</option>`).join("")}`;
+    if (appInitialized) {
+      setView(currentView);
+      return;
+    }
     appInitialized = true;
     const studentHeading = document.querySelector("#view-students .table-tools h3");
     if (studentHeading) studentHeading.textContent = "Étudiants inscrits";
