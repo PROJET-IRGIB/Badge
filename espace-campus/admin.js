@@ -18,6 +18,8 @@
   let attendanceCache = [];
   let announcementsCache = [];
   let representativesCache = [];
+  let siteContactsCache = [];
+  let siteContactsAvailable = false;
   let adminSite = null;
   let currentAdminId = "";
   const applications = () => applicationsCache;
@@ -43,11 +45,11 @@
       profiles.push(...(data || []));
       if (!data || data.length < 500) break;
     }
-    studentProfilesCache = profiles.map(row => ({ studentId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, bannedAt: row.banned_at || null }));
+    studentProfilesCache = profiles.map(row => ({ studentId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, bannedAt: row.banned_at || null, cardSuspendedAt: row.card_suspended_at || null }));
     const records = [];
     for (let from = 0; ; from += 500) {
       const { data, error } = await adminClient.from("attendance_records")
-        .select("status,attended_at,session_id,marked_by,student_profiles!inner(user_id,first_name,last_name,email,program,level,site),attendance_sessions!inner(site,program,level,session_day,course_title)")
+        .select("status,attended_at,session_id,marked_by,student_profiles!inner(user_id,first_name,last_name,email,program,level,site,banned_at,card_suspended_at),attendance_sessions!inner(site,program,level,session_day,course_title)")
         .eq("attendance_sessions.session_day", D.todayKey())
         .order("attended_at", { ascending: false, nullsFirst: false }).order("id", { ascending: false }).range(from, from + 499);
       if (error) throw error;
@@ -55,10 +57,16 @@
       if (!data || data.length < 500) break;
     }
     const byStudent = new Map(applicationsCache.map(item => [item.studentId, item]));
-    attendanceCache = (records || []).map(row => {
+    attendanceCache = (records || []).filter(row => !row.student_profiles.banned_at && !row.student_profiles.card_suspended_at).map(row => {
       const person = row.student_profiles; const app = byStudent.get(person.user_id); const actor = row.marked_by ? byStudent.get(row.marked_by) : null;
       return { studentId: person.user_id, markedBy: row.marked_by, markedByName: actor ? fullName(actor) : "Étudiant", createdAt: row.attended_at, day: row.attendance_sessions.session_day, sessionCode: row.session_id.slice(0, 8), courseTitle: row.attendance_sessions.course_title, present: row.status === "present", firstName: person.first_name, lastName: person.last_name, email: person.email, matricule: app?.finalMatricule || app?.temporaryMatricule || "", program: person.program, level: person.level, site: person.site };
     });
+    const { data: contacts, error: contactsError } = await adminClient.from("campus_site_contacts").select("site,contact_name,address,phone,updated_at");
+    siteContactsAvailable = !contactsError;
+    if (!contactsError) {
+      siteContactsCache = contacts || [];
+      D.applySiteContacts(siteContactsCache);
+    }
   }
   const statusText = status => ({ pending: "En attente", approved: "Approuvée", rejected: "Rejetée" }[status] || status);
   const statusHtml = status => `<span class="status ${status === "approved" ? "active" : status === "rejected" ? "rejected" : "pending"}">${statusText(status)}</span>`;
@@ -119,7 +127,7 @@
       const app = applications().find(item => item.studentId === person.studentId);
       const rep = representativesCache.find(item => item.user_id === person.studentId);
       const inGroupRep = representativesCache.some(item => item.site === person.site && item.program === person.program && item.level === person.level);
-      return `<tr><td>${app ? photoCell(app) : `<span class="table-photo photo-empty">—</span>`}</td><td><strong>${esc(fullName(person))}</strong><span class="sub">${esc(person.email)}</span>${person.bannedAt ? `<span class="sub status rejected">Compte banni</span>` : ""}</td><td><strong>${esc(app?.finalMatricule || app?.temporaryMatricule || "—")}</strong><span class="sub">${app ? statusText(app.status) : "Inscrit · demande non envoyée"}</span></td><td>${esc(person.sex)}</td><td>${esc(programName(person.program))}<span class="sub">${esc(person.level)}</span></td><td>${esc(siteName(person.site))}</td><td>${esc(keyFor(person))}</td><td class="student-admin-actions"><button class="btn secondary sm" type="button" data-student-role="${esc(person.studentId)}" ${person.bannedAt || rep ? "disabled" : ""}>${rep ? "Déjà responsable" : inGroupRep ? "Remplacer responsable" : "Nommer responsable"}</button>${person.bannedAt ? `<span class="small muted">Banni</span>` : `<button class="btn danger sm" type="button" data-student-ban="${esc(person.studentId)}">Bannir</button>`}<button class="btn danger sm" type="button" data-student-delete="${esc(person.studentId)}">Supprimer</button></td></tr>`;
+      return `<tr><td>${app ? photoCell(app) : `<span class="table-photo photo-empty">—</span>`}</td><td><strong>${esc(fullName(person))}</strong><span class="sub">${esc(person.email)}</span>${person.bannedAt ? `<span class="sub status rejected">Compte banni</span>` : ""}${person.cardSuspendedAt ? `<span class="sub status rejected">Carte désactivée</span>` : ""}</td><td><strong>${esc(app?.finalMatricule || app?.temporaryMatricule || "—")}</strong><span class="sub">${app ? statusText(app.status) : "Inscrit · demande non envoyée"}</span></td><td>${esc(person.sex)}</td><td>${esc(programName(person.program))}<span class="sub">${esc(person.level)}</span></td><td>${esc(siteName(person.site))}</td><td>${esc(keyFor(person))}</td><td class="student-admin-actions"><button class="btn secondary sm" type="button" data-student-role="${esc(person.studentId)}" ${person.bannedAt || person.cardSuspendedAt || rep ? "disabled" : ""}>${rep ? "Déjà responsable" : inGroupRep ? "Remplacer responsable" : "Nommer responsable"}</button>${person.bannedAt ? `<span class="small muted">Banni</span>` : `<button class="btn danger sm" type="button" data-student-ban="${esc(person.studentId)}">Bannir</button>`}<button class="btn danger sm" type="button" data-student-delete="${esc(person.studentId)}">Supprimer</button></td></tr>`;
     }).join("") || `<tr><td colspan="8" class="table-empty">Aucun étudiant inscrit trouvé.</td></tr>`;
   }
   const careerCycles = [
@@ -191,7 +199,12 @@
   }
   function renderCatalog() {
     byId("program-grid").innerHTML = D.programs.map(program => `<article class="program-card"><span class="program-code">${esc(program.code)}</span><div class="program-title">${esc(program.name)}</div></article>`).join("");
-    byId("site-grid").innerHTML = D.sites.map(site => `<article class="site-card"><span class="site-code">ZONE ${esc(site.zone)} · ${esc(site.id)}</span><strong>${esc(site.city)}</strong>${site.points.map(point => `<p><b>${esc(point.name)}</b> · ${esc(point.address)}<br>${esc(point.phone)}</p>`).join("")}</article>`).join("");
+    const sites = D.sites.filter(site => !adminSite || site.id === adminSite);
+    byId("site-grid").innerHTML = sites.map(site => {
+      const point = site.points?.[0] || {};
+      const contact = siteContactsCache.find(row => row.site === site.id) || {};
+      return `<article class="site-card"><span class="site-code">ZONE ${esc(site.zone)} · ${esc(site.id)}</span><strong>${esc(site.city)}</strong>${siteContactsAvailable ? `<form class="site-contact-form" data-site-contact="${esc(site.id)}"><label>Contact / zone<input name="contact_name" maxlength="80" value="${esc(contact.contact_name || point.name || site.city)}" required></label><label>Adresse<input name="address" maxlength="200" value="${esc(contact.address || point.address || "")}" required></label><label>Téléphone<input name="phone" type="tel" maxlength="40" value="${esc(contact.phone || point.phone || "")}" required></label><button class="btn secondary sm" type="submit">Enregistrer les contacts</button></form>` : `<p>La gestion centralisée des contacts sera disponible après l’activation de la migration Supabase.</p>`}</article>`;
+    }).join("");
   }
   function renderAnnouncements() {
     const host = byId("announcement-admin-rows");
@@ -270,7 +283,7 @@
     const program = byId("rep-program").value || D.programs[0].code;
     const level = byId("rep-level").value || D.levels[0];
     const assignment = representativesCache.find(item => item.site === site && item.program === program && item.level === level);
-    const candidates = studentProfilesCache.filter(item => item.site === site && item.program === program && item.level === level && !item.bannedAt);
+    const candidates = studentProfilesCache.filter(item => item.site === site && item.program === program && item.level === level && !item.bannedAt && !item.cardSuspendedAt);
     const current = assignment && studentProfilesCache.find(item => item.studentId === assignment.user_id);
     const select = `<label for="rep-student">Étudiant du groupe</label><select id="rep-student"><option value="">${candidates.length ? "Choisir dans le groupe" : "Aucun étudiant disponible"}</option>${candidates.map(item => `<option value="${esc(item.studentId)}" ${assignment?.user_id === item.studentId ? "selected" : ""}>${esc(fullName(item))} · ${esc(applications().find(app => app.studentId === item.studentId)?.finalMatricule || applications().find(app => app.studentId === item.studentId)?.temporaryMatricule || "Sans matricule")}</option>`).join("")}</select>`;
     byId("representative-manager").innerHTML = `<div class="representative-group-summary"><span class="news-tag">${esc(siteName(site))}</span><span class="news-tag">${esc(programName(program))}</span><span class="news-tag">${esc(level)}</span></div>${assignment ? `<div class="representative-current"><div><small>Responsable actuel</small><strong>${esc(current ? fullName(current) : "Compte affecté, étudiant non trouvé")}</strong><span>${esc(applications().find(app => app.studentId === assignment.user_id)?.finalMatricule || "")}</span></div><button class="btn secondary sm" type="button" data-rep-reset-pin="${esc(`${site}|${program}|${level}`)}">Réinitialiser son code QR</button><button class="btn danger sm" type="button" data-rep-remove="${esc(`${site}|${program}|${level}`)}">Retirer</button></div>` : `<div class="notice">Aucun responsable n’est encore désigné pour ce groupe.</div>`}<div class="representative-assign">${select}<button class="btn" type="button" data-rep-assign="${esc(`${site}|${program}|${level}`)}">${assignment ? "Remplacer le responsable" : "Désigner le responsable"}</button></div><p class="field-help">L’administrateur peut désigner tout étudiant actif de ce groupe, même si sa carte n’est pas encore approuvée. Un responsable actif est associé à un seul groupe.</p>`;
@@ -308,7 +321,12 @@
       : `Supprimer définitivement le compte de ${fullName(person)} ? Ses demandes, photos et présences liées seront supprimées. Cette action est irréversible.`;
     if (!window.confirm(warning)) return;
     const { data, error } = await adminClient.functions.invoke("manage-student-account", { body: { action, studentId: userId } });
-    if (error || data?.error) { toast(data?.error || friendlyError(error, "L’action n’a pas abouti. Réessayez.")); return; }
+    if (error || data?.error) {
+      let detail = data?.error || "";
+      if (!detail && error?.context?.json) { try { detail = (await error.context.json())?.error || ""; } catch {} }
+      toast(detail || friendlyError(error, "L’action n’a pas abouti. Vérifiez que la fonction de gestion est déployée et réessayez."));
+      return;
+    }
     toast(action === "ban" ? `${fullName(person)} a été banni et déconnecté.` : `Le compte de ${fullName(person)} a été supprimé.`);
     await refreshCurrent();
   }
@@ -323,7 +341,11 @@
     if (!window.confirm("Réinitialiser le code secret du responsable ? Il devra en créer un nouveau.")) return;
     const [site, program, level] = key.split("|");
     const { error } = await adminClient.rpc("admin_reset_representative_daily_qr_pin", { p_site: site, p_program: program, p_level: level });
-    if (error) { toast(friendlyError(error, "Le code secret n’a pas pu être réinitialisé. Réessayez.")); return; }
+    if (error) {
+      const message = String(error.message || "").toLowerCase();
+      const detail = message.includes("aucun responsable") ? "Aucun responsable n’est actuellement affecté à ce groupe. Actualisez la liste." : message.includes("site") || message.includes("permission") ? "Votre compte n’est pas autorisé à réinitialiser le code de ce site." : message.includes("function") || message.includes("schema cache") ? "La migration de réinitialisation n’est pas encore appliquée dans Supabase." : friendlyError(error, "Le code secret n’a pas pu être réinitialisé. Réessayez.");
+      toast(detail); return;
+    }
     toast("Code secret réinitialisé. Le responsable devra en créer un nouveau.");
   }
   async function toggleAnnouncement(id) {
@@ -331,8 +353,8 @@
     if (!item) return;
     const publish = item.status !== "published";
     try {
-      const { data, error } = await adminClient.from("campus_announcements").update({ status: publish ? "published" : "draft", published_at: publish ? (item.published_at || new Date().toISOString()) : item.published_at }).eq("id", id).select("id").maybeSingle();
-      if (error || !data) { toast(friendlyError(error, "Cette actualité n’a pas pu être modifiée. Réessayez.")); return; }
+      const { data, error } = await adminClient.rpc("admin_set_campus_announcement_status", { p_announcement_id: id, p_status: publish ? "published" : "draft" });
+      if (error || !data) { toast(friendlyError(error, "Cette actualité n’a pas pu être modifiée. Vérifiez que la migration du module Actualités est appliquée.")); return; }
       const push = publish ? await dispatchCampusPush({ kind: "announcement", id }) : null;
       await loadAnnouncements();
       toast(!publish ? "Actualité retirée de l’espace étudiant." : push?.error ? "Actualité publiée; notification en arrière-plan indisponible." : push.data?.sent ? `Actualité publiée; notification envoyée à ${push.data.sent} appareil(s).` : "Actualité publiée; aucun appareil n’a activé les notifications.");
@@ -340,10 +362,39 @@
       toast("Connexion interrompue : cette actualité n’a pas pu être modifiée.");
     }
   }
+  async function setStudentCardSuspension(studentId, wasSuspended) {
+    const person = studentProfilesCache.find(item => item.studentId === studentId);
+    if (!person) return;
+    const suspended = !wasSuspended;
+    const question = suspended
+      ? `Désactiver temporairement la carte de ${fullName(person)} ? Son QR ne fonctionnera plus et il sera retiré des listes de pointage. Son inscription et son matricule seront conservés.`
+      : `Réactiver la carte de ${fullName(person)} ? Le même QR redeviendra valide.`;
+    if (!window.confirm(question)) return;
+    const { error } = await adminClient.rpc("admin_set_student_card_suspension", { p_student_id: studentId, p_suspended: suspended });
+    if (error) { toast(friendlyError(error, "La carte n’a pas pu être mise à jour. Vérifiez que la migration de gestion des cartes est appliquée.")); return; }
+    await refreshCurrent();
+    toast(suspended ? "Carte désactivée temporairement; le QR est désormais refusé." : "Carte réactivée; son QR est de nouveau valide.");
+  }
+  async function saveSiteContact(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const site = form.dataset.siteContact;
+    if (adminSite && site !== adminSite) { toast("Vous ne pouvez modifier que les contacts de votre site."); return; }
+    const values = new FormData(form);
+    const button = form.querySelector('button[type="submit"]');
+    button.disabled = true;
+    const { data, error } = await adminClient.from("campus_site_contacts").update({ contact_name: String(values.get("contact_name")).trim(), address: String(values.get("address")).trim(), phone: String(values.get("phone")).trim(), updated_at: new Date().toISOString() }).eq("site", site).select("site,contact_name,address,phone,updated_at").maybeSingle();
+    button.disabled = false;
+    if (error || !data) { toast(friendlyError(error, "Les contacts n’ont pas été enregistrés. Vérifiez que la migration du catalogue est appliquée.")); return; }
+    siteContactsCache = [...siteContactsCache.filter(row => row.site !== site), data];
+    D.applySiteContacts([data]);
+    renderCatalog();
+    toast(`Contacts de ${siteName(site)} enregistrés pour les étudiants.`);
+  }
   function renderCards() {
     const query = (byId("card-search").value || "").trim().toLowerCase();
     const list = approved().filter(item => [fullName(item), item.finalMatricule, programName(item.program), siteName(item.site)].join(" ").toLowerCase().includes(query));
-    byId("card-rows").innerHTML = list.map(item => `<tr><td>${photoCell(item)}</td><td><strong>${esc(fullName(item))}</strong></td><td>${esc(item.finalMatricule)}</td><td>${esc(programName(item.program))}<span class="sub">${esc(item.level)}</span></td><td>${esc(siteName(item.site))}</td><td><button class="btn secondary sm" data-preview-card="${esc(item.id)}">Prévisualiser</button></td></tr>`).join("") || `<tr><td colspan="6" class="table-empty">Aucune carte approuvée.</td></tr>`;
+    byId("card-rows").innerHTML = list.map(item => { const person = studentProfilesCache.find(row => row.studentId === item.studentId); const suspended = Boolean(person?.cardSuspendedAt); return `<tr><td>${photoCell(item)}</td><td><strong>${esc(fullName(item))}</strong>${suspended ? `<span class="sub status rejected">Carte temporairement désactivée</span>` : ""}</td><td>${esc(item.finalMatricule)}</td><td>${esc(programName(item.program))}<span class="sub">${esc(item.level)}</span></td><td>${esc(siteName(item.site))}</td><td><div class="table-actions"><button class="btn secondary sm" data-preview-card="${esc(item.id)}">Prévisualiser</button><button class="btn ${suspended ? "" : "danger"} sm" data-card-suspension="${esc(item.studentId)}" data-suspended="${suspended ? "1" : "0"}">${suspended ? "Réactiver la carte" : "Désactiver temporairement"}</button></div></td></tr>`; }).join("") || `<tr><td colspan="6" class="table-empty">Aucune carte approuvée.</td></tr>`;
   }
   function auditReport(item) {
     const required = [item.firstName, item.lastName, item.email, item.phone, item.program, item.level, item.site, item.sex];
@@ -421,7 +472,9 @@
     if (error || !signedPhoto?.signedUrl) { toast("La photo privée ne peut pas être chargée pour cette carte."); return; }
     item.photo = signedPhoto.signedUrl;
     byId("admin-card-zone").innerHTML = D.cardHtml(item, "admin-card-qr");
-    if (window.QRCode) new QRCode(byId("admin-card-qr"), { text: `IRGIB-CARTE:${item.finalMatricule}`, width: 128, height: 128, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+    const person = studentProfilesCache.find(profile => profile.studentId === item.studentId);
+    if (person?.cardSuspendedAt) byId("admin-card-qr").innerHTML = '<span class="card-suspended-qr">CARTE DÉSACTIVÉE</span>';
+    else if (window.QRCode) new QRCode(byId("admin-card-qr"), { text: `IRGIB-CARTE:${item.finalMatricule}`, width: 128, height: 128, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
     else byId("admin-card-qr").innerHTML = '<div class="qr-fallback">QR indisponible</div>';
     byId("card-preview-title").textContent = `${fullName(item)} · ${item.finalMatricule}`;
     byId("card-preview-panel").style.display = "block";
@@ -479,6 +532,10 @@
     byId("card-search").addEventListener("input", renderCards);
     ["group-site", "group-program", "group-level"].forEach(id => byId(id).addEventListener("change", renderGroups));
     byId("announcement-form").addEventListener("submit", event => void publishAnnouncement(event));
+    document.addEventListener("submit", event => {
+      const contactForm = event.target instanceof HTMLFormElement ? event.target.closest("form[data-site-contact]") : null;
+      if (contactForm) void saveSiteContact(event);
+    });
     byId("announcement-media").addEventListener("change", event => {
       const preview = byId("announcement-media-preview");
       const file = event.currentTarget.files?.[0];
@@ -510,6 +567,8 @@
       if (preview) { const item = approved().find(application => application.id === preview.dataset.previewCard); if (item) void drawAdminCard(item); }
       const exportButton = target?.closest("[data-export]");
       if (exportButton) exportCsv(exportButton.dataset.export);
+      const cardStatus = target?.closest("[data-card-suspension]");
+      if (cardStatus) void setStudentCardSuspension(cardStatus.dataset.cardSuspension, cardStatus.dataset.suspended === "1");
     });
     byId("print-admin-card").addEventListener("click", () => { document.body.classList.add("print-card-mode", "admin-print-mode"); window.print(); setTimeout(() => document.body.classList.remove("print-card-mode", "admin-print-mode"), 900); });
     byId("admin-logout").addEventListener("click", async () => {

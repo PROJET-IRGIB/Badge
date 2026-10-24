@@ -33,7 +33,9 @@
   let selectedPhotoName = "";
   let selectedPhotoBlob = null;
   let scannedSession = "";
+  let scannedSessionInfo = null;
   let announcements = [];
+  const expandedNewsIds = new Set();
   let lastNewsRefresh = 0;
   let initialNewsLoaded = false;
   const knownAnnouncementIds = new Set();
@@ -44,13 +46,17 @@
   let selectedRepresentativeStudent = null;
   let representativeCameraStream = null;
   let representativeScanFrame = 0;
+  let representativeRefreshTimer = 0;
   let representativeLastScanTime = 0;
   let representativeLastQr = "";
+  let representativeBadgeVerified = false;
+  let representativeVerifySequence = 0;
   let representativeHasPin = false;
   let blockedAccountNotice = "";
 
   const getApplication = () => application;
-  const fromProfileRow = row => row && ({ userId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, bannedAt: row.banned_at || null, banReason: row.ban_reason || "" });
+  const approvalNoticeKey = app => `irgib-approval-notice:${currentUser?.id || "student"}:${app?.id || "none"}`;
+  const fromProfileRow = row => row && ({ userId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, bannedAt: row.banned_at || null, banReason: row.ban_reason || "", cardSuspendedAt: row.card_suspended_at || null });
   const fromApplicationRow = row => row && ({ id: row.id, studentId: row.student_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, birthDate: row.birth_date, program: row.program, level: row.level, site: row.site, status: row.status, temporaryMatricule: row.temporary_matricule, finalMatricule: row.final_matricule, photoPath: row.photo_path, rejectionReason: row.rejection_reason, submittedAt: row.submitted_at, decidedAt: row.decided_at });
   async function loadStudentData() {
     const { data: profileRow, error: profileError } = await db.from("student_profiles").select("*").eq("user_id", currentUser.id).maybeSingle();
@@ -61,6 +67,10 @@
       const site = D.getSite(profile.site)?.city || "votre site";
       throw Object.assign(new Error(profile.banReason || `Votre compte a été banni par l’administration de ${site}.`), { name: "AccountBannedError" });
     }
+    try {
+      const { data: contacts } = await db.from("campus_site_contacts").select("site,contact_name,address,phone").eq("site", profile.site);
+      D.applySiteContacts(contacts || []);
+    } catch { /* Le catalogue local reste disponible si la migration de contacts n’est pas encore appliquée. */ }
     const { data: apps, error: appError } = await db.from("badge_applications").select("*").eq("student_id", currentUser.id).order("submitted_at", { ascending: false }).limit(1);
     if (appError) throw appError;
     application = fromApplicationRow(apps?.[0]);
@@ -102,7 +112,13 @@
     document.querySelectorAll(".student-tabs [data-student-view]").forEach(button => button.classList.toggle("active", button.dataset.studentView === view));
     if (view === "attendance") { renderAttendance(); }
     if (view === "news") { void loadAnnouncements(); }
-    if (view === "card") { renderMyCard(); }
+    if (view === "card") {
+      if (application?.status === "approved") {
+        try { localStorage.setItem(approvalNoticeKey(application), "shown"); } catch {}
+        byId("notification-banner").style.display = "none";
+      }
+      renderMyCard();
+    }
     if (view === "profile") { renderProfile(); }
   };
   const populateRequestForm = () => {
@@ -122,6 +138,11 @@
     const node = byId("notification-banner");
     if (!app) { node.style.display = "none"; return; }
     if (app.status === "approved") {
+      const noticeKey = approvalNoticeKey(app);
+      let alreadyShown = false;
+      try { alreadyShown = localStorage.getItem(noticeKey) === "shown"; } catch {}
+      if (alreadyShown || document.querySelector("#student-view-card.active")) { node.style.display = "none"; return; }
+      try { localStorage.setItem(noticeKey, "shown"); } catch {}
       node.innerHTML = `<strong>Votre carte est approuvée.</strong> Votre matricule définitif est <b>${esc(app.finalMatricule)}</b>. Votre carte est disponible dans « Ma carte ».`;
     } else if (app.status === "rejected") {
       node.innerHTML = `<strong>Votre demande a été rejetée.</strong> ${esc(app.rejectionReason || "Consultez l’administration de votre site d’apprentissage pour la suite.")}`;
@@ -156,6 +177,10 @@
     const qrPayload = `IRGIB-CARTE:${app.finalMatricule}`;
     byId("student-card-zone").innerHTML = D.cardHtml(app, "card-qr");
     const qrHost = byId("card-qr");
+    if (profile?.cardSuspendedAt) {
+      qrHost.innerHTML = `<span class="card-suspended-qr">Carte temporairement désactivée</span>`;
+      return;
+    }
     if (window.QRCode && app.finalMatricule) {
       new QRCode(qrHost, { text: qrPayload, width: 256, height: 256, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
       const canvas = qrHost.querySelector("canvas");
@@ -184,9 +209,11 @@
       status.innerHTML = app ? `<div class="pending-card"><span class="status ${app.status === "rejected" ? "rejected" : "pending"}">${app.status === "rejected" ? "Demande rejetée" : "En attente d’approbation"}</span><h3>${app.status === "rejected" ? "Votre carte n’est pas encore disponible." : "La carte apparaîtra après validation."}</h3><p>Matricule temporaire : <b>${esc(app.temporaryMatricule)}</b></p><p class="small muted">Le matricule définitif et le QR de la carte sont créés après approbation.</p></div>` : `<div class="pending-card"><h3>Envoyez d’abord votre demande de badge.</h3><p class="small muted">Un matricule temporaire sera créé à l’envoi. La carte et son QR seront disponibles après approbation.</p></div>`;
       return;
     }
-    status.innerHTML = `<div class="notice" style="margin-bottom:14px"><strong>Carte approuvée.</strong> Matricule définitif : ${esc(app.finalMatricule)}.</div>`;
+    status.innerHTML = profile?.cardSuspendedAt
+      ? `<div class="notice card-suspension-notice" role="status"><strong>Carte temporairement désactivée.</strong><p>Ce badge ne peut plus être utilisé pour le moment. Rapprochez-vous de l’administration de votre site pour régulariser votre situation.</p></div>`
+      : "";
     zone.style.display = "block";
-    actions.style.display = "flex";
+    actions.style.display = profile?.cardSuspendedAt ? "none" : "flex";
     drawCard(app);
   }
 
@@ -217,7 +244,7 @@
     byId("my-attendance-rows").innerHTML = rows.length ? rows.map(item => `<tr><td>${item.createdAt ? new Date(item.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—"}</td><td>${esc(item.courseTitle)}</td><td>${esc(D.getProgram(item.program).shortName)} · ${esc(item.level)}</td><td>${esc(D.getSite(item.site).city)}</td><td>${item.status === "present" ? (item.markedBy ? "Responsable de classe" : "Moi") : "—"}</td><td><span class="status ${item.status === "present" ? "active" : "absent"}">${item.status === "present" ? "Présent" : "Absent"}</span></td></tr>`).join("") : `<tr><td colspan="6" class="table-empty">Aucune séance créée pour votre groupe aujourd’hui.</td></tr>`;
     const person = app || profile;
     const alreadyPresent = rows.some(item => item.status === "present" && item.site === person?.site && item.program === person?.program && item.level === person?.level);
-    if (scannedSession) showAttendancePreview(scannedSession, app);
+    if (scannedSession && scannedSessionInfo) showAttendancePreview(scannedSession, scannedSessionInfo, app);
     byId("start-scan").disabled = alreadyPresent;
     if (alreadyPresent) {
       byId("attendance-message").textContent = "Votre présence du jour est déjà enregistrée. Le QR ne peut être validé qu’une fois.";
@@ -230,7 +257,19 @@
       node.innerHTML = `<article class="news-empty"><span class="news-empty-icon" aria-hidden="true">✦</span><strong>Rien de nouveau pour le moment</strong><p>Les annonces importantes de votre campus apparaîtront ici.</p></article>`;
       return;
     }
-    node.innerHTML = announcements.map(item => `<article class="news-card"><div class="news-card-top"><span class="news-tag">${item.site ? esc(D.getSite(item.site).city) : "Tous les sites"}</span><span class="news-publisher">${item.published_by_site ? `Publié par l’administration de ${esc(D.getSite(item.published_by_site).city)}` : "Publié par l’administration générale"}</span><time datetime="${esc(item.published_at)}">${new Date(item.published_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}</time></div><h3>${esc(item.title)}</h3><p>${esc(item.body)}</p>${item.mediaUrl ? (item.media_type === "video" ? `<video class="news-media" src="${esc(item.mediaUrl)}" controls playsinline preload="metadata" aria-label="Vidéo : ${esc(item.title)}"></video>` : `<img class="news-media" src="${esc(item.mediaUrl)}" alt="Illustration : ${esc(item.title)}" loading="lazy">`) : ""}</article>`).join("");
+    node.innerHTML = announcements.map(item => {
+      const fullBody = String(item.body || "");
+      const expandable = fullBody.length > 220 || Boolean(item.mediaUrl);
+      const expanded = expandedNewsIds.has(item.id);
+      const body = expandable && !expanded ? `${esc(fullBody.slice(0, 220).trimEnd())}${fullBody.length > 220 ? "…" : ""}` : esc(fullBody);
+      const media = item.mediaUrl ? (item.media_type === "video" ? `<video class="news-media" src="${esc(item.mediaUrl)}" controls playsinline preload="metadata" aria-label="Vidéo : ${esc(item.title)}"></video>` : `<img class="news-media" src="${esc(item.mediaUrl)}" alt="Illustration : ${esc(item.title)}" loading="lazy">`) : "";
+      return `<article class="news-card${expanded ? " expanded" : ""}"><div class="news-card-top"><span class="news-tag">${item.site ? esc(D.getSite(item.site).city) : "Tous les sites"}</span><span class="news-publisher">${item.published_by_site ? `Publié par l’administration de ${esc(D.getSite(item.published_by_site).city)}` : "Publié par l’administration générale"}</span><time datetime="${esc(item.published_at)}">${new Date(item.published_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}</time></div><h3>${esc(item.title)}</h3><p>${body}</p>${expanded ? media : ""}${expandable ? `<button type="button" class="news-expand-btn" data-news-expand="${esc(item.id)}">${expanded ? "Fermer" : "Voir plus"}</button>` : ""}</article>`;
+    }).join("");
+    node.querySelectorAll("[data-news-expand]").forEach(button => button.addEventListener("click", () => {
+      const id = button.dataset.newsExpand;
+      if (expandedNewsIds.has(id)) expandedNewsIds.delete(id); else expandedNewsIds.add(id);
+      renderAnnouncements();
+    }));
   }
   async function signAnnouncementMedia(rows) {
     return Promise.all((rows || []).map(async item => {
@@ -328,6 +367,12 @@
     if (!representativeGroupmates.some(row => row.student_id === selectedRepresentativeStudent?.student_id)) selectedRepresentativeStudent = null;
     renderRepresentativeGroupmates();
   }
+  function startRepresentativeRefresh() {
+    if (representativeRefreshTimer) window.clearInterval(representativeRefreshTimer);
+    representativeRefreshTimer = window.setInterval(() => {
+      if (currentUser && !document.hidden && !byId("rep-attendance-panel").hidden) void loadRepresentativeGroupmates();
+    }, 10000);
+  }
   function hideRepresentativeDailyQr() {
     const result = byId("rep-daily-qr-result");
     if (!result) return;
@@ -389,37 +434,73 @@
     if (hide) byId("rep-badge-scanner").hidden = true;
   }
   async function confirmRepresentativeBadge(rawValue) {
-    if (!selectedRepresentativeStudent || rawValue === representativeLastQr) return;
-    representativeLastQr = rawValue;
-    const expected = `IRGIB-CARTE:${selectedRepresentativeStudent.final_matricule || ""}`;
-    if (!selectedRepresentativeStudent.final_matricule || rawValue !== expected) {
-      byId("rep-attendance-message").textContent = "QR non valide pour cet étudiant : il ne correspond pas au badge sélectionné. Vérifiez son nom et scannez le QR de sa carte.";
-      window.setTimeout(() => { representativeLastQr = ""; }, 1200);
-      return;
-    }
-    const button = byId("rep-mark-attendance");
-    button.disabled = true;
-    byId("rep-attendance-message").textContent = "Badge reconnu. Vérification et enregistrement sécurisés…";
-    let error;
+    if (!selectedRepresentativeStudent || representativeBadgeVerified || !rawValue) return;
+    representativeLastQr = String(rawValue).trim();
+    const sequence = ++representativeVerifySequence;
+    stopRepresentativeCamera(false);
+    const status = byId("rep-badge-verification");
+    status.hidden = false;
+    status.dataset.state = "checking";
+    status.innerHTML = `<span class="verify-spinner" aria-hidden="true"></span><div><strong>Vérification du QR…</strong><span>Contrôle de la carte et du groupe autorisé.</span></div>`;
+    byId("rep-badge-confirm-actions").hidden = true;
+    const startedAt = performance.now();
+    let error = null;
     try {
-      ({ error } = await db.rpc("mark_classmate_attendance", { p_student_id: selectedRepresentativeStudent.student_id, p_scanned_qr: rawValue }));
+      const result = await db.rpc("verify_classmate_badge", { p_student_id: selectedRepresentativeStudent.student_id, p_scanned_qr: representativeLastQr });
+      error = result.error || (result.data?.ok === false ? new Error(result.data.message || "QR non valide") : null);
     } catch (rpcError) { error = rpcError; }
+    await new Promise(resolve => window.setTimeout(resolve, Math.max(0, 950 - (performance.now() - startedAt))));
+    if (sequence !== representativeVerifySequence) return;
     if (error) {
-      button.disabled = false;
-      byId("rep-attendance-message").textContent = friendlyError(error, "La présence n’a pas pu être mise à jour. Vérifiez le QR puis réessayez.");
-      window.setTimeout(() => { representativeLastQr = ""; }, 1200);
+      representativeBadgeVerified = false;
+      status.dataset.state = "invalid";
+      status.innerHTML = `<span class="verify-cross" aria-hidden="true">×</span><div><strong>QR non valide pour cet étudiant</strong><span>Le badge ne correspond pas au nom sélectionné ou n’est pas actif.</span></div>`;
+      byId("rep-badge-confirm-actions").hidden = false;
+      byId("rep-confirm-attendance").hidden = true;
+      byId("rep-rescan-badge").textContent = "Scanner à nouveau";
+      byId("rep-attendance-message").textContent = "Vérifiez l’étudiant sélectionné, puis recommencez le scan.";
       return;
     }
-    const markedName = `${selectedRepresentativeStudent.last_name} ${selectedRepresentativeStudent.first_name}`;
-    stopRepresentativeCamera();
-    selectedRepresentativeStudent = null;
-    byId("rep-attendance-message").textContent = `Présence mise à jour : ${markedName} est maintenant marqué présent.`;
-    await loadStudentData();
-    renderAttendance();
-    await loadRepresentativeGroupmates();
+    representativeBadgeVerified = true;
+    status.dataset.state = "valid";
+    status.innerHTML = `<span class="verify-checkmark" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="m12 25 8 8 17-19"/></svg></span><div><strong>QR confirmé</strong><span>Badge valide pour ${esc(`${selectedRepresentativeStudent.last_name} ${selectedRepresentativeStudent.first_name}`)}.</span></div>`;
+    byId("rep-badge-confirm-actions").hidden = false;
+    byId("rep-confirm-attendance").hidden = false;
+    byId("rep-rescan-badge").textContent = "Recommencer";
+    byId("rep-attendance-message").textContent = "Vérifiez le nom puis confirmez le pointage.";
+  }
+  async function markSelectedClassmateAttendance() {
+    if (!selectedRepresentativeStudent || !representativeBadgeVerified || !representativeLastQr) return;
+    const button = byId("rep-confirm-attendance");
+    button.disabled = true;
+    byId("rep-attendance-message").textContent = "Enregistrement de la présence…";
+    const current = selectedRepresentativeStudent;
+    try {
+      const { error } = await db.rpc("mark_classmate_attendance", { p_student_id: current.student_id, p_scanned_qr: representativeLastQr });
+      if (error) throw error;
+      stopRepresentativeCamera();
+      selectedRepresentativeStudent = null;
+      representativeLastQr = "";
+      representativeBadgeVerified = false;
+      byId("rep-badge-confirm-actions").hidden = true;
+      byId("rep-attendance-message").dataset.state = "success";
+      byId("rep-attendance-message").textContent = `Présence mise à jour : ${current.last_name} ${current.first_name} est maintenant présent.`;
+      await loadStudentData();
+      renderAttendance();
+      await loadRepresentativeGroupmates();
+    } catch (error) {
+      button.disabled = false;
+      byId("rep-attendance-message").dataset.state = "error";
+      byId("rep-attendance-message").textContent = friendlyError(error, "La présence n’a pas pu être mise à jour. Actualisez la liste puis recommencez.");
+      representativeBadgeVerified = false;
+      representativeLastQr = "";
+      byId("rep-badge-confirm-actions").hidden = true;
+      byId("rep-mark-attendance").disabled = !selectedRepresentativeStudent;
+    }
   }
   async function startRepresentativeCamera() {
     const message = byId("rep-attendance-message");
+    message.dataset.state = "";
     if (!selectedRepresentativeStudent) { message.textContent = "Sélectionnez d’abord un étudiant absent."; return; }
     if (!navigator.mediaDevices?.getUserMedia || !window.isSecureContext) { message.textContent = "Le scan nécessite un navigateur récent et une connexion HTTPS."; return; }
     if (!("BarcodeDetector" in window) && typeof window.jsQR !== "function") { message.textContent = "Le lecteur QR ne s’est pas chargé. Rechargez la page puis réessayez."; return; }
@@ -438,10 +519,13 @@
       const context = canvas.getContext("2d", { willReadFrequently: true });
       representativeLastScanTime = 0;
       representativeLastQr = "";
+      representativeBadgeVerified = false;
+      let candidateValue = "";
+      let candidateFrames = 0;
       const scan = async timestamp => {
         if (!representativeCameraStream) return;
         const now = timestamp || performance.now();
-        if (now - representativeLastScanTime >= 180 && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0) {
+        if (now - representativeLastScanTime >= 260 && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0) {
           representativeLastScanTime = now;
           let rawValue = "";
           if (detector) { try { rawValue = (await detector.detect(video)).find(code => code.rawValue)?.rawValue || ""; } catch { detector = null; } }
@@ -455,7 +539,9 @@
               rawValue = window.jsQR(frame.data, frame.width, frame.height, { inversionAttempts: "attemptBoth" })?.data || "";
             } catch { /* La caméra peut ne pas encore fournir une image exploitable. */ }
           }
-          if (rawValue) await confirmRepresentativeBadge(rawValue);
+          if (rawValue && rawValue.trim() === candidateValue) candidateFrames++;
+          else { candidateValue = rawValue.trim(); candidateFrames = rawValue ? 1 : 0; }
+          if (candidateFrames >= 3) { await confirmRepresentativeBadge(candidateValue); return; }
         }
         if (representativeCameraStream) representativeScanFrame = requestAnimationFrame(scan);
       };
@@ -465,12 +551,35 @@
       message.textContent = cameraErrorMessage(error);
     }
   }
-  function showAttendancePreview(code, app = getApplication()) {
-    scannedSession = code;
+
+  async function verifyStudentSessionQr(rawToken) {
+    const preview = byId("attendance-preview");
+    byId("attendance-message").textContent = "Vérification du QR de séance…";
+    byId("submit-attendance").disabled = true;
+    preview.innerHTML = `<div class="qr-checking"><span class="verify-spinner" aria-hidden="true"></span><strong>Vérification du QR de séance…</strong><span>Nous contrôlons qu’il correspond bien à votre groupe.</span></div>`;
+    const startedAt = performance.now();
+    const { data, error } = await db.rpc("student_attendance_session_info", { p_token: rawToken });
+    await new Promise(resolve => window.setTimeout(resolve, Math.max(0, 850 - (performance.now() - startedAt))));
+    if (error) {
+      scannedSession = ""; scannedSessionInfo = null;
+      preview.innerHTML = `<div class="qr-invalid"><strong>QR non confirmé</strong><span>Ce code ne correspond pas à votre groupe ou la séance est terminée. Vérifiez auprès du responsable.</span></div>`;
+      byId("attendance-message").textContent = "Présentez le QR de présence actif de votre groupe.";
+      byId("submit-attendance").disabled = true;
+      stopCamera();
+      return false;
+    }
+    showAttendancePreview(rawToken, data);
+    byId("attendance-message").textContent = "QR confirmé. Validez pour enregistrer votre présence.";
+    stopCamera();
+    return true;
+  }
+  function showAttendancePreview(token, info, app = getApplication()) {
+    scannedSession = token;
+    scannedSessionInfo = info;
     const person = app || profile;
-    const site = D.getSite(person.site);
-    const program = D.getProgram(person.program);
-    byId("attendance-preview").innerHTML = `<div class="attendance-code"><span class="eyebrow">Séance détectée</span><strong>${esc(code)}</strong></div><div class="readonly-grid"><div class="info-row"><span>Étudiant</span><strong>${esc(fullName(person))}</strong></div><div class="info-row"><span>Matricule</span><strong>${esc(app?.finalMatricule || app?.temporaryMatricule || "En attente de demande")}</strong></div><div class="info-row"><span>Filière · niveau</span><strong>${esc(program.shortName)} · ${esc(person.level)}</strong></div><div class="info-row"><span>Ville / site</span><strong>${esc(site.city)}</strong></div><div class="info-row"><span>Date</span><strong>${esc(D.todayKey())}</strong></div></div>`;
+    const site = D.getSite(info.site || person.site);
+    const program = D.getProgram(info.program || person.program);
+    byId("attendance-preview").innerHTML = `<div class="qr-confirmed"><span class="qr-checkmark" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="m12 25 8 8 17-19"/></svg></span><div><strong>QR confirmé</strong><span>${esc(info.course_title || "Séance du jour")} · ${esc(site.city)}</span></div></div><div class="readonly-grid"><div class="info-row"><span>Étudiant</span><strong>${esc(fullName(person))}</strong></div><div class="info-row"><span>Matricule</span><strong>${esc(app?.finalMatricule || app?.temporaryMatricule || "En attente de demande")}</strong></div><div class="info-row"><span>Filière · niveau</span><strong>${esc(program.shortName)} · ${esc(info.level || person.level)}</strong></div><div class="info-row"><span>Ville / site</span><strong>${esc(site.city)}</strong></div><div class="info-row"><span>Date</span><strong>${esc(info.session_day || D.todayKey())}</strong></div></div>`;
     byId("submit-attendance").disabled = false;
   }
   function decodeSession(raw) {
@@ -555,9 +664,7 @@
           }
           if (rawValue) {
             try {
-              showAttendancePreview(decodeSession(rawValue));
-              byId("attendance-message").textContent = "QR de séance détecté. Vérifiez les informations, puis validez votre présence.";
-              stopCamera();
+              await verifyStudentSessionQr(decodeSession(rawValue));
               return;
             } catch (error) {
               byId("attendance-message").textContent = "Ce QR ne contient pas un code de séance reconnu. Présentez le QR de présence.";
@@ -585,9 +692,15 @@
     if ("Notification" in window && Notification.permission === "granted") void registerPushSubscription();
     void loadAnnouncements();
     void loadRepresentativeGroupmates();
+    startRepresentativeRefresh();
     if (!studentChannel) studentChannel = db.channel(`student-${currentUser.id}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "student_profiles", filter: `user_id=eq.${currentUser.id}` }, payload => {
         if (payload.new?.banned_at) showBlockedAccount(payload.new.ban_reason || "Votre compte a été banni par l’administration de votre établissement.");
+        else if (profile && Object.hasOwn(payload.new || {}, "card_suspended_at")) {
+          profile.cardSuspendedAt = payload.new.card_suspended_at || null;
+          renderMyCard();
+          renderProfile();
+        }
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "badge_applications", filter: `student_id=eq.${currentUser.id}` }, async () => {
         const oldStatus = application?.status;
@@ -595,7 +708,7 @@
         catch { byId("login-message").textContent = "La mise à jour de votre dossier est temporairement indisponible."; }
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "attendance_records", filter: `student_id=eq.${currentUser.id}` }, async () => {
-        try { await loadStudentData(); renderAttendance(); }
+        try { await loadStudentData(); renderAttendance(); await loadRepresentativeGroupmates(); }
         catch { byId("attendance-message").textContent = "La liste des présences n’a pas pu être actualisée."; }
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "campus_announcements" }, payload => {
@@ -727,6 +840,7 @@
     stopCamera();
     stopRepresentativeCamera();
     if (studentChannel) { await db.removeChannel(studentChannel); studentChannel = null; }
+    if (representativeRefreshTimer) { window.clearInterval(representativeRefreshTimer); representativeRefreshTimer = 0; }
     // Remove this device's push endpoint before the session closes, so another
     // student using the same browser can register it safely on their account.
     try {
@@ -746,8 +860,18 @@
   document.addEventListener("click", requestNotificationPermissionFromFirstInteraction, true);
   byId("rep-mark-attendance").addEventListener("click", async event => {
     event.currentTarget.disabled = true;
+    byId("rep-attendance-message").dataset.state = "";
     await startRepresentativeCamera();
     event.currentTarget.disabled = !selectedRepresentativeStudent;
+  });
+  byId("rep-confirm-attendance").addEventListener("click", () => void markSelectedClassmateAttendance());
+  byId("rep-rescan-badge").addEventListener("click", () => {
+    representativeVerifySequence++;
+    representativeBadgeVerified = false;
+    representativeLastQr = "";
+    byId("rep-badge-confirm-actions").hidden = true;
+    byId("rep-badge-verification").hidden = true;
+    void startRepresentativeCamera();
   });
   byId("rep-pin-form").addEventListener("submit", event => {
     event.preventDefault();
@@ -769,7 +893,12 @@
     renderRepresentativeGroupmates();
   });
   byId("rep-stop-scan").addEventListener("click", () => {
+    representativeVerifySequence++;
+    representativeBadgeVerified = false;
+    representativeLastQr = "";
     stopRepresentativeCamera();
+    byId("rep-badge-confirm-actions").hidden = true;
+    byId("rep-badge-verification").hidden = true;
     byId("rep-mark-attendance").disabled = !selectedRepresentativeStudent;
     byId("rep-attendance-message").textContent = "Scan annulé. Aucune présence n’a été modifiée.";
   });
@@ -856,6 +985,7 @@
       byId("attendance-message").textContent = /déjà enregistrée/i.test(error.message || "") ? "Votre présence à cette séance est déjà enregistrée." : friendlyError(error, "Présence non enregistrée. Vérifiez que le QR est actif et correspond à votre groupe.");
       if (/déjà enregistrée/i.test(error.message)) {
         scannedSession = "";
+        scannedSessionInfo = null;
         try { await loadStudentData(); }
         catch { byId("attendance-message").textContent = "La présence semble déjà validée, mais l’appel n’a pas pu être actualisé. Rechargez la page pour vérifier."; }
         byId("attendance-preview").innerHTML = `<div class="attendance-done"><strong>Présence déjà validée</strong><span>Ce QR a déjà été utilisé pour enregistrer votre présence aujourd’hui.</span></div>`;
@@ -867,11 +997,13 @@
     try { await loadStudentData(); }
     catch { byId("attendance-message").textContent = "Présence enregistrée. L’actualisation de l’appel est temporairement indisponible."; }
     scannedSession = "";
+    scannedSessionInfo = null;
     byId("attendance-preview").innerHTML = `<div class="attendance-done"><strong>Présence enregistrée</strong><span>Votre présence est confirmée pour la séance du jour.</span></div>`;
     renderAttendance();
     button.disabled = true;
   });
   byId("print-my-card").addEventListener("click", () => {
+    if (profile?.cardSuspendedAt) { byId("my-card-status").insertAdjacentHTML("beforeend", '<p class="form-message" role="status">Cette carte est temporairement désactivée. Le PDF ne peut pas être téléchargé.</p>'); return; }
     const faces = [...byId("student-card-zone").querySelectorAll(".card-v2")];
     if (faces.length !== 2) { byId("my-card-status").insertAdjacentHTML("beforeend", '<p class="form-message" role="status">La carte complète n’est pas prête. Rechargez la page puis réessayez.</p>'); return; }
     const printWindow = window.open("", "irgib-card-print", "popup,width=980,height=820");
