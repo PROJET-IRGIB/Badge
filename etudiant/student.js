@@ -133,6 +133,7 @@
     void db.auth.signOut();
   }
   const selectStudentView = view => {
+    if (view === "request" && application?.status === "approved") view = "card";
     hideRepresentativeDailyQr();
     document.querySelectorAll(".student-view").forEach(section => section.classList.toggle("active", section.id === `student-view-${view}`));
     document.querySelectorAll(".student-tabs [data-student-view]").forEach(button => button.classList.toggle("active", button.dataset.studentView === view));
@@ -149,12 +150,14 @@
   };
   function configureStudentNavigation(app) {
     const approved = app?.status === "approved";
-    const homeTab = byId("student-home-tab");
-    const cardTab = byId("student-card-tab");
-    homeTab.dataset.studentView = approved ? "card" : "request";
-    homeTab.textContent = "Accueil";
-    cardTab.dataset.studentView = approved ? "request" : "card";
-    cardTab.textContent = approved ? "Demande" : "Ma carte";
+    const cardTab = byId("student-home-tab");
+    const requestTab = byId("student-card-tab");
+    cardTab.dataset.studentView = "card";
+    cardTab.textContent = "Ma carte";
+    requestTab.dataset.studentView = "request";
+    requestTab.textContent = "Demande";
+    requestTab.hidden = approved;
+    if (approved && byId("student-view-request").classList.contains("active")) selectStudentView("card");
   }
   const populateRequestForm = () => {
     const app = getApplication();
@@ -823,7 +826,7 @@
     renderAttendance();
     if (location.hash === "#news") selectStudentView("news");
     else if (location.hash === "#card") selectStudentView("card");
-    else selectStudentView(app?.status === "approved" ? "card" : "request");
+    else selectStudentView("card");
   }
 
   byId("show-login").addEventListener("click", () => showAuthPage("login"));
