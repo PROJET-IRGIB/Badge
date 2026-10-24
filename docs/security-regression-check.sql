@@ -6,7 +6,10 @@ with required_functions(function_name, required_guard) as (
   values
     ('submit_attendance', 'banned_at is not null'),
     ('list_representative_groupmates', 'banned_at is not null'),
-    ('mark_classmate_attendance', 'banned_at is not null')
+    ('mark_classmate_attendance', 'banned_at is not null'),
+    ('representative_daily_qr_pin_status', 'banned_at is not null'),
+    ('set_representative_daily_qr_pin', 'banned_at is not null'),
+    ('representative_daily_attendance_qr', 'banned_at is not null')
 )
 select
   r.function_name,
