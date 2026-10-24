@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": "https://irgib-africa-badge.vercel.app",
   "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
