@@ -32,6 +32,12 @@
   let selectedPhoto = "";
   let selectedPhotoName = "";
   let selectedPhotoBlob = null;
+  let passwordChangeStage = 0;
+  const passwordSuccessNotice = document.createElement("p");
+  passwordSuccessNotice.id = "password-success-notice";
+  passwordSuccessNotice.className = "notice notification-banner";
+  passwordSuccessNotice.hidden = true;
+  byId("password-open").after(passwordSuccessNotice);
   let scannedSession = "";
   let scannedSessionInfo = null;
   let announcements = [];
@@ -47,6 +53,8 @@
   let representativeCameraStream = null;
   let representativeScanFrame = 0;
   let representativeRefreshTimer = 0;
+  let representativeRefreshInFlight = false;
+  let representativeAssigned = false;
   let representativeLastScanTime = 0;
   let representativeLastQr = "";
   let representativeBadgeVerified = false;
@@ -224,7 +232,26 @@
     const program = D.getProgram(person.program);
     const matricule = app ? app.finalMatricule || app.temporaryMatricule : "Pas encore attribué";
     byId("profile-details").innerHTML = `<div class="profile-summary"><div class="profile-monogram">${esc(`${person.firstName?.[0] || ""}${person.lastName?.[0] || ""}`.toUpperCase())}</div><div><h3>${esc(fullName(person))}</h3><span class="muted small">${esc(person.email)}</span></div></div><div class="readonly-grid"><div class="info-row"><span>Sexe</span><strong>${esc(person.sex)}</strong></div><div class="info-row"><span>Téléphone</span><strong>${esc(person.phone || "—")}</strong></div><div class="info-row"><span>Filière</span><strong>${esc(program.name)}</strong></div><div class="info-row"><span>Niveau</span><strong>${esc(person.level)}</strong></div><div class="info-row"><span>Ville / site</span><strong>${esc(site.city)}</strong></div><div class="info-row"><span>Matricule</span><strong>${esc(matricule)}</strong></div></div>`;
-    byId("password-form").reset();
+    resetPasswordFlow();
+  }
+
+  function setPasswordStage(stage) {
+    passwordChangeStage = stage;
+    const stages = [byId("password-current-stage"), byId("password-new-stage"), byId("password-confirm-stage")];
+    stages.forEach((element, index) => { element.hidden = index !== stage; });
+    byId("new-password").disabled = stage < 1;
+    byId("confirm-password").disabled = stage < 2;
+  }
+
+  function resetPasswordFlow(close = true) {
+    const form = byId("password-form");
+    if (!form) return;
+    form.reset();
+    form.hidden = close;
+    byId("password-open").setAttribute("aria-expanded", String(!close));
+    passwordSuccessNotice.hidden = true;
+    passwordSuccessNotice.textContent = "";
+    setPasswordStage(0);
     byId("password-message").textContent = "";
   }
 
@@ -350,22 +377,37 @@
 
   async function loadRepresentativeGroupmates() {
     const panel = byId("rep-attendance-panel");
-    panel.hidden = true;
-    const { data: assignment, error: assignmentError } = await db.from("class_representatives").select("user_id").eq("user_id", currentUser.id).maybeSingle();
-    if (assignmentError || !assignment) return;
-    panel.hidden = false;
-    const { data: hasPin, error: pinError } = await db.rpc("representative_daily_qr_pin_status");
-    representativeHasPin = !pinError && Boolean(hasPin);
-    byId("rep-pin-label").textContent = representativeHasPin ? "Code secret à 4 chiffres" : "Créer votre code secret à 4 chiffres";
-    byId("rep-pin-submit").textContent = representativeHasPin ? "Voir le QR du jour" : "Créer mon code";
-    byId("rep-pin-message").textContent = pinError ? "Le code du jour n’est pas disponible pour le moment. Réessayez plus tard." : "";
-    byId("rep-daily-pin").value = "";
-    byId("rep-absent-list").innerHTML = `<p class="muted small">Chargement de la liste des absents…</p>`;
-    const { data, error } = await db.rpc("list_representative_groupmates");
-    if (error) { byId("rep-absent-list").innerHTML = `<p class="form-message">Impossible de charger les absents. Réessayez dans un instant.</p>`; return; }
-    representativeGroupmates = data || [];
-    if (!representativeGroupmates.some(row => row.student_id === selectedRepresentativeStudent?.student_id)) selectedRepresentativeStudent = null;
-    renderRepresentativeGroupmates();
+    if (!currentUser || representativeRefreshInFlight) return;
+    representativeRefreshInFlight = true;
+    try {
+      const { data: assignment, error: assignmentError } = await db.from("class_representatives").select("user_id").eq("user_id", currentUser.id).maybeSingle();
+      if (assignmentError) {
+        if (!representativeAssigned) panel.hidden = true;
+        byId("rep-pin-message").textContent = "La vérification du rôle est temporairement indisponible. Réessayez dans un instant.";
+        return;
+      }
+      if (!assignment) {
+        representativeAssigned = false;
+        panel.hidden = true;
+        return;
+      }
+      representativeAssigned = true;
+      panel.hidden = false;
+      const { data: hasPin, error: pinError } = await db.rpc("representative_daily_qr_pin_status");
+      if (!pinError) representativeHasPin = Boolean(hasPin);
+      byId("rep-pin-label").textContent = representativeHasPin ? "Code secret à 4 chiffres" : "Créer votre code secret à 4 chiffres";
+      byId("rep-pin-submit").textContent = representativeHasPin ? "Voir le QR du jour" : "Créer mon code";
+      byId("rep-pin-submit").disabled = Boolean(pinError);
+      byId("rep-pin-message").textContent = pinError ? "Le code du jour n’est pas disponible pour le moment. Réessayez plus tard." : "";
+      if (!representativeGroupmates.length) byId("rep-absent-list").innerHTML = `<p class="muted small">Chargement de la liste des absents…</p>`;
+      const { data, error } = await db.rpc("list_representative_groupmates");
+      if (error) { byId("rep-absent-list").innerHTML = `<p class="form-message">Impossible de charger les absents. Réessayez dans un instant.</p>`; return; }
+      representativeGroupmates = data || [];
+      if (!representativeGroupmates.some(row => row.student_id === selectedRepresentativeStudent?.student_id)) selectedRepresentativeStudent = null;
+      renderRepresentativeGroupmates();
+    } finally {
+      representativeRefreshInFlight = false;
+    }
   }
   function startRepresentativeRefresh() {
     if (representativeRefreshTimer) window.clearInterval(representativeRefreshTimer);
@@ -471,10 +513,11 @@
   }
   async function markSelectedClassmateAttendance() {
     if (!selectedRepresentativeStudent || !representativeBadgeVerified || !representativeLastQr) return;
+    const current = selectedRepresentativeStudent;
+    if (!window.confirm(`Confirmer la présence de ${current.last_name} ${current.first_name} après vérification de son badge ?`)) return;
     const button = byId("rep-confirm-attendance");
     button.disabled = true;
     byId("rep-attendance-message").textContent = "Enregistrement de la présence…";
-    const current = selectedRepresentativeStudent;
     try {
       const { error } = await db.rpc("mark_classmate_attendance", { p_student_id: current.student_id, p_scanned_qr: representativeLastQr });
       if (error) throw error;
@@ -716,6 +759,10 @@
         if (item?.status !== "published" || (item.site && item.site !== profile.site)) return;
         if (initialNewsLoaded && !knownAnnouncementIds.has(item.id)) void showCampusNotification("Nouvelle actualité IRGIB", item.title, `campus-news-${item.id}`, "/etudiant/#news");
         void loadAnnouncements();
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "campus_site_contacts", filter: `site=eq.${profile.site}` }, async () => {
+        try { await loadStudentData(); renderSiteInfo(); renderMyCard(); }
+        catch { /* L’actualisation périodique récupérera les coordonnées en cas d’interruption. */ }
       }).subscribe();
     byId("hello-name").textContent = profile.firstName;
     renderNotification(getApplication());
@@ -757,6 +804,7 @@
     const password = String(values.get("password"));
     const draft = { firstName: String(values.get("firstName")).trim(), lastName: String(values.get("lastName")).trim(), email: String(values.get("email")).trim().toLowerCase(), phone: String(values.get("phone")).trim(), sex: String(values.get("sex")), program: String(values.get("program")), level: String(values.get("level")), site: String(values.get("site")) };
     if (password.length < 8 || !draft.phone) { byId("signup-message").textContent = "Renseignez le téléphone et un mot de passe d’au moins 8 caractères."; return; }
+    if (!window.confirm(`Confirmer la création du compte étudiant pour ${draft.firstName} ${draft.lastName} (${draft.email}) ?`)) return;
     const button = event.currentTarget.querySelector('[type="submit"]'); button.disabled = true;
     try {
       const { data, error } = await db.auth.signUp({ email: draft.email, password, options: { data: { account_type: "student", first_name: draft.firstName, last_name: draft.lastName, phone: draft.phone, sex: draft.sex, program: draft.program, level: draft.level, site: draft.site } } });
@@ -777,6 +825,7 @@
     const token = byId("verify-code").value.replace(/\s/g, "");
     if (!pendingSignupEmail) { byId("verify-message").textContent = "Recommencez l’inscription pour demander un nouveau code."; return; }
     if (!/^\d{6,8}$/.test(token)) { byId("verify-message").textContent = "Saisissez le code numérique reçu par e-mail."; return; }
+    if (!window.confirm("Confirmer ce code et activer votre compte étudiant ?")) return;
     const button = event.currentTarget.querySelector('[type="submit"]'); button.disabled = true;
     byId("verify-message").textContent = "Vérification du code…";
     try {
@@ -804,39 +853,65 @@
     finally { button.disabled = false; }
   });
   byId("back-to-signup").addEventListener("click", () => { setScreen("auth-screen"); showAuthPage("signup"); });
-  byId("password-form").addEventListener("submit", async event => {
-    event.preventDefault();
+  byId("password-open").addEventListener("click", () => {
+    resetPasswordFlow(false);
+    byId("current-password").focus();
+  });
+  byId("password-cancel").addEventListener("click", () => resetPasswordFlow(true));
+  byId("password-verify").addEventListener("click", async event => {
+    const button = event.currentTarget;
     const current = byId("current-password").value;
-    const next = byId("new-password").value;
-    const confirm = byId("confirm-password").value;
-    if (next.length < 8) { byId("password-message").textContent = "Le nouveau mot de passe doit contenir au moins 8 caractères."; return; }
-    if (next !== confirm) { byId("password-message").textContent = "Les deux nouveaux mots de passe ne correspondent pas."; return; }
-    const button = event.currentTarget.querySelector('button[type="submit"]');
+    const email = currentUser?.email;
+    if (!email || !current) { byId("password-message").textContent = "Saisissez votre mot de passe actuel pour continuer."; return; }
     button.disabled = true;
     byId("password-message").textContent = "Vérification du mot de passe actuel…";
     try {
-      const email = currentUser?.email;
-      if (!email || !current) {
-        byId("password-message").textContent = "Saisissez votre mot de passe actuel pour continuer.";
-        return;
-      }
-      const { data: reauthenticated, error: reauthError } = await db.auth.signInWithPassword({ email, password: current });
-      if (reauthError || !reauthenticated.user || reauthenticated.user.id !== currentUser.id) {
+      const { data, error } = await db.auth.signInWithPassword({ email, password: current });
+      if (error || !data.user || data.user.id !== currentUser.id) {
         byId("password-message").textContent = "Le mot de passe actuel est incorrect. Vérifiez-le puis réessayez.";
         return;
       }
-      const { error } = await db.auth.updateUser({ password: next });
-      byId("password-message").textContent = error
-        ? "Le mot de passe a été vérifié, mais sa mise à jour a échoué. Réessayez."
-        : "Votre mot de passe a été mis à jour.";
-      if (!error) event.currentTarget.reset();
+      byId("current-password").value = "";
+      setPasswordStage(1);
+      byId("password-message").textContent = "Mot de passe vérifié. Choisissez maintenant un nouveau mot de passe.";
+      byId("new-password").focus();
     } catch {
       byId("password-message").textContent = "La vérification n’a pas abouti. Vérifiez votre connexion puis réessayez.";
-    } finally {
-      button.disabled = false;
-    }
+    } finally { button.disabled = false; }
+  });
+  byId("password-continue").addEventListener("click", () => {
+    const next = byId("new-password").value;
+    if (next.length < 8) { byId("password-message").textContent = "Le nouveau mot de passe doit contenir au moins 8 caractères."; return; }
+    if (next === currentUser?.email) { byId("password-message").textContent = "Choisissez un mot de passe différent de votre adresse e-mail."; return; }
+    setPasswordStage(2);
+    byId("password-message").textContent = "Saisissez une seconde fois le nouveau mot de passe pour le confirmer.";
+    byId("confirm-password").focus();
+  });
+  byId("password-back-current").addEventListener("click", () => { setPasswordStage(0); byId("current-password").focus(); });
+  byId("password-back-new").addEventListener("click", () => { setPasswordStage(1); byId("new-password").focus(); });
+  byId("password-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    if (passwordChangeStage === 0) { byId("password-verify").click(); return; }
+    if (passwordChangeStage === 1) { byId("password-continue").click(); return; }
+    const next = byId("new-password").value;
+    if (next.length < 8) { byId("password-message").textContent = "Le nouveau mot de passe doit contenir au moins 8 caractères."; setPasswordStage(1); return; }
+    if (next !== byId("confirm-password").value) { byId("password-message").textContent = "Les deux nouveaux mots de passe ne correspondent pas."; return; }
+    if (!window.confirm("Confirmer le changement de votre mot de passe ? Vous devrez utiliser le nouveau lors de votre prochaine connexion.")) return;
+    const button = event.currentTarget.querySelector('button[type="submit"]');
+    button.disabled = true;
+    byId("password-message").textContent = "Mise à jour sécurisée en cours…";
+    try {
+      const { error } = await db.auth.updateUser({ password: next });
+      if (error) { byId("password-message").textContent = friendlyError(error, "Le mot de passe n’a pas pu être modifié. Réessayez."); return; }
+      resetPasswordFlow(true);
+      passwordSuccessNotice.textContent = "Votre mot de passe a été modifié.";
+      passwordSuccessNotice.hidden = false;
+    } catch {
+      byId("password-message").textContent = "La mise à jour n’a pas abouti. Vérifiez votre connexion puis réessayez.";
+    } finally { button.disabled = false; }
   });
   byId("signout").addEventListener("click", async () => {
+    if (!window.confirm("Voulez-vous vraiment vous déconnecter de votre espace étudiant ?")) return;
     stopCamera();
     stopRepresentativeCamera();
     if (studentChannel) { await db.removeChannel(studentChannel); studentChannel = null; }
@@ -877,6 +952,7 @@
     event.preventDefault();
     const pin = byId("rep-daily-pin").value;
     if (!/^\d{4}$/.test(pin)) { byId("rep-pin-message").textContent = "Saisissez exactement 4 chiffres."; return; }
+    if (!representativeHasPin && !window.confirm("Créer ce code secret à 4 chiffres pour protéger l’accès au QR quotidien de votre groupe ?")) return;
     void revealRepresentativeDailyQr(pin);
   });
   byId("rep-hide-daily-qr").addEventListener("click", () => {
@@ -938,6 +1014,7 @@
     const lastName = String(values.get("lastName")).trim();
     const safeName = /^[\p{L}\p{M} .’'-]+$/u;
     if (!safeName.test(firstName) || !safeName.test(lastName)) { byId("request-message").textContent = "Vérifiez le nom et le prénom : lettres, espaces, apostrophe ou trait d’union uniquement."; return; }
+    if (!window.confirm(`Confirmer l’envoi de votre demande de badge pour ${firstName} ${lastName} ? Vérifiez bien les informations et la photo avant de continuer.`)) return;
     const button = event.currentTarget.querySelector('[type="submit"]'); button.disabled = true;
     let photoPath = "";
     try {
@@ -975,6 +1052,8 @@
   byId("stop-scan").addEventListener("click", stopCamera);
   byId("submit-attendance").addEventListener("click", async () => {
     if (!scannedSession) return;
+    const sessionLabel = scannedSessionInfo?.course_title || "la séance du jour";
+    if (!window.confirm(`Confirmer votre présence pour ${sessionLabel} ? Cette validation ne pourra pas être annulée depuis l’application.`)) return;
     const button = byId("submit-attendance"); button.disabled = true;
     byId("attendance-message").textContent = "Enregistrement sécurisé de votre présence…";
     const tokenBeingSubmitted = scannedSession;

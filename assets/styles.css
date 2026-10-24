@@ -475,3 +475,16 @@ body:has(#portal-screen[style*="display: block"])>.notice{max-width:1100px;margi
 #rep-attendance-message[data-state="error"]{color:#b42318;font-weight:600}
 @media(max-width:700px){.news-card.expanded{grid-column:auto}.news-card .news-media{max-height:230px}.qr-checking,.qr-confirmed,.qr-invalid,.qr-verification{padding:12px}.site-contact-form input{font-size:16px}}
 @media(prefers-reduced-motion:reduce){.verify-spinner{animation-duration:2.4s}.qr-checkmark path,.verify-checkmark path{animation-duration:1.2s}}
+
+/* Clear visual warning for actions that change account or campus data. */
+.btn.danger,#signout,#password-open,#password-form button[type="submit"],#signup-form button[type="submit"],#verify-form button[type="submit"],#request-form button[type="submit"],#submit-attendance,#rep-pin-submit,#rep-confirm-attendance,#admin-logout,#announcement-submit,.site-contact-form button[type="submit"],[data-rep-reset-pin],[data-rep-assign],[data-rep-remove],[data-student-role],[data-announcement-toggle],[data-card-suspension],#approve-request,#reject-request{background:#c62828!important;color:#fff!important;border:1px solid #b71c1c!important;box-shadow:0 5px 14px rgba(198,40,40,.16)!important}
+.btn.danger:hover,#signout:hover,#password-open:hover,#password-form button[type="submit"]:hover,#signup-form button[type="submit"]:hover,#verify-form button[type="submit"]:hover,#request-form button[type="submit"]:hover,#submit-attendance:hover,#rep-pin-submit:hover,#rep-confirm-attendance:hover,#admin-logout:hover,#announcement-submit:hover,.site-contact-form button[type="submit"]:hover,[data-rep-reset-pin]:hover,[data-rep-assign]:hover,[data-rep-remove]:hover,[data-student-role]:hover,[data-announcement-toggle]:hover,[data-card-suspension]:hover,#approve-request:hover,#reject-request:hover{background:#a71919!important;transform:translateY(-1px)}
+.btn.danger:disabled,#approve-request:disabled{background:#c62828!important;opacity:.48}
+.account-security{margin-top:24px;padding:22px;border:1px solid #dce5ef;border-radius:17px;background:linear-gradient(145deg,#f7faff,#fff);box-shadow:0 8px 24px rgba(18,49,90,.055)}
+.account-security h3{margin:5px 0 7px;font:800 17px Manrope,sans-serif;color:var(--navy)}
+.account-security>p{max-width:620px;margin-bottom:14px}
+.account-security #password-form{margin-top:17px;padding-top:16px;border-top:1px solid #e1e8f0}
+.password-step{max-width:520px;animation:student-view-in .18s ease-out}
+.password-step[hidden],#password-form[hidden]{display:none!important}
+.account-security .form-actions{flex-wrap:wrap}
+@media(max-width:700px){.account-security{margin-top:19px;padding:16px 14px;border-radius:15px}.account-security .form-actions{align-items:stretch;flex-direction:column}.account-security .form-actions .btn{width:100%;min-height:44px}.password-step{max-width:none}}

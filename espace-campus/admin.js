@@ -239,6 +239,7 @@
     const file = byId("announcement-media").files?.[0] || null;
     if (title.length < 4 || body.length < 10) { message.textContent = "Ajoutez un titre précis et une information d’au moins 10 caractères."; return; }
     if (file && (!/^(image\/(jpeg|png|webp)|video\/(mp4|webm))$/.test(file.type) || file.size > 50 * 1024 * 1024)) { message.textContent = "Choisissez une image ou vidéo JPG, PNG, WebP, MP4 ou WebM de 50 Mo maximum."; return; }
+    if (!window.confirm(`Publier l’actualité « ${title} » aux destinataires sélectionnés ?`)) return;
     button.disabled = true;
     message.textContent = "Publication en cours…";
     let mediaPath = null;
@@ -294,6 +295,7 @@
     if (!userId) { toast("Choisissez un étudiant approuvé dans ce groupe."); return; }
     const student = studentProfilesCache.find(item => item.studentId === userId && item.site === site && item.program === program && item.level === level && !item.bannedAt);
     if (!student) { toast("Cet étudiant n’appartient pas au groupe sélectionné."); return; }
+    if (!window.confirm(`Désigner ${fullName(student)} comme responsable du groupe ${siteName(site)} · ${programName(program)} · ${level} ?`)) return;
     const { error } = await adminClient.rpc("admin_assign_class_representative", { p_student_id: userId, p_site: site, p_program: program, p_level: level });
     if (error) {
       toast(friendlyError(error, "Le responsable n’a pas pu être désigné. Vérifiez le groupe puis réessayez."));
@@ -306,6 +308,7 @@
     const person = studentProfilesCache.find(item => item.studentId === userId);
     if (!person) return;
     if (person.bannedAt) { toast("Un compte banni ne peut pas être responsable."); return; }
+    if (!window.confirm(`Modifier le rôle de ${fullName(person)} et le désigner responsable de ${keyFor(person)} ?`)) return;
     const { error } = await adminClient.rpc("admin_assign_class_representative", { p_student_id: person.studentId, p_site: person.site, p_program: person.program, p_level: person.level });
     if (error) { toast(friendlyError(error, "Le rôle n’a pas pu être modifié. Réessayez.")); return; }
     toast(`${fullName(person)} est maintenant responsable de ${keyFor(person)}.`);
@@ -332,6 +335,7 @@
   }
   async function removeRepresentative(key) {
     const [site, program, level] = key.split("|");
+    if (!window.confirm(`Retirer le responsable du groupe ${siteName(site)} · ${programName(program)} · ${level} ?`)) return;
     const { error } = await adminClient.from("class_representatives").delete().eq("site", site).eq("program", program).eq("level", level);
     if (error) { toast(friendlyError(error, "Le responsable n’a pas pu être retiré. Réessayez.")); return; }
     toast("Responsable retiré du groupe.");
@@ -352,6 +356,7 @@
     const item = announcementsCache.find(row => row.id === id);
     if (!item) return;
     const publish = item.status !== "published";
+    if (!window.confirm(publish ? `Publier « ${item.title} » dans l’espace étudiant ?` : `Retirer « ${item.title} » de l’espace étudiant ?`)) return;
     try {
       const { data, error } = await adminClient.rpc("admin_set_campus_announcement_status", { p_announcement_id: id, p_status: publish ? "published" : "draft" });
       if (error || !data) { toast(friendlyError(error, "Cette actualité n’a pas pu être modifiée. Vérifiez que la migration du module Actualités est appliquée.")); return; }
@@ -381,6 +386,7 @@
     const site = form.dataset.siteContact;
     if (adminSite && site !== adminSite) { toast("Vous ne pouvez modifier que les contacts de votre site."); return; }
     const values = new FormData(form);
+    if (!window.confirm(`Enregistrer les coordonnées de ${siteName(site)} ? Elles seront visibles par les étudiants de ce site.`)) return;
     const button = form.querySelector('button[type="submit"]');
     button.disabled = true;
     const { data, error } = await adminClient.from("campus_site_contacts").update({ contact_name: String(values.get("contact_name")).trim(), address: String(values.get("address")).trim(), phone: String(values.get("phone")).trim(), updated_at: new Date().toISOString() }).eq("site", site).select("site,contact_name,address,phone,updated_at").maybeSingle();
@@ -439,6 +445,7 @@
     if (!item || item.status !== "pending") return;
     const report = auditReport(item);
     if (!report.ok || !byId("photo-check")?.checked) { toast("Terminez les contrôles et confirmez la vérification visuelle de la photo."); return; }
+    if (!window.confirm(`Approuver la demande de ${fullName(item)} et attribuer son matricule définitif ?`)) return;
     const button = byId("approve-request"); button.disabled = true;
     const { data, error } = await adminClient.rpc("admin_decide_application", { p_application_id: item.id, p_decision: "approved", p_reason: null });
     if (error) { button.disabled = false; toast(friendlyError(error, "La décision n’a pas pu être enregistrée. Réessayez.")); return; }
@@ -454,6 +461,7 @@
     if (!item || item.status !== "pending") return;
     const reason = byId("reject-reason").value.trim();
     if (!reason) { toast("Indiquez un motif de rejet pour informer l’étudiant."); byId("reject-reason").focus(); return; }
+    if (!window.confirm(`Rejeter la demande de ${fullName(item)} avec le motif indiqué ?`)) return;
     const button = byId("reject-request"); button.disabled = true;
     const { error } = await adminClient.rpc("admin_decide_application", { p_application_id: item.id, p_decision: "rejected", p_reason: reason });
     if (error) { button.disabled = false; toast(friendlyError(error, "Le rejet n’a pas pu être enregistré. Réessayez.")); return; }
@@ -465,7 +473,7 @@
   async function refreshCurrent() {
     try { await loadAdminData(); }
     catch (error) { toast(friendlyError(error, "Les informations ne sont pas disponibles pour le moment. Réessayez.")); return; }
-    renderDashboard(); if (currentView === "requests") renderRequests(); if (currentView === "students") renderStudents(); if (currentView === "attendance") renderAttendance(); if (currentView === "groups") renderGroups(); if (currentView === "representatives") await loadRepresentatives(); if (currentView === "announcements") await loadAnnouncements(); if (currentView === "cards") renderCards();
+    renderDashboard(); if (currentView === "requests") renderRequests(); if (currentView === "students") renderStudents(); if (currentView === "attendance") renderAttendance(); if (currentView === "groups") renderGroups(); if (currentView === "representatives") await loadRepresentatives(); if (currentView === "catalog") renderCatalog(); if (currentView === "announcements") await loadAnnouncements(); if (currentView === "cards") renderCards();
   }
   async function drawAdminCard(item) {
     const { data: signedPhoto, error } = await adminClient.storage.from("student-photos").createSignedUrl(item.photoPath, 600);
@@ -572,6 +580,7 @@
     });
     byId("print-admin-card").addEventListener("click", () => { document.body.classList.add("print-card-mode", "admin-print-mode"); window.print(); setTimeout(() => document.body.classList.remove("print-card-mode", "admin-print-mode"), 900); });
     byId("admin-logout").addEventListener("click", async () => {
+      if (!window.confirm("Voulez-vous vraiment vous déconnecter de l’espace administration ?")) return;
       const { error } = await adminClient.auth.signOut();
       showAdminGate(error ? "La déconnexion a échoué. Réessayez." : "Vous êtes déconnecté.");
     });
@@ -581,23 +590,23 @@
   async function authorizeAdmin(session) {
     if (!session) { showAdminGate("Connectez-vous avec votre compte administrateur."); return false; }
     currentAdminId = session.user.id;
-    const { data: globalMembership, error: globalError } = await adminClient.from("admin_members").select("user_id").eq("user_id", session.user.id).maybeSingle();
-    if (globalError) { showAdminGate("Impossible de vérifier votre autorisation. Réessayez ou contactez l’administration principale."); return false; }
-    if (globalMembership) adminSite = null;
+    const { data: siteMemberships, error: siteError } = await adminClient.from("admin_site_members").select("site").eq("user_id", session.user.id);
+    if (siteError) { showAdminGate("Impossible de vérifier votre site. Réessayez ou contactez l’administration principale."); return false; }
+    if (siteMemberships?.length > 1) {
+      await adminClient.auth.signOut();
+      showAdminGate("Ce compte est associé à plusieurs sites. Contactez l’administrateur principal.");
+      return false;
+    }
+    if (siteMemberships?.length === 1) adminSite = siteMemberships[0].site;
     else {
-      const { data: siteMemberships, error: siteError } = await adminClient.from("admin_site_members").select("site").eq("user_id", session.user.id);
-      if (siteError) { showAdminGate("Impossible de vérifier votre site. Réessayez ou contactez l’administration principale."); return false; }
-      if (siteMemberships?.length !== 1) {
+      const { data: globalMembership, error: globalError } = await adminClient.from("admin_members").select("user_id").eq("user_id", session.user.id).maybeSingle();
+      if (globalError) { showAdminGate("Impossible de vérifier votre autorisation. Réessayez ou contactez l’administration principale."); return false; }
+      if (!globalMembership) {
         await adminClient.auth.signOut();
-        showAdminGate(siteMemberships?.length ? "Ce compte est associé à plusieurs sites. Contactez l’administrateur principal." : "Ce compte n’est pas autorisé à accéder à l’administration.");
+        showAdminGate("Ce compte n’est pas autorisé à accéder à l’administration.");
         return false;
       }
-      adminSite = siteMemberships[0].site;
-    }
-    if (!globalMembership && !adminSite) {
-      await adminClient.auth.signOut();
-      showAdminGate("Ce compte n’est pas autorisé à accéder à l’administration.");
-      return false;
+      adminSite = null;
     }
     try { await loadAdminData(); }
     catch (error) {
@@ -615,6 +624,7 @@
       .on("postgres_changes", { event: "*", schema: "public", table: "attendance_records" }, () => { void refreshCurrent(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "attendance_sessions" }, () => { void refreshCurrent(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "class_representatives" }, () => { if (currentView === "representatives") void loadRepresentatives(); })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "campus_site_contacts" }, () => { void refreshCurrent(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "campus_announcements" }, () => { if (currentView === "announcements") void loadAnnouncements(); })
       .subscribe();
     return true;

@@ -1,21 +1,26 @@
 (() => {
-  if (!("serviceWorker" in navigator)) return;
-  const hadController = Boolean(navigator.serviceWorker.controller);
-  let reloadingForUpdate = false;
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (!hadController || reloadingForUpdate) return;
-    reloadingForUpdate = true;
-    window.location.reload();
-  });
-  navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).then(registration => {
-    const checkForUpdate = () => { if (document.visibilityState === "visible") void registration.update().catch(() => {}); };
-    checkForUpdate();
-    document.addEventListener("visibilitychange", checkForUpdate);
-    window.setInterval(checkForUpdate, 30 * 60 * 1000);
-  }).catch(() => {});
+  if ("serviceWorker" in navigator) {
+    const hadController = Boolean(navigator.serviceWorker.controller);
+    let reloadingForUpdate = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!hadController || reloadingForUpdate) return;
+      reloadingForUpdate = true;
+      window.location.reload();
+    });
+    navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).then(registration => {
+      const checkForUpdate = () => { if (document.visibilityState === "visible") void registration.update().catch(() => {}); };
+      checkForUpdate();
+      document.addEventListener("visibilitychange", checkForUpdate);
+      window.setInterval(checkForUpdate, 30 * 60 * 1000);
+    }).catch(() => {});
+  }
 
+  const installMarkerKey = "irgib-student-app-installed-v1";
   const isStandalone = () => window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
-  if (isStandalone()) return;
+  const hasInstallMarker = () => { try { return localStorage.getItem(installMarkerKey) === "yes"; } catch { return false; } };
+  const saveInstallMarker = () => { try { localStorage.setItem(installMarkerKey, "yes"); } catch {} };
+  if (isStandalone()) { saveInstallMarker(); return; }
+  if (hasInstallMarker()) return;
 
   let installPrompt = null;
   let installed = false;
@@ -31,6 +36,7 @@
   });
   window.addEventListener("appinstalled", () => {
     installed = true;
+    saveInstallMarker();
     if (dialog) dialog.remove();
     document.body.classList.remove("pwa-install-locked");
     document.querySelectorAll("body > :not(.pwa-install-overlay)").forEach(node => { node.inert = false; });
@@ -75,7 +81,11 @@
           await promptEvent.prompt();
           const choice = await promptEvent.userChoice;
           if (choice?.outcome === "accepted") {
-            status.textContent = "Installation lancée. Ouvrez l’application depuis son icône pour continuer.";
+            installed = true;
+            saveInstallMarker();
+            dialog.remove();
+            document.body.classList.remove("pwa-install-locked");
+            document.querySelectorAll("body > :not(.pwa-install-overlay)").forEach(node => { node.inert = false; });
           } else {
             status.textContent = "L’installation est nécessaire pour accéder à l’espace étudiant. Vous pourrez réessayer depuis ce bouton.";
           }
