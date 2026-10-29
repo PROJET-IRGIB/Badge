@@ -45,7 +45,7 @@
       profiles.push(...(data || []));
       if (!data || data.length < 500) break;
     }
-    studentProfilesCache = profiles.filter(row => row.email_verified_at).map(row => ({ studentId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, accountStatus: row.account_status || "pending", accountRejectionReason: row.account_rejection_reason || "", emailVerifiedAt: row.email_verified_at, accountReviewedAt: row.account_reviewed_at || null, bannedAt: row.banned_at || null, cardSuspendedAt: row.card_suspended_at || null }));
+    studentProfilesCache = profiles.filter(row => row.email_verified_at).map(row => ({ studentId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, originGroup: row.origin_group || "", countryOfOrigin: row.country_of_origin || "", program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, accountStatus: row.account_status || "pending", accountRejectionReason: row.account_rejection_reason || "", emailVerifiedAt: row.email_verified_at, accountReviewedAt: row.account_reviewed_at || null, bannedAt: row.banned_at || null, cardSuspendedAt: row.card_suspended_at || null }));
     const records = [];
     for (let from = 0; ; from += 500) {
       const { data, error } = await adminClient.from("attendance_records")
@@ -98,7 +98,7 @@
     const status = byId("account-filter").value;
     const list = studentProfilesCache.filter(person => (status === "all"
       || (status === "banned" ? Boolean(person.bannedAt) : status === "approved" ? person.accountStatus === "approved" && !person.bannedAt : person.accountStatus === status))
-      && [fullName(person), person.email, programName(person.program), person.level, siteName(person.site)].join(" ").toLowerCase().includes(query))
+      && [fullName(person), person.email, programName(person.program), person.level, siteName(person.site), person.originGroup, person.countryOfOrigin].join(" ").toLowerCase().includes(query))
       .sort((a, b) => (b.accountReviewedAt || "").localeCompare(a.accountReviewedAt || "") || fullName(a).localeCompare(fullName(b), "fr"));
     byId("account-count").textContent = `${list.length} compte${list.length === 1 ? "" : "s"}`;
     byId("account-rows").innerHTML = list.map(person => {
@@ -113,8 +113,9 @@
         ? `<button class="btn ${person.bannedAt ? "secondary" : "danger"} sm" type="button" data-account-${person.bannedAt ? "unban" : "ban"}="${esc(person.studentId)}">${person.bannedAt ? "Débannir" : "Bannir"}</button>`
         : "";
       const destructiveActions = `<div class="table-actions" style="flex-wrap:wrap;align-items:center">${reviewAction}${accountActions}<button class="btn danger sm" type="button" data-account-delete="${esc(person.studentId)}">Supprimer</button></div>`;
-      return `<tr><td><strong>${esc(fullName(person))}</strong>${person.accountRejectionReason ? `<span class="sub">Motif : ${esc(person.accountRejectionReason)}</span>` : ""}</td><td>${esc(person.email)}</td><td>${esc(programName(person.program))}<span class="sub">${esc(person.level)}</span></td><td>${esc(siteName(person.site))}</td><td><span class="status ${tone}">${label}</span></td><td>${destructiveActions}</td></tr>`;
-    }).join("") || `<tr><td colspan="6" class="table-empty">Aucun compte ne correspond à ces critères.</td></tr>`;
+      const origin = person.originGroup === "anglophone" ? "Anglophone · matricule A" : person.originGroup === "francophone" ? "Francophone · matricule F" : "À renseigner";
+      return `<tr><td><strong>${esc(fullName(person))}</strong>${person.accountRejectionReason ? `<span class="sub">Motif : ${esc(person.accountRejectionReason)}</span>` : ""}</td><td>${esc(person.email)}</td><td>${esc(programName(person.program))}<span class="sub">${esc(person.level)}</span></td><td>${esc(origin)}<span class="sub">${esc(person.countryOfOrigin || "Pays d’origine non renseigné")}</span></td><td>${esc(siteName(person.site))}</td><td><span class="status ${tone}">${label}</span></td><td>${destructiveActions}</td></tr>`;
+    }).join("") || `<tr><td colspan="7" class="table-empty">Aucun compte ne correspond à ces critères.</td></tr>`;
   }
   async function decideStudentAccount(studentId, approve) {
     const person = studentProfilesCache.find(item => item.studentId === studentId);
@@ -158,7 +159,10 @@
   }
   function renderStudents() {
     const query = (byId("student-search").value || "").trim().toLowerCase();
-    const list = studentProfilesCache.filter(person => person.accountStatus === "approved" && !person.bannedAt).filter(person => {
+    const program = byId("student-program-filter").value;
+    const level = byId("student-level-filter").value;
+    const list = studentProfilesCache.filter(person => person.accountStatus === "approved" && !person.bannedAt
+      && (!program || person.program === program) && (!level || person.level === level)).filter(person => {
       const app = applications().find(item => item.studentId === person.studentId);
       return [fullName(person), person.email, app?.finalMatricule, app?.temporaryMatricule, programName(person.program), person.level, siteName(person.site)].join(" ").toLowerCase().includes(query);
     });
@@ -219,6 +223,8 @@
   }
   function initGroupFilters() {
     const scopedSites = D.sites.filter(item => !adminSite || item.id === adminSite);
+    byId("student-program-filter").innerHTML = `<option value="">Toutes les filières</option>${D.programs.map(item => `<option value="${item.code}">${item.code} · ${esc(item.shortName)}</option>`).join("")}`;
+    byId("student-level-filter").innerHTML = `<option value="">Toutes les années</option>${D.levels.map(level => `<option value="${level}">${level} · ${careerYear[level] || level}</option>`).join("")}`;
     byId("group-site").innerHTML = `${adminSite ? "" : `<option value="">Tous les sites</option>`}${scopedSites.map(item => `<option value="${item.id}">${esc(item.city)}</option>`).join("")}`;
     byId("group-program").innerHTML = `<option value="">Toutes les filières</option>${D.programs.map(item => `<option value="${item.code}">${item.code} · ${esc(item.shortName)}</option>`).join("")}`;
     byId("group-level").innerHTML = `<option value="">Tous les niveaux</option>${D.levels.map(level => `<option value="${level}">${level} · ${careerYear[level] || level}</option>`).join("")}`;
@@ -588,6 +594,7 @@
     byId("account-search").addEventListener("input", renderStudentAccounts);
     byId("account-filter").addEventListener("change", renderStudentAccounts);
     byId("student-search").addEventListener("input", renderStudents);
+    ["student-program-filter", "student-level-filter"].forEach(id => byId(id).addEventListener("change", renderStudents));
     byId("attendance-search").addEventListener("input", renderAttendance);
     ["attendance-site", "attendance-program", "attendance-level", "attendance-status"].forEach(id => byId(id).addEventListener("change", renderAttendance));
     byId("card-search").addEventListener("input", renderCards);

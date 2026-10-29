@@ -17,9 +17,11 @@
     const programOptions = D.programs.map(item => `<option value="${item.code}">${item.code} · ${esc(item.name)}</option>`).join("");
     const levelOptions = D.levels.map(level => `<option value="${level}">${level}</option>`).join("");
     const siteOptions = D.sites.map(site => `<option value="${site.id}">${esc(site.city)}</option>`).join("");
+    const countryOptions = D.originCountries.map(country => `<option value="${esc(country)}"></option>`).join("");
     ["signup-program", "request-program"].forEach(id => byId(id).innerHTML = programOptions);
     ["signup-level", "request-level"].forEach(id => byId(id).innerHTML = levelOptions);
     ["signup-site", "request-site"].forEach(id => byId(id).innerHTML = siteOptions);
+    ["signup-country-options", "request-country-options"].forEach(id => byId(id).innerHTML = countryOptions);
   };
   initSelects();
 
@@ -86,7 +88,7 @@
     app.photo = photoSignedUrl;
   }
   const approvalNoticeKey = app => `irgib-approval-notice:${currentUser?.id || "student"}:${app?.id || "none"}`;
-  const fromProfileRow = row => row && ({ userId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, accountStatus: row.account_status || "pending", accountRejectionReason: row.account_rejection_reason || "", emailVerifiedAt: row.email_verified_at || null, bannedAt: row.banned_at || null, banReason: row.ban_reason || "", cardSuspendedAt: row.card_suspended_at || null });
+  const fromProfileRow = row => row && ({ userId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, originGroup: row.origin_group || "", countryOfOrigin: row.country_of_origin || "", accountStatus: row.account_status || "pending", accountRejectionReason: row.account_rejection_reason || "", emailVerifiedAt: row.email_verified_at || null, bannedAt: row.banned_at || null, banReason: row.ban_reason || "", cardSuspendedAt: row.card_suspended_at || null });
   const fromApplicationRow = row => row && ({ id: row.id, studentId: row.student_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, birthDate: row.birth_date, program: row.program, level: row.level, site: row.site, status: row.status, temporaryMatricule: row.temporary_matricule, finalMatricule: row.final_matricule, photoPath: row.photo_path, rejectionReason: row.rejection_reason, submittedAt: row.submitted_at, decidedAt: row.decided_at });
   async function loadStudentData() {
     const { data: profileRow, error: profileError } = await db.from("student_profiles").select("*").eq("user_id", currentUser.id).maybeSingle();
@@ -203,6 +205,8 @@
     byId("request-program").value = source.program || D.programs[0].code;
     byId("request-level").value = source.level || D.levels[0];
     byId("request-site").value = source.site || D.sites[0].id;
+    byId("request-origin-group").value = source.originGroup || profile?.originGroup || "";
+    byId("request-country-origin").value = source.countryOfOrigin || profile?.countryOfOrigin || "";
   };
 
   function renderNotification(app) {
@@ -304,7 +308,9 @@
     const site = D.getSite(person.site);
     const program = D.getProgram(person.program);
     const matricule = app ? app.finalMatricule || app.temporaryMatricule : "Pas encore attribué";
-    byId("profile-details").innerHTML = `<div class="profile-summary"><div class="profile-monogram">${esc(`${person.firstName?.[0] || ""}${person.lastName?.[0] || ""}`.toUpperCase())}</div><div><h3>${esc(fullName(person))}</h3><span class="muted small">${esc(person.email)}</span></div></div><div class="readonly-grid"><div class="info-row"><span>Sexe</span><strong>${esc(person.sex)}</strong></div><div class="info-row"><span>Téléphone</span><strong>${esc(person.phone || "—")}</strong></div><div class="info-row"><span>Filière</span><strong>${esc(program.name)}</strong></div><div class="info-row"><span>Niveau</span><strong>${esc(person.level)}</strong></div><div class="info-row"><span>Ville / site</span><strong>${esc(site.city)}</strong></div><div class="info-row"><span>Matricule</span><strong>${esc(matricule)}</strong></div></div>`;
+    const originLabel = (profile?.originGroup || person.originGroup) === "anglophone" ? "Anglophone · matricule A" : (profile?.originGroup || person.originGroup) === "francophone" ? "Francophone · matricule F" : app ? "Non renseignée · matricule historique conservé" : "À renseigner dans la demande de badge";
+    const country = profile?.countryOfOrigin || person.countryOfOrigin || "À renseigner";
+    byId("profile-details").innerHTML = `<div class="profile-summary"><div class="profile-monogram">${esc(`${person.firstName?.[0] || ""}${person.lastName?.[0] || ""}`.toUpperCase())}</div><div><h3>${esc(fullName(person))}</h3><span class="muted small">${esc(person.email)}</span></div></div><div class="readonly-grid"><div class="info-row"><span>Sexe</span><strong>${esc(person.sex)}</strong></div><div class="info-row"><span>Téléphone</span><strong>${esc(person.phone || "—")}</strong></div><div class="info-row"><span>Filière</span><strong>${esc(program.name)}</strong></div><div class="info-row"><span>Niveau</span><strong>${esc(person.level)}</strong></div><div class="info-row"><span>Origine</span><strong>${esc(originLabel)}</strong></div><div class="info-row"><span>Pays d’origine</span><strong>${esc(country)}</strong></div><div class="info-row"><span>Ville / site</span><strong>${esc(site.city)}</strong></div><div class="info-row"><span>Matricule</span><strong>${esc(matricule)}</strong></div></div>`;
     resetPasswordFlow();
   }
 
@@ -888,12 +894,12 @@
     event.preventDefault();
     const values = new FormData(event.currentTarget);
     const password = String(values.get("password"));
-    const draft = { firstName: String(values.get("firstName")).trim(), lastName: String(values.get("lastName")).trim(), email: String(values.get("email")).trim().toLowerCase(), phone: String(values.get("phone")).trim(), sex: String(values.get("sex")), program: String(values.get("program")), level: String(values.get("level")), site: String(values.get("site")) };
-    if (password.length < 8 || !draft.phone) { byId("signup-message").textContent = "Renseignez le téléphone et un mot de passe d’au moins 8 caractères."; return; }
+    const draft = { firstName: String(values.get("firstName")).trim(), lastName: String(values.get("lastName")).trim(), email: String(values.get("email")).trim().toLowerCase(), phone: String(values.get("phone")).trim(), sex: String(values.get("sex")), originGroup: String(values.get("originGroup")), countryOfOrigin: String(values.get("countryOfOrigin")).trim(), program: String(values.get("program")), level: String(values.get("level")), site: String(values.get("site")) };
+    if (password.length < 8 || !draft.phone || !draft.countryOfOrigin || !["francophone", "anglophone"].includes(draft.originGroup)) { byId("signup-message").textContent = "Renseignez le téléphone, le pays et l’origine francophone ou anglophone, puis vérifiez le mot de passe (8 caractères minimum)."; return; }
     if (!window.confirm(`Confirmer la création du compte étudiant pour ${draft.firstName} ${draft.lastName} (${draft.email}) ?`)) return;
     const button = event.currentTarget.querySelector('[type="submit"]'); button.disabled = true;
     try {
-      const { data, error } = await db.auth.signUp({ email: draft.email, password, options: { data: { account_type: "student", first_name: draft.firstName, last_name: draft.lastName, phone: draft.phone, sex: draft.sex, program: draft.program, level: draft.level, site: draft.site } } });
+      const { data, error } = await db.auth.signUp({ email: draft.email, password, options: { data: { account_type: "student", first_name: draft.firstName, last_name: draft.lastName, phone: draft.phone, sex: draft.sex, origin_group: draft.originGroup, country_of_origin: draft.countryOfOrigin, program: draft.program, level: draft.level, site: draft.site } } });
       if (error) throw error;
       if (data.session) { currentUser = data.user; byId("signup-form").reset(); await activatePortal(); }
       else {
@@ -1107,8 +1113,9 @@
     const button = event.currentTarget.querySelector('[type="submit"]'); button.disabled = true;
     let photoPath = "";
     try {
-      const details = { first_name: firstName, last_name: lastName, phone: String(values.get("phone")).trim(), sex: String(values.get("sex")), program: String(values.get("program")), level: String(values.get("level")), site: String(values.get("site")), birth_date: String(values.get("birthDate")) };
-      const { data: updatedProfile, error: profileError } = await db.rpc("student_update_profile", { p_first_name: details.first_name, p_last_name: details.last_name, p_phone: details.phone, p_sex: details.sex, p_program: details.program, p_level: details.level, p_site: details.site, p_birth_date: details.birth_date });
+      const details = { first_name: firstName, last_name: lastName, phone: String(values.get("phone")).trim(), sex: String(values.get("sex")), origin_group: String(values.get("originGroup")), country_of_origin: String(values.get("countryOfOrigin")).trim(), program: String(values.get("program")), level: String(values.get("level")), site: String(values.get("site")), birth_date: String(values.get("birthDate")) };
+      if (!details.country_of_origin || !["francophone", "anglophone"].includes(details.origin_group)) throw new Error("Renseignez votre pays et votre origine francophone ou anglophone.");
+      const { data: updatedProfile, error: profileError } = await db.rpc("student_update_profile", { p_first_name: details.first_name, p_last_name: details.last_name, p_phone: details.phone, p_sex: details.sex, p_program: details.program, p_level: details.level, p_site: details.site, p_birth_date: details.birth_date, p_origin_group: details.origin_group, p_country_of_origin: details.country_of_origin });
       if (profileError) throw profileError;
       profile = fromProfileRow(Array.isArray(updatedProfile) ? updatedProfile[0] : updatedProfile);
       if (!selectedPhotoBlob) throw new Error("La photo n’a pas pu être préparée. Choisissez une autre image.");

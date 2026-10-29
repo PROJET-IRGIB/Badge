@@ -34,6 +34,8 @@
         <div class="field"><label for="signup-email">Adresse e-mail</label><input id="signup-email" name="email" type="email" required autocomplete="email"></div>
         <div class="field"><label for="signup-password">Mot de passe</label><input id="signup-password" name="password" type="password" required minlength="8" autocomplete="new-password"><span class="field-help">8 caractères minimum.</span></div>
         <div class="field"><label for="signup-sex">Sexe</label><select id="signup-sex" name="sex" required><option value="">Choisir</option><option value="F">F</option><option value="M">M</option></select></div>
+        <div class="field"><label for="signup-origin-group">Provenance</label><select id="signup-origin-group" name="originGroup" required><option value="">Choisir</option><option value="francophone">Francophone · matricule F</option><option value="anglophone">Anglophone · matricule A</option></select><span class="field-help">Cette information marque votre provenance et détermine le suffixe du matricule. Elle ne change pas la langue du compte.</span></div>
+        <div class="field"><label for="signup-country-origin">Pays d’origine</label><input id="signup-country-origin" name="countryOfOrigin" list="signup-country-options" maxlength="80" autocomplete="country-name" required placeholder="Ex. Bénin"><datalist id="signup-country-options"></datalist></div>
         <div class="field"><label for="signup-phone">Téléphone</label><input id="signup-phone" name="phone" inputmode="tel" placeholder="+229 01 …"></div>
         <div class="field"><label for="signup-program">Filière</label><select id="signup-program" name="program" required></select></div>
         <div class="field"><label for="signup-level">Niveau d’étude</label><select id="signup-level" name="level" required></select></div>
@@ -60,6 +62,8 @@
               <div class="field"><label for="request-first">Prénom(s)</label><input id="request-first" name="firstName" required maxlength="50"></div>
               <div class="field"><label for="request-last">Nom</label><input id="request-last" name="lastName" required maxlength="50"></div>
               <div class="field"><label for="request-sex">Sexe</label><select id="request-sex" name="sex" required><option value="F">F</option><option value="M">M</option></select></div>
+              <div class="field"><label for="request-origin-group">Provenance</label><select id="request-origin-group" name="originGroup" required><option value="">Choisir</option><option value="francophone">Francophone · matricule F</option><option value="anglophone">Anglophone · matricule A</option></select><span class="field-help">Pour les anciens comptes, renseignez votre provenance avant la première demande de badge.</span></div>
+              <div class="field"><label for="request-country-origin">Pays d’origine</label><input id="request-country-origin" name="countryOfOrigin" list="request-country-options" maxlength="80" autocomplete="country-name" required placeholder="Ex. Bénin"><datalist id="request-country-options"></datalist></div>
               <div class="field"><label for="request-birth">Date de naissance</label><input id="request-birth" name="birthDate" type="date" required></div>
               <div class="field"><label for="request-phone">Téléphone</label><input id="request-phone" name="phone" inputmode="tel" required></div>
               <div class="field"><label for="request-program">Filière</label><select id="request-program" name="program" required></select></div>
@@ -89,13 +93,13 @@
   </main>
   <footer class="footer"><span>IRGIB AFRICA · Espace étudiant</span><a href="https://irgibafrica.university/catalogue-formations.html" target="_blank" rel="noreferrer">Catalogue officiel des formations</a></footer>
   <script src="../assets/portal-flow.js?v=20261028l" defer></script>
-  <script src="../assets/catalog.js?v=20261029a"></script>
+  <script src="../assets/catalog.js?v=20261029b"></script>
   <script src="../assets/password-visibility.js?v=1" defer></script>
   <script src="../assets/push-config.js?v=20261024c"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script src="/assets/pwa-install.js?v=20261024b" defer></script>
-  <script src="/assets/bootstrap.js?v=backend3" data-entry="/etudiant/student.js?v=backend26" data-error-target="login-message"></script>
+  <script src="/assets/bootstrap.js?v=backend3" data-entry="/etudiant/student.js?v=backend28" data-error-target="login-message"></script>
 </body>
 </html>

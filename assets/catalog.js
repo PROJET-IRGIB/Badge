@@ -17,6 +17,7 @@
     { id: "DJG-CENTRE", city: "Djougou", zone: "05", points: [{ name: "Centre d’application", address: "Centre d’application", phone: "+229 55 55 08 08" }] }
   ];
   const levels = ["LP1", "LP2", "LP3", "M1", "M2"];
+  const originCountries = "Afrique du Sud|Algérie|Angola|Bénin|Botswana|Burkina Faso|Burundi|Cabo Verde|Cameroun|Comores|Congo|Côte d’Ivoire|Djibouti|Égypte|Érythrée|Eswatini|Éthiopie|Gabon|Gambie|Ghana|Guinée|Guinée-Bissau|Guinée équatoriale|Kenya|Lesotho|Libéria|Libye|Madagascar|Malawi|Mali|Maroc|Maurice|Mauritanie|Mozambique|Namibie|Niger|Nigéria|Ouganda|République centrafricaine|République démocratique du Congo|Rwanda|Sao Tomé-et-Principe|Sénégal|Seychelles|Sierra Leone|Somalie|Soudan|Soudan du Sud|Tanzanie|Tchad|Togo|Tunisie|Zambie|Zimbabwe|Belgique|Canada|France|Royaume-Uni|États-Unis|Autre pays".split("|");
   const groupKey = (site, program, level) => `${site}-${program}-${level}`;
   const allGroups = () => sites.flatMap(site => programs.flatMap(program => levels.map(level => ({ key: groupKey(site.id, program.code, level), site: site.id, program: program.code, level }))));
   const getProgram = code => programs.find(item => item.code === code) || programs[0];
@@ -55,5 +56,5 @@
       site.points = [{ name: row.contact_name || site.city, address: row.address || "", phone: row.phone || "" }];
     });
   }
-  window.IRGIB_DATA = { programs, sites, levels, academicYear, groupKey, allGroups, getProgram, getSite, formatBirth, cardHtml, todayKey, applySiteContacts };
+  window.IRGIB_DATA = { programs, sites, levels, originCountries, academicYear, groupKey, allGroups, getProgram, getSite, formatBirth, cardHtml, todayKey, applySiteContacts };
 })();
