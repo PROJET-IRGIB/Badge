@@ -96,19 +96,24 @@
   function renderStudentAccounts() {
     const query = (byId("account-search").value || "").trim().toLowerCase();
     const status = byId("account-filter").value;
-    const list = studentProfilesCache.filter(person => (status === "all" || person.accountStatus === status)
+    const list = studentProfilesCache.filter(person => (status === "all"
+      || (status === "banned" ? Boolean(person.bannedAt) : status === "approved" ? person.accountStatus === "approved" && !person.bannedAt : person.accountStatus === status))
       && [fullName(person), person.email, programName(person.program), person.level, siteName(person.site)].join(" ").toLowerCase().includes(query))
       .sort((a, b) => (b.accountReviewedAt || "").localeCompare(a.accountReviewedAt || "") || fullName(a).localeCompare(fullName(b), "fr"));
     byId("account-count").textContent = `${list.length} compte${list.length === 1 ? "" : "s"}`;
     byId("account-rows").innerHTML = list.map(person => {
-      const label = person.accountStatus === "approved" ? "Confirmé" : person.accountStatus === "rejected" ? "Refusé" : "À confirmer";
-      const tone = person.accountStatus === "approved" ? "active" : person.accountStatus === "rejected" ? "rejected" : "pending";
-      const action = person.accountStatus === "approved"
-        ? `<span class="small muted">Accès autorisé</span>`
+      const label = person.bannedAt ? "Banni" : person.accountStatus === "approved" ? "Confirmé" : person.accountStatus === "rejected" ? "Refusé" : "À confirmer";
+      const tone = person.bannedAt || person.accountStatus === "rejected" ? "rejected" : person.accountStatus === "approved" ? "active" : "pending";
+      const reviewAction = person.accountStatus === "approved"
+        ? `<span class="small muted">${person.bannedAt ? "Accès suspendu" : "Accès autorisé"}</span>`
         : person.accountStatus === "pending"
-          ? `<div class="table-actions"><button class="btn sm" type="button" data-account-approve="${esc(person.studentId)}">Confirmer le compte</button><button class="btn danger sm" type="button" data-account-reject="${esc(person.studentId)}">Refuser</button></div>`
+          ? `<button class="btn sm" type="button" data-account-approve="${esc(person.studentId)}">Confirmer le compte</button><button class="btn danger sm" type="button" data-account-reject="${esc(person.studentId)}">Refuser</button>`
           : `<button class="btn sm" type="button" data-account-approve="${esc(person.studentId)}">Réexaminer</button>`;
-      return `<tr><td><strong>${esc(fullName(person))}</strong>${person.accountRejectionReason ? `<span class="sub">Motif : ${esc(person.accountRejectionReason)}</span>` : ""}</td><td>${esc(person.email)}</td><td>${esc(programName(person.program))}<span class="sub">${esc(person.level)}</span></td><td>${esc(siteName(person.site))}</td><td><span class="status ${tone}">${label}</span></td><td>${action}</td></tr>`;
+      const accountActions = person.accountStatus === "approved"
+        ? `<button class="btn ${person.bannedAt ? "secondary" : "danger"} sm" type="button" data-account-${person.bannedAt ? "unban" : "ban"}="${esc(person.studentId)}">${person.bannedAt ? "Débannir" : "Bannir"}</button>`
+        : "";
+      const destructiveActions = `<div class="table-actions" style="flex-wrap:wrap;align-items:center">${reviewAction}${accountActions}<button class="btn danger sm" type="button" data-account-delete="${esc(person.studentId)}">Supprimer</button></div>`;
+      return `<tr><td><strong>${esc(fullName(person))}</strong>${person.accountRejectionReason ? `<span class="sub">Motif : ${esc(person.accountRejectionReason)}</span>` : ""}</td><td>${esc(person.email)}</td><td>${esc(programName(person.program))}<span class="sub">${esc(person.level)}</span></td><td>${esc(siteName(person.site))}</td><td><span class="status ${tone}">${label}</span></td><td>${destructiveActions}</td></tr>`;
     }).join("") || `<tr><td colspan="6" class="table-empty">Aucun compte ne correspond à ces critères.</td></tr>`;
   }
   async function decideStudentAccount(studentId, approve) {
@@ -153,7 +158,7 @@
   }
   function renderStudents() {
     const query = (byId("student-search").value || "").trim().toLowerCase();
-    const list = studentProfilesCache.filter(person => person.accountStatus === "approved").filter(person => {
+    const list = studentProfilesCache.filter(person => person.accountStatus === "approved" && !person.bannedAt).filter(person => {
       const app = applications().find(item => item.studentId === person.studentId);
       return [fullName(person), person.email, app?.finalMatricule, app?.temporaryMatricule, programName(person.program), person.level, siteName(person.site)].join(" ").toLowerCase().includes(query);
     });
@@ -161,7 +166,7 @@
     byId("student-rows").innerHTML = list.map(person => {
       const app = applications().find(item => item.studentId === person.studentId);
       const rep = representativesCache.find(item => item.user_id === person.studentId);
-      return `<tr><td>${app ? photoCell(app) : `<span class="table-photo photo-empty">—</span>`}</td><td><strong>${esc(fullName(person))}</strong><span class="sub">${esc(person.email)}</span>${person.bannedAt ? `<span class="sub status rejected">Compte banni</span>` : ""}${person.cardSuspendedAt ? `<span class="sub status rejected">Carte désactivée</span>` : ""}</td><td><strong>${esc(app?.finalMatricule || app?.temporaryMatricule || "—")}</strong><span class="sub">${app ? statusText(app.status) : "Inscrit · demande non envoyée"}</span></td><td>${esc(person.sex)}</td><td>${esc(programName(person.program))}<span class="sub">${esc(person.level)}</span></td><td>${esc(siteName(person.site))}</td><td>${esc(keyFor(person))}</td><td class="student-admin-actions"><button class="btn secondary sm" type="button" data-student-role="${esc(person.studentId)}" ${person.bannedAt || person.cardSuspendedAt || rep ? "disabled" : ""}>${rep ? "Déjà responsable" : "Nommer responsable"}</button>${person.bannedAt ? `<span class="small muted">Banni</span>` : `<button class="btn danger sm" type="button" data-student-ban="${esc(person.studentId)}">Bannir</button>`}<button class="btn danger sm" type="button" data-student-delete="${esc(person.studentId)}">Supprimer</button></td></tr>`;
+      return `<tr><td>${app ? photoCell(app) : `<span class="table-photo photo-empty">—</span>`}</td><td><strong>${esc(fullName(person))}</strong><span class="sub">${esc(person.email)}</span>${person.cardSuspendedAt ? `<span class="sub status rejected">Carte désactivée</span>` : ""}</td><td><strong>${esc(app?.finalMatricule || app?.temporaryMatricule || "—")}</strong><span class="sub">${app ? statusText(app.status) : "Inscrit · demande non envoyée"}</span></td><td>${esc(person.sex)}</td><td>${esc(programName(person.program))}<span class="sub">${esc(person.level)}</span></td><td>${esc(siteName(person.site))}</td><td>${esc(keyFor(person))}</td><td class="student-admin-actions"><button class="btn secondary sm" type="button" data-student-role="${esc(person.studentId)}" ${person.cardSuspendedAt || rep ? "disabled" : ""}>${rep ? "Déjà responsable" : "Nommer responsable"}</button></td></tr>`;
     }).join("") || `<tr><td colspan="8" class="table-empty">Aucun étudiant inscrit trouvé.</td></tr>`;
   }
   const careerCycles = [
@@ -358,10 +363,12 @@
   async function manageStudentAccount(userId, action) {
     const person = studentProfilesCache.find(item => item.studentId === userId);
     if (!person) return;
-    const actionLabel = action === "ban" ? "Bannir" : "Supprimer définitivement";
+    const actionLabel = action === "ban" ? "Bannir" : action === "unban" ? "Débannir" : "Supprimer définitivement";
     const warning = action === "ban"
-      ? `Bannir ${fullName(person)} ? Sa session sera fermée et son accès sera bloqué.`
-      : `Supprimer définitivement le compte de ${fullName(person)} ? Ses demandes, photos et présences liées seront supprimées. Cette action est irréversible.`;
+      ? `Bannir ${fullName(person)} ? Son accès étudiant sera bloqué.`
+      : action === "unban"
+        ? `Débannir ${fullName(person)} et rétablir son accès étudiant ?`
+        : `Supprimer définitivement le compte de ${fullName(person)} ? Ses demandes, photos et présences liées seront supprimées. Cette action est irréversible.`;
     if (!window.confirm(warning)) return;
     const { data, error } = await adminClient.functions.invoke("manage-student-account", { body: { action, studentId: userId } });
     if (error || data?.error) {
@@ -370,7 +377,7 @@
       toast(detail || friendlyError(error, "L’action n’a pas abouti. Vérifiez que la fonction de gestion est déployée et réessayez."));
       return;
     }
-    toast(action === "ban" ? `${fullName(person)} a été banni et déconnecté.` : `Le compte de ${fullName(person)} a été supprimé.`);
+    toast(action === "ban" ? `${fullName(person)} a été banni.` : action === "unban" ? `${fullName(person)} a été débanni et son accès est rétabli.` : `Le compte de ${fullName(person)} a été supprimé.`);
     await refreshCurrent();
   }
   async function removeRepresentative(key) {
@@ -611,10 +618,12 @@
       if (accountApprove) void decideStudentAccount(accountApprove.dataset.accountApprove, true);
       const accountReject = target?.closest("[data-account-reject]");
       if (accountReject) void decideStudentAccount(accountReject.dataset.accountReject, false);
-      const studentBan = target?.closest("[data-student-ban]");
-      if (studentBan) void manageStudentAccount(studentBan.dataset.studentBan, "ban");
-      const studentDelete = target?.closest("[data-student-delete]");
-      if (studentDelete) void manageStudentAccount(studentDelete.dataset.studentDelete, "delete");
+      const accountBan = target?.closest("[data-account-ban]");
+      if (accountBan) void manageStudentAccount(accountBan.dataset.accountBan, "ban");
+      const accountUnban = target?.closest("[data-account-unban]");
+      if (accountUnban) void manageStudentAccount(accountUnban.dataset.accountUnban, "unban");
+      const accountDelete = target?.closest("[data-account-delete]");
+      if (accountDelete) void manageStudentAccount(accountDelete.dataset.accountDelete, "delete");
       const repRemove = target?.closest("[data-rep-remove]");
       if (repRemove) void removeRepresentative(repRemove.dataset.repRemove);
       const repResetPin = target?.closest("[data-rep-reset-pin]");

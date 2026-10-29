@@ -41,7 +41,7 @@ Deno.serve(async req => {
   }
   const body = input as { action?: unknown; studentId?: unknown };
   const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (typeof body.action !== "string" || !["ban", "delete"].includes(body.action)
+  if (typeof body.action !== "string" || !["ban", "unban", "delete"].includes(body.action)
       || typeof body.studentId !== "string" || !uuidPattern.test(body.studentId)) {
     return reply(400, { error: "Action ou identifiant étudiant invalide." });
   }
@@ -80,6 +80,20 @@ Deno.serve(async req => {
     }
     await serviceClient.from("push_subscriptions").delete().eq("user_id", body.studentId);
     return reply(200, { ok: true, action: "ban" });
+  }
+
+  if (body.action === "unban") {
+    if (!profile.banned_at) return reply(409, { error: "Ce compte n’est pas actuellement banni." });
+    const { error: unbanError } = await serviceClient.auth.admin.updateUserById(body.studentId, { ban_duration: "none" });
+    if (unbanError) return reply(500, { error: "Le bannissement Supabase n’a pas pu être levé." });
+    const { error: profileError } = await serviceClient.from("student_profiles").update({
+      banned_at: null, banned_by: null, ban_reason: null,
+    }).eq("user_id", body.studentId);
+    if (profileError) {
+      await serviceClient.auth.admin.updateUserById(body.studentId, { ban_duration: "876000h" });
+      return reply(500, { error: "Le bannissement Auth a été levé, mais le statut du compte n’a pas pu être actualisé. Réessayez." });
+    }
+    return reply(200, { ok: true, action: "unban" });
   }
 
   // Revoke sign-in first, then remove personal records and owned photos. If a later
