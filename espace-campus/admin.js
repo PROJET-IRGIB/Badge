@@ -45,7 +45,7 @@
       profiles.push(...(data || []));
       if (!data || data.length < 500) break;
     }
-    studentProfilesCache = profiles.map(row => ({ studentId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, bannedAt: row.banned_at || null, cardSuspendedAt: row.card_suspended_at || null }));
+    studentProfilesCache = profiles.filter(row => row.email_verified_at).map(row => ({ studentId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, accountStatus: row.account_status || "pending", accountRejectionReason: row.account_rejection_reason || "", emailVerifiedAt: row.email_verified_at, accountReviewedAt: row.account_reviewed_at || null, bannedAt: row.banned_at || null, cardSuspendedAt: row.card_suspended_at || null }));
     const records = [];
     for (let from = 0; ; from += 500) {
       const { data, error } = await adminClient.from("attendance_records")
@@ -89,9 +89,44 @@
     currentView = view;
     document.querySelectorAll(".view").forEach(node => node.classList.toggle("active", node.id === `view-${view}`));
     document.querySelectorAll(".side-nav [data-view]").forEach(node => node.classList.toggle("active", node.dataset.view === view));
-    const labels = { dashboard: "Vue d’ensemble", requests: "Demandes de badge", students: "Étudiants", attendance: "Présences", groups: "Groupes", representatives: "Responsables de classe", catalog: "Catalogue", announcements: "Actualités", cards: "Cartes" };
+    const labels = { dashboard: "Vue d’ensemble", requests: "Demandes de badge", accounts: "Comptes étudiants", students: "Étudiants", attendance: "Présences", groups: "Groupes", representatives: "Responsables de classe", catalog: "Catalogue", announcements: "Actualités", cards: "Cartes" };
     byId("breadcrumb").textContent = `Campus / ${labels[view]}`;
-    ({ dashboard: renderDashboard, requests: renderRequests, students: () => void loadRepresentatives().then(renderStudents), attendance: renderAttendance, groups: renderGroups, representatives: () => void loadRepresentatives(), catalog: renderCatalog, announcements: () => void loadAnnouncements(), cards: renderCards })[view]?.();
+    ({ dashboard: renderDashboard, requests: renderRequests, accounts: renderStudentAccounts, students: () => void loadRepresentatives().then(renderStudents), attendance: renderAttendance, groups: renderGroups, representatives: () => void loadRepresentatives(), catalog: renderCatalog, announcements: () => void loadAnnouncements(), cards: renderCards })[view]?.();
+  }
+  function renderStudentAccounts() {
+    const query = (byId("account-search").value || "").trim().toLowerCase();
+    const status = byId("account-filter").value;
+    const list = studentProfilesCache.filter(person => (status === "all" || person.accountStatus === status)
+      && [fullName(person), person.email, programName(person.program), person.level, siteName(person.site)].join(" ").toLowerCase().includes(query))
+      .sort((a, b) => (b.accountReviewedAt || "").localeCompare(a.accountReviewedAt || "") || fullName(a).localeCompare(fullName(b), "fr"));
+    byId("account-count").textContent = `${list.length} compte${list.length === 1 ? "" : "s"}`;
+    byId("account-rows").innerHTML = list.map(person => {
+      const label = person.accountStatus === "approved" ? "Confirmé" : person.accountStatus === "rejected" ? "Refusé" : "À confirmer";
+      const tone = person.accountStatus === "approved" ? "active" : person.accountStatus === "rejected" ? "rejected" : "pending";
+      const action = person.accountStatus === "approved"
+        ? `<span class="small muted">Accès autorisé</span>`
+        : person.accountStatus === "pending"
+          ? `<div class="table-actions"><button class="btn sm" type="button" data-account-approve="${esc(person.studentId)}">Confirmer le compte</button><button class="btn danger sm" type="button" data-account-reject="${esc(person.studentId)}">Refuser</button></div>`
+          : `<button class="btn sm" type="button" data-account-approve="${esc(person.studentId)}">Réexaminer</button>`;
+      return `<tr><td><strong>${esc(fullName(person))}</strong>${person.accountRejectionReason ? `<span class="sub">Motif : ${esc(person.accountRejectionReason)}</span>` : ""}</td><td>${esc(person.email)}</td><td>${esc(programName(person.program))}<span class="sub">${esc(person.level)}</span></td><td>${esc(siteName(person.site))}</td><td><span class="status ${tone}">${label}</span></td><td>${action}</td></tr>`;
+    }).join("") || `<tr><td colspan="6" class="table-empty">Aucun compte ne correspond à ces critères.</td></tr>`;
+  }
+  async function decideStudentAccount(studentId, approve) {
+    const person = studentProfilesCache.find(item => item.studentId === studentId);
+    if (!person) return;
+    const actionLabel = approve ? "confirmer" : "refuser";
+    let reason = "";
+    if (!approve) {
+      reason = window.prompt(`Motif du refus pour ${fullName(person)} (facultatif) :`) || "";
+      if (!window.confirm(`Refuser le compte étudiant de ${fullName(person)} ?`)) return;
+    } else if (!window.confirm(`Confirmer que ${fullName(person)} est bien étudiant à ${siteName(person.site)} et autoriser son accès à l’espace étudiant ?`)) return;
+    const { error } = await adminClient.rpc("admin_decide_student_account", { p_student_id: studentId, p_approve: approve, p_reason: reason });
+    if (error) { toast(friendlyError(error, `Le compte n’a pas pu être ${actionLabel}. Vérifiez la migration Supabase puis réessayez.`)); return; }
+    if (approve) {
+      const push = await dispatchCampusPush({ kind: "student_account_approved", id: studentId });
+      toast(push.error ? "Compte confirmé. L’étudiant verra l’accès ouvert à sa prochaine connexion ; la notification push n’a pas pu partir." : push.data?.sent ? "Compte confirmé et notification envoyée à l’étudiant." : "Compte confirmé. L’étudiant pourra se connecter ; aucune notification push n’est activée sur son appareil.");
+    } else toast("Compte refusé. L’étudiant ne peut pas accéder à son espace.");
+    await refreshCurrent();
   }
   function requestTableRows(list, recent = false) {
     const count = recent ? 6 : 7;
@@ -118,7 +153,7 @@
   }
   function renderStudents() {
     const query = (byId("student-search").value || "").trim().toLowerCase();
-    const list = studentProfilesCache.filter(person => {
+    const list = studentProfilesCache.filter(person => person.accountStatus === "approved").filter(person => {
       const app = applications().find(item => item.studentId === person.studentId);
       return [fullName(person), person.email, app?.finalMatricule, app?.temporaryMatricule, programName(person.program), person.level, siteName(person.site)].join(" ").toLowerCase().includes(query);
     });
@@ -482,7 +517,7 @@
   async function refreshCurrent() {
     try { await loadAdminData(); }
     catch (error) { toast(friendlyError(error, "Les informations ne sont pas disponibles pour le moment. Réessayez.")); return; }
-    renderDashboard(); if (currentView === "requests") renderRequests(); if (currentView === "students") renderStudents(); if (currentView === "attendance") renderAttendance(); if (currentView === "groups") renderGroups(); if (currentView === "representatives") await loadRepresentatives(); if (currentView === "catalog") renderCatalog(); if (currentView === "announcements") await loadAnnouncements(); if (currentView === "cards") renderCards();
+    renderDashboard(); if (currentView === "requests") renderRequests(); if (currentView === "accounts") renderStudentAccounts(); if (currentView === "students") renderStudents(); if (currentView === "attendance") renderAttendance(); if (currentView === "groups") renderGroups(); if (currentView === "representatives") await loadRepresentatives(); if (currentView === "catalog") renderCatalog(); if (currentView === "announcements") await loadAnnouncements(); if (currentView === "cards") renderCards();
   }
   async function drawAdminCard(item) {
     const { data: signedPhoto, error } = await adminClient.storage.from("student-photos").createSignedUrl(item.photoPath, 600);
@@ -543,6 +578,8 @@
     byId("review-modal").addEventListener("click", event => { if (event.target === byId("review-modal")) closeReview(); });
     byId("request-search").addEventListener("input", renderRequests);
     byId("request-filter").addEventListener("change", renderRequests);
+    byId("account-search").addEventListener("input", renderStudentAccounts);
+    byId("account-filter").addEventListener("change", renderStudentAccounts);
     byId("student-search").addEventListener("input", renderStudents);
     byId("attendance-search").addEventListener("input", renderAttendance);
     ["attendance-site", "attendance-program", "attendance-level", "attendance-status"].forEach(id => byId(id).addEventListener("change", renderAttendance));
@@ -570,6 +607,10 @@
       if (repAssign) void assignRepresentative(repAssign.dataset.repAssign);
       const studentRole = target?.closest("[data-student-role]");
       if (studentRole) void assignStudentFromRegistry(studentRole.dataset.studentRole);
+      const accountApprove = target?.closest("[data-account-approve]");
+      if (accountApprove) void decideStudentAccount(accountApprove.dataset.accountApprove, true);
+      const accountReject = target?.closest("[data-account-reject]");
+      if (accountReject) void decideStudentAccount(accountReject.dataset.accountReject, false);
       const studentBan = target?.closest("[data-student-ban]");
       if (studentBan) void manageStudentAccount(studentBan.dataset.studentBan, "ban");
       const studentDelete = target?.closest("[data-student-delete]");

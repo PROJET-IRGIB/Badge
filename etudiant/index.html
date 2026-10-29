@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#12315a"><meta name="robots" content="noindex,nofollow"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <title>Espace étudiant · IRGIB AFRICA</title><link rel="manifest" href="/manifest.webmanifest?v=4"><link rel="icon" type="image/png" sizes="192x192" href="/assets/pwa-192-v4.png"><link rel="apple-touch-icon" href="/assets/pwa-192-v4.png"><link rel="stylesheet" href="../assets/styles.css?v=20261028p">
+  <title>Espace étudiant · IRGIB AFRICA</title><link rel="manifest" href="/manifest.webmanifest?v=4"><link rel="icon" type="image/png" sizes="192x192" href="/assets/pwa-192-v4.png"><link rel="apple-touch-icon" href="/assets/pwa-192-v4.png"><link rel="stylesheet" href="../assets/styles.css?v=20261029a">
 </head>
 <body>
   <canvas id="portal-flow" aria-hidden="true"></canvas>
@@ -13,6 +13,8 @@
     <section id="loading-screen" class="panel auth-panel student-loading" role="status" aria-live="polite"><div class="student-loading-mark"><img src="../assets/blason.jpg" alt=""></div><h1>Ouverture de votre espace</h1><p class="subhead">Nous vérifions votre session sécurisée…</p><span class="student-loading-spinner" aria-hidden="true"></span></section>
 
     <section id="banned-screen" class="panel auth-panel account-blocked-panel" style="display:none" role="alert"><div class="eyebrow">Accès au compte suspendu</div><h1>Compte banni</h1><p id="banned-account-message" class="subhead">Votre compte a été banni par l’administration de votre établissement. Contactez l’administration de votre site.</p><button class="btn secondary" id="banned-return-login" type="button">Retour à la connexion</button></section>
+
+    <section id="account-pending-screen" class="panel auth-panel account-blocked-panel" style="display:none" role="status" aria-live="polite"><div class="eyebrow">Vérification administrative</div><h1 id="account-pending-title">Confirmation en cours</h1><p id="account-pending-message" class="subhead">Votre compte est en cours de confirmation par l’administration de votre site. Réessayez plus tard.</p><button class="btn secondary" id="account-pending-return-login" type="button">Retour à la connexion</button></section>
 
     <section id="auth-screen" class="panel auth-panel" style="display:none">
       <div class="eyebrow">Portail étudiant</div><h1 id="auth-title">Connexion</h1><p id="auth-intro" class="subhead">Connectez-vous avec l’adresse e-mail et le mot de passe utilisés lors de votre inscription.</p>
@@ -87,13 +89,13 @@
   </main>
   <footer class="footer"><span>IRGIB AFRICA · Espace étudiant</span><a href="https://irgibafrica.university/catalogue-formations.html" target="_blank" rel="noreferrer">Catalogue officiel des formations</a></footer>
   <script src="../assets/portal-flow.js?v=20261028l" defer></script>
-  <script src="../assets/catalog.js?v=20261026a"></script>
+  <script src="../assets/catalog.js?v=20261029a"></script>
   <script src="../assets/password-visibility.js?v=1" defer></script>
   <script src="../assets/push-config.js?v=20261024c"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script src="/assets/pwa-install.js?v=20261024b" defer></script>
-  <script src="/assets/bootstrap.js?v=backend3" data-entry="/etudiant/student.js?v=backend25" data-error-target="login-message"></script>
+  <script src="/assets/bootstrap.js?v=backend3" data-entry="/etudiant/student.js?v=backend26" data-error-target="login-message"></script>
 </body>
 </html>

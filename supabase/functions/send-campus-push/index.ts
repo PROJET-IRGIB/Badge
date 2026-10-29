@@ -76,6 +76,19 @@ Deno.serve(async req => {
     body = "Votre carte étudiante est disponible dans votre espace.";
     tag = `badge-approved-${application.id}`;
     destination = "/etudiant/#card";
+  } else if (event.kind === "student_account_approved" && typeof event.id === "string") {
+    const { data: student, error } = await serviceClient.from("student_profiles")
+      .select("user_id,site,account_status,email_verified_at").eq("user_id", event.id).maybeSingle();
+    if (error || !student || student.account_status !== "approved" || !student.email_verified_at) {
+      return response(404, { error: "Compte étudiant confirmé introuvable." });
+    }
+    const { data: allowed } = await userClient.rpc("is_admin_for_site", { p_site: student.site });
+    if (!allowed) return response(403, { error: "Vous ne pouvez pas notifier cet étudiant." });
+    targetUser = student.user_id;
+    title = "Votre compte étudiant IRGIB est confirmé";
+    body = "Vous pouvez maintenant vous connecter et envoyer votre demande de badge.";
+    tag = `student-account-approved-${student.user_id}`;
+    destination = "/etudiant/";
   } else return response(400, { error: "Type de notification inconnu." });
 
   const subscriptionQuery = serviceClient.from("push_subscriptions").select("endpoint,user_id,p256dh,auth_secret");

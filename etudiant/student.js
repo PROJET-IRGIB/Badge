@@ -61,6 +61,7 @@
   let representativeVerifySequence = 0;
   let representativeHasPin = false;
   let blockedAccountNotice = "";
+  let pendingAccountNotice = "";
   let renderedCardKey = "";
   let photoSignedUrl = "";
   let photoSignedPath = "";
@@ -85,7 +86,7 @@
     app.photo = photoSignedUrl;
   }
   const approvalNoticeKey = app => `irgib-approval-notice:${currentUser?.id || "student"}:${app?.id || "none"}`;
-  const fromProfileRow = row => row && ({ userId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, bannedAt: row.banned_at || null, banReason: row.ban_reason || "", cardSuspendedAt: row.card_suspended_at || null });
+  const fromProfileRow = row => row && ({ userId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, accountStatus: row.account_status || "pending", accountRejectionReason: row.account_rejection_reason || "", emailVerifiedAt: row.email_verified_at || null, bannedAt: row.banned_at || null, banReason: row.ban_reason || "", cardSuspendedAt: row.card_suspended_at || null });
   const fromApplicationRow = row => row && ({ id: row.id, studentId: row.student_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, birthDate: row.birth_date, program: row.program, level: row.level, site: row.site, status: row.status, temporaryMatricule: row.temporary_matricule, finalMatricule: row.final_matricule, photoPath: row.photo_path, rejectionReason: row.rejection_reason, submittedAt: row.submitted_at, decidedAt: row.decided_at });
   async function loadStudentData() {
     const { data: profileRow, error: profileError } = await db.from("student_profiles").select("*").eq("user_id", currentUser.id).maybeSingle();
@@ -95,6 +96,14 @@
     if (profile.bannedAt) {
       const site = D.getSite(profile.site)?.city || "votre site";
       throw Object.assign(new Error(profile.banReason || `Votre compte a été banni par l’administration de ${site}.`), { name: "AccountBannedError" });
+    }
+    if (profile.accountStatus === "rejected") {
+      const site = D.getSite(profile.site)?.city || "votre site universitaire";
+      throw Object.assign(new Error(`La demande de création de votre compte n’a pas été acceptée par l’administration de ${site}.${profile.accountRejectionReason ? ` Motif : ${profile.accountRejectionReason}.` : ""} Contactez l’administration de votre site.`), { name: "AccountRejectedError" });
+    }
+    if (profile.accountStatus !== "approved" || !profile.emailVerifiedAt) {
+      const site = D.getSite(profile.site)?.city || "votre site universitaire";
+      throw Object.assign(new Error(`Votre compte est en cours de confirmation par l’administration de ${site}. Le délai de traitement est de 72 h au maximum. Réessayez plus tard.`), { name: "AccountPendingError" });
     }
     try {
       const { data: contacts } = await db.from("campus_site_contacts").select("site,contact_name,address,phone").eq("site", profile.site);
@@ -120,7 +129,7 @@
     byId("signup-message").textContent = "";
   };
   const setScreen = screen => {
-    ["loading-screen", "auth-screen", "verify-screen", "portal-screen", "banned-screen"].forEach(id => byId(id).style.display = id === screen ? "block" : "none");
+    ["loading-screen", "auth-screen", "verify-screen", "portal-screen", "banned-screen", "account-pending-screen"].forEach(id => byId(id).style.display = id === screen ? "block" : "none");
     byId("signout").style.display = screen === "portal-screen" ? "inline-flex" : "none";
   };
   function showBlockedAccount(message) {
@@ -131,6 +140,14 @@
     currentUser = null;
     profile = null;
     void db.auth.signOut();
+  }
+  async function showPendingAccount(message, rejected = false) {
+    pendingAccountNotice = message || "Votre compte est en cours de confirmation par l’administration de votre site. Réessayez plus tard.";
+    byId("account-pending-title").textContent = rejected ? "Compte non confirmé" : "Confirmation en cours";
+    byId("account-pending-message").textContent = pendingAccountNotice;
+    setScreen("account-pending-screen");
+    if (currentUser && "Notification" in window && Notification.permission === "granted" && profile) await registerPushSubscription();
+    await db.auth.signOut();
   }
   function dayGreeting(date = new Date()) {
     const hour = date.getHours();
@@ -784,6 +801,7 @@
     try { await loadStudentData(); }
     catch (error) {
       if (error.name === "AccountBannedError") { showBlockedAccount(error.message); return; }
+      if (error.name === "AccountPendingError" || error.name === "AccountRejectedError") { await showPendingAccount(error.message, error.name === "AccountRejectedError"); return; }
       setScreen("auth-screen"); byId("login-message").textContent = friendlyError(error, "Impossible de charger votre espace. Vérifiez votre connexion ou contactez l’administration de votre site."); return;
     }
     setScreen("portal-screen");
@@ -893,10 +911,13 @@
     const token = byId("verify-code").value.replace(/\s/g, "");
     if (!pendingSignupEmail) { byId("verify-message").textContent = "Recommencez l’inscription pour demander un nouveau code."; return; }
     if (!/^\d{6,8}$/.test(token)) { byId("verify-message").textContent = "Saisissez le code numérique reçu par e-mail."; return; }
-    if (!window.confirm("Confirmer ce code et activer votre compte étudiant ?")) return;
+    if (!window.confirm("Confirmer ce code et transmettre votre compte à l’administration de votre site pour validation ?")) return;
     const button = event.currentTarget.querySelector('[type="submit"]'); button.disabled = true;
     byId("verify-message").textContent = "Vérification du code…";
     try {
+      if ("Notification" in window && Notification.permission === "default") {
+        try { await Notification.requestPermission(); } catch { /* La confirmation de l’e-mail reste possible sans notifications. */ }
+      }
       const { data, error } = await db.auth.verifyOtp({ email: pendingSignupEmail, token, type: "email" });
       if (error) throw error;
       if (!data.user) throw new Error("La confirmation a réussi mais le compte étudiant n’a pas été retourné. Connectez-vous pour continuer.");
@@ -1196,10 +1217,16 @@
     setScreen("auth-screen");
     showAuthPage("login");
   });
+  byId("account-pending-return-login").addEventListener("click", () => {
+    pendingAccountNotice = "";
+    setScreen("auth-screen");
+    showAuthPage("login");
+  });
   db.auth.onAuthStateChange((event, session) => {
     if (event === "SIGNED_OUT") {
       hideRepresentativeDailyQr(); representativeHasPin = false; currentUser = null; profile = null; application = null; attendanceRows = []; renderedCardKey = ""; photoSignedUrl = ""; photoSignedPath = ""; photoSignedUntil = 0;
       if (blockedAccountNotice) { setScreen("banned-screen"); byId("banned-account-message").textContent = blockedAccountNotice; }
+      else if (pendingAccountNotice) { setScreen("account-pending-screen"); byId("account-pending-message").textContent = pendingAccountNotice; }
       else { setScreen("auth-screen"); showAuthPage("login"); }
     }
     else if (event === "SIGNED_IN" && session?.user && !currentUser) { currentUser = session.user; void activatePortal(); }

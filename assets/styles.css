@@ -29,7 +29,10 @@
 .card-v2-header,.card-v2-main,.card-v2-footer,.card-v2-details,.card-v2-portrait,.card-v2-verification{min-width:0;min-height:0}
 .card-v2-header{display:flex;align-items:center;gap:2cqw;border-bottom:1px solid rgba(255,255,255,.22);padding-bottom:.4%}
 .card-v2-logo{width:11cqw;height:11cqw;object-fit:contain;border-radius:50%;background:#fff;padding:1px;flex:none}
+.card-v2-header .card-v2-national-seal{width:11cqw;height:11cqw;object-fit:contain;border-radius:0;background:transparent;padding:0}
+.card-v2-institution-logo{width:9.5cqw;height:9.5cqw;object-fit:contain;flex:none;border-radius:50%;background:#fff;padding:.35cqw}
 .card-v2-brand{display:grid;gap:.15cqw;min-width:0}
+.card-v2-header .card-v2-brand{flex:1}
 .card-v2-brand strong{font:800 3.1cqw/1.05 Manrope,sans-serif;letter-spacing:.02em;color:#fff}
 .card-v2-brand span{font-size:1.45cqw;font-weight:700;letter-spacing:.05em;color:#c5d4e6}
 .card-v2-brand small{font-size:1.55cqw;font-weight:800;letter-spacing:.04em;color:#eef3f8}
@@ -65,6 +68,11 @@
 .card-v2-back-block small{font-size:1.45cqw;font-weight:600;line-height:1.15;color:#d5e0ea}
 .card-v2-back-block strong{font-size:1.85cqw;font-weight:700;line-height:1.15;color:#fff}
 .card-v2-back-block em{font-style:normal;font-size:1.5cqw;line-height:1.15;color:#d5e0ea}
+.card-v2-authority-demo{display:flex;align-items:center;justify-content:flex-end;gap:2cqw;margin-top:.4cqw;min-height:9cqw}
+.card-v2-authority-demo>img{width:10cqw;height:10cqw;object-fit:contain;flex:none}
+.card-v2-authority-demo>div{display:grid;justify-items:center;gap:.3cqw}
+.card-v2-authority-demo>div img{width:20cqw;height:6cqw;object-fit:contain}
+.card-v2-authority-demo small{font-size:1.15cqw;font-weight:800;letter-spacing:.07em;color:#f2d9dd}
 .card-v2-back-footer{display:flex;align-items:center;justify-content:space-between;gap:2cqw;border-top:1px solid rgba(255,255,255,.28);padding-top:2%;font-size:1.7cqw;line-height:1.15;color:#e8eef5}
 .card-v2-back-footer em{display:block;font-style:normal;font-size:1.48cqw;line-height:1.15;color:#d5e0ea}
 .card-v2-back-mark{display:flex;align-items:center;gap:1.1cqw;flex:none;color:#fff;font:800 1.55cqw/1 Manrope,sans-serif;letter-spacing:.04em}
