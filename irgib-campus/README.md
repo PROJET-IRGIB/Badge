@@ -16,9 +16,9 @@ Les écrans sont interactifs. Ils utilisent le stockage local du navigateur et d
 3. L’étudiant renseigne les champs de sa demande et joint une photo d’identité. Le texte exige une photo nette, en tenue de l’école, cheveux bien peignés.
 4. À l’envoi, la plateforme de démonstration attribue un matricule temporaire `TMP-…`. La demande et les champs sont ensuite en lecture seule côté étudiant.
 5. Si une erreur est remarquée, l’étudiant est invité à joindre l’administration de son site d’apprentissage dans les 24 heures, avant la décision.
-6. À l’approbation, la maquette attribue un matricule définitif `IRGIB-####F` ou `IRGIB-####B` et affiche une notification dans l’espace étudiant. Le sexe reste un champ séparé, `M` ou `F`.
+6. À l’approbation, la maquette attribue un matricule définitif et affiche une notification dans l’espace étudiant. Le sexe reste un champ séparé, `M` ou `F`.
 
-Avec quatre chiffres et seulement deux lettres finales possibles, le format permet au maximum **20 000 matricules définitifs uniques au total**, tous sites et promotions confondus.
+Le matricule définitif est attribué par la plateforme et doit rester unique pour tous les sites et promotions.
 
 ## Parcours administration
 

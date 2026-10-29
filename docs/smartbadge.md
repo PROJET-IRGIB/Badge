@@ -10,7 +10,7 @@ Année affichée sur la carte : 2026-2027. Le portail est le site statique de la
 
 - Inscription étudiant, confirmation d’e-mail, connexion et changement de mot de passe.
 - Profil et demande de badge : photo privée, naissance, sexe, téléphone, filière, niveau et site.
-- File d’administration : approuver ou rejeter. Le rejet permet une nouvelle demande. Le matricule final `IRGIB-####F` ou `IRGIB-####B` est attribué à l’approbation.
+- File d’administration : approuver ou rejeter. Le rejet permet une nouvelle demande. Le matricule définitif est attribué à l’approbation.
 - Carte bilingue 85,60 × 53,98 mm, recto et verso, QR `IRGIB-CARTE:<matricule>`.
 - Présence du jour : l’administration crée un QR de séance pour un groupe ; l’étudiant le scanne et confirme.
 - Huit filières, cinq niveaux (`LP1`, `LP2`, `LP3`, `M1`, `M2`) et six sites. Le Siège et Akpakpa sont deux sites. L’écran Groupes compte les cartes approuvées par site, filière et niveau.

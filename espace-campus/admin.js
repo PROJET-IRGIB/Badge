@@ -113,7 +113,7 @@
         ? `<button class="btn ${person.bannedAt ? "secondary" : "danger"} sm" type="button" data-account-${person.bannedAt ? "unban" : "ban"}="${esc(person.studentId)}">${person.bannedAt ? "Débannir" : "Bannir"}</button>`
         : "";
       const destructiveActions = `<div class="table-actions" style="flex-wrap:wrap;align-items:center">${reviewAction}${accountActions}<button class="btn danger sm" type="button" data-account-delete="${esc(person.studentId)}">Supprimer</button></div>`;
-      const origin = person.originGroup === "anglophone" ? "Anglophone · matricule A" : person.originGroup === "francophone" ? "Francophone · matricule F" : "À renseigner";
+      const origin = person.originGroup === "anglophone" ? "Anglophone" : person.originGroup === "francophone" ? "Francophone" : "À renseigner";
       return `<tr><td><strong>${esc(fullName(person))}</strong>${person.accountRejectionReason ? `<span class="sub">Motif : ${esc(person.accountRejectionReason)}</span>` : ""}</td><td>${esc(person.email)}</td><td>${esc(programName(person.program))}<span class="sub">${esc(person.level)}</span></td><td>${esc(origin)}<span class="sub">${esc(person.countryOfOrigin || "Pays d’origine non renseigné")}</span></td><td>${esc(siteName(person.site))}</td><td><span class="status ${tone}">${label}</span></td><td>${destructiveActions}</td></tr>`;
     }).join("") || `<tr><td colspan="7" class="table-empty">Aucun compte ne correspond à ces critères.</td></tr>`;
   }
