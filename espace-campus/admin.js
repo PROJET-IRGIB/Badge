@@ -47,6 +47,8 @@
       if (!data || data.length < 500) break;
     }
     studentProfilesCache = profiles.filter(row => row.email_verified_at).map(row => ({ studentId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, originGroup: row.origin_group || "", countryOfOrigin: row.country_of_origin || "", program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, accountStatus: row.account_status || "pending", accountRejectionReason: row.account_rejection_reason || "", emailVerifiedAt: row.email_verified_at, accountReviewedAt: row.account_reviewed_at || null, bannedAt: row.banned_at || null, cardSuspendedAt: row.card_suspended_at || null }));
+    const countryByStudent = new Map(studentProfilesCache.map(person => [person.studentId, person.countryOfOrigin]));
+    applicationsCache = applicationsCache.map(item => ({ ...item, countryOfOrigin: countryByStudent.get(item.studentId) || "" }));
     const records = [];
     for (let from = 0; ; from += 500) {
       const { data, error } = await adminClient.from("attendance_records")

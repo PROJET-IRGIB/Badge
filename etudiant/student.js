@@ -128,7 +128,7 @@
   let photoSignedUntil = 0;
 
   const getApplication = () => application;
-  const cardKey = app => app ? [app.id, app.status, app.finalMatricule, app.photoPath, app.firstName, app.lastName, app.birthDate, app.sex, app.program, app.level, app.site, profile?.cardSuspendedAt || ""].join("|") : "";
+  const cardKey = app => app ? [app.id, app.status, app.finalMatricule, app.photoPath, app.firstName, app.lastName, app.birthDate, app.sex, app.countryOfOrigin || profile?.countryOfOrigin || "", app.program, app.level, app.site, profile?.cardSuspendedAt || ""].join("|") : "";
   const attendanceKey = rows => (rows || []).map(row => `${row.sessionId}:${row.status}:${row.createdAt}`).join(",");
   async function attachPhotoUrl(app) {
     if (!app?.photoPath) {
@@ -147,7 +147,7 @@
   }
   const approvalNoticeKey = app => `irgib-approval-notice:${currentUser?.id || "student"}:${app?.id || "none"}`;
   const fromProfileRow = row => row && ({ userId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, originGroup: row.origin_group || "", countryOfOrigin: row.country_of_origin || "", accountStatus: row.account_status || "pending", accountRejectionReason: row.account_rejection_reason || "", emailVerifiedAt: row.email_verified_at || null, bannedAt: row.banned_at || null, banReason: row.ban_reason || "", cardSuspendedAt: row.card_suspended_at || null });
-  const fromApplicationRow = row => row && ({ id: row.id, studentId: row.student_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, birthDate: row.birth_date, program: row.program, level: row.level, site: row.site, status: row.status, temporaryMatricule: row.temporary_matricule, finalMatricule: row.final_matricule, photoPath: row.photo_path, rejectionReason: row.rejection_reason, submittedAt: row.submitted_at, decidedAt: row.decided_at });
+  const fromApplicationRow = row => row && ({ id: row.id, studentId: row.student_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, birthDate: row.birth_date, countryOfOrigin: row.country_of_origin || profile?.countryOfOrigin || "", program: row.program, level: row.level, site: row.site, status: row.status, temporaryMatricule: row.temporary_matricule, finalMatricule: row.final_matricule, photoPath: row.photo_path, rejectionReason: row.rejection_reason, submittedAt: row.submitted_at, decidedAt: row.decided_at });
   async function loadStudentData() {
     const { data: profileRow, error: profileError } = await db.from("student_profiles").select("*").eq("user_id", currentUser.id).maybeSingle();
     if (profileError) throw profileError;
@@ -318,7 +318,7 @@
     }
     renderedCardKey = key;
     const qrPayload = `IRGIB-CARTE:${app.finalMatricule}`;
-    zone.innerHTML = D.cardHtml(app, "card-qr");
+    zone.innerHTML = D.cardHtml({ ...app, countryOfOrigin: app.countryOfOrigin || profile?.countryOfOrigin || "" }, "card-qr");
     const qrHost = byId("card-qr");
     if (profile?.cardSuspendedAt) {
       qrHost.innerHTML = `<span class="card-suspended-qr">Carte temporairement désactivée</span>`;
