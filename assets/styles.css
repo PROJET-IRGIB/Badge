@@ -571,3 +571,9 @@ body:has(#portal-screen[style*="display: block"])>.footer{position:relative;z-in
   body:has(#portal-screen[style*="display: block"]){background:#fff!important}
   #portal-flow{display:none!important}
 }
+.card-bulk-toolbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 18px;border-bottom:1px solid var(--line);background:#fbfcfe}
+.card-bulk-toolbar .checkbox-inline{display:inline-flex;align-items:center;gap:9px;margin:0;color:var(--ink);font-weight:700}
+#view-cards [data-card-select],#card-select-visible{width:18px;height:18px;margin:0;accent-color:#174577;cursor:pointer}
+#view-cards [data-card-select]:disabled{cursor:not-allowed;opacity:.45}
+#card-selection-count{margin-right:auto}
+@media(max-width:700px){.card-bulk-toolbar{align-items:stretch;gap:11px;padding:13px}.card-bulk-toolbar .checkbox-inline{width:100%}#card-selection-count{width:100%}.card-bulk-toolbar #download-selected-cards{width:100%;min-height:44px}}

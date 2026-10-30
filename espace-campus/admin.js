@@ -22,6 +22,7 @@
   let siteContactsAvailable = false;
   let adminSite = null;
   let currentAdminId = "";
+  const selectedCardIds = new Set();
   const applications = () => applicationsCache;
   const approved = () => applications().filter(item => item.status === "approved");
   const siteName = id => D.getSite(id).city;
@@ -457,7 +458,15 @@
   function renderCards() {
     const query = (byId("card-search").value || "").trim().toLowerCase();
     const list = approved().filter(item => [fullName(item), item.finalMatricule, programName(item.program), siteName(item.site)].join(" ").toLowerCase().includes(query));
-    byId("card-rows").innerHTML = list.map(item => { const person = studentProfilesCache.find(row => row.studentId === item.studentId); const suspended = Boolean(person?.cardSuspendedAt); return `<tr><td>${photoCell(item)}</td><td><strong>${esc(fullName(item))}</strong>${suspended ? `<span class="sub status rejected">Carte temporairement désactivée</span>` : ""}</td><td>${esc(item.finalMatricule)}</td><td>${esc(programName(item.program))}<span class="sub">${esc(item.level)}</span></td><td>${esc(siteName(item.site))}</td><td><div class="table-actions"><button class="btn secondary sm" data-preview-card="${esc(item.id)}">Prévisualiser</button><button class="btn ${suspended ? "" : "danger"} sm" data-card-suspension="${esc(item.studentId)}" data-suspended="${suspended ? "1" : "0"}">${suspended ? "Réactiver la carte" : "Désactiver temporairement"}</button></div></td></tr>`; }).join("") || `<tr><td colspan="6" class="table-empty">Aucune carte approuvée.</td></tr>`;
+    const selectableIds = new Set(approved().filter(item => !studentProfilesCache.find(row => row.studentId === item.studentId)?.cardSuspendedAt && item.photoPath).map(item => item.id));
+    for (const id of selectedCardIds) if (!selectableIds.has(id)) selectedCardIds.delete(id);
+    byId("card-rows").innerHTML = list.map(item => { const person = studentProfilesCache.find(row => row.studentId === item.studentId); const suspended = Boolean(person?.cardSuspendedAt); const selectable = !suspended && Boolean(item.photoPath); return `<tr><td><input type="checkbox" data-card-select="${esc(item.id)}" ${selectedCardIds.has(item.id) ? "checked" : ""} ${selectable ? "" : "disabled"} aria-label="Sélectionner le badge de ${esc(fullName(item))}"></td><td>${photoCell(item)}</td><td><strong>${esc(fullName(item))}</strong>${suspended ? `<span class="sub status rejected">Carte temporairement désactivée</span>` : ""}</td><td>${esc(item.finalMatricule)}</td><td>${esc(programName(item.program))}<span class="sub">${esc(item.level)}</span></td><td>${esc(siteName(item.site))}</td><td><div class="table-actions"><button class="btn secondary sm" data-preview-card="${esc(item.id)}">Prévisualiser</button><button class="btn ${suspended ? "" : "danger"} sm" data-card-suspension="${esc(item.studentId)}" data-suspended="${suspended ? "1" : "0"}">${suspended ? "Réactiver la carte" : "Désactiver temporairement"}</button></div></td></tr>`; }).join("") || `<tr><td colspan="7" class="table-empty">Aucune carte approuvée.</td></tr>`;
+    const visibleChecks = [...byId("card-rows").querySelectorAll("[data-card-select]:not(:disabled)")];
+    const checkedVisible = visibleChecks.filter(input => input.checked).length;
+    byId("card-select-visible").checked = visibleChecks.length > 0 && checkedVisible === visibleChecks.length;
+    byId("card-select-visible").indeterminate = checkedVisible > 0 && checkedVisible < visibleChecks.length;
+    byId("card-selection-count").textContent = `${selectedCardIds.size} badge${selectedCardIds.size === 1 ? "" : "s"} sélectionné${selectedCardIds.size === 1 ? "" : "s"}`;
+    byId("download-selected-cards").disabled = selectedCardIds.size === 0;
   }
   function auditReport(item) {
     const required = [item.firstName, item.lastName, item.email, item.phone, item.program, item.level, item.site, item.sex];
@@ -545,6 +554,84 @@
     byId("card-preview-panel").style.display = "block";
     byId("card-preview-panel").scrollIntoView({ behavior: "smooth", block: "start" });
   }
+  function printableCardFace(face) {
+    const clone = face.cloneNode(true);
+    clone.querySelectorAll(".card-v2-qr").forEach(qrHost => {
+      const canvas = qrHost.querySelector("canvas");
+      const sourceImage = [...qrHost.querySelectorAll("img")].find(image => image.naturalWidth > 0);
+      let qrSource = "";
+      try { if (canvas?.width && canvas?.height) qrSource = canvas.toDataURL("image/png"); } catch {}
+      if (!qrSource && sourceImage) qrSource = sourceImage.currentSrc || sourceImage.src;
+      qrHost.replaceChildren();
+      if (qrSource) {
+        const image = document.createElement("img");
+        image.src = qrSource;
+        image.alt = "QR de vérification du badge";
+        image.style.cssText = "display:block;width:100%;height:100%;max-width:100%;max-height:100%;object-fit:contain;background:#fff;filter:none";
+        qrHost.append(image);
+      } else {
+        const fallback = document.createElement("span");
+        fallback.className = "qr-fallback";
+        fallback.textContent = "QR indisponible";
+        qrHost.append(fallback);
+      }
+    });
+    clone.querySelectorAll("img").forEach(image => {
+      const src = image.getAttribute("src");
+      if (src && !src.startsWith("data:")) image.src = new URL(src, location.href).href;
+    });
+    return clone.outerHTML;
+  }
+  async function downloadSelectedCards() {
+    const selected = approved().filter(item => selectedCardIds.has(item.id));
+    if (!selected.length) { toast("Sélectionnez au moins un badge actif."); return; }
+    if (!window.QRCode) { toast("Le générateur QR n’est pas chargé. Rechargez la page puis réessayez."); return; }
+    const printWindow = window.open("", "irgib-admin-bulk-cards", "popup,width=980,height=820");
+    if (!printWindow) { toast("Autorisez l’ouverture de la fenêtre d’impression pour préparer le PDF."); return; }
+    printWindow.opener = null;
+    printWindow.document.open();
+    printWindow.document.write("<!doctype html><html lang=\"fr\"><head><meta charset=\"utf-8\"><title>Préparation des badges</title></head><body style=\"font:16px Arial,sans-serif;padding:32px;color:#102a39\">Préparation des badges sélectionnés…</body></html>");
+    printWindow.document.close();
+    const staging = document.createElement("div");
+    staging.style.cssText = "position:fixed;left:-100000px;top:0;width:85.6mm;pointer-events:none";
+    document.body.append(staging);
+    try {
+      const sheets = [];
+      for (let index = 0; index < selected.length; index += 1) {
+        const item = selected[index];
+        const person = studentProfilesCache.find(profile => profile.studentId === item.studentId);
+        if (person?.cardSuspendedAt) throw new Error(`La carte de ${fullName(item)} est temporairement désactivée.`);
+        const { data: signedPhoto, error } = await adminClient.storage.from("student-photos").createSignedUrl(item.photoPath, 3600);
+        if (error || !signedPhoto?.signedUrl) throw new Error(`La photo de ${fullName(item)} n’a pas pu être chargée.`);
+        const qrId = `admin-bulk-qr-${index}`;
+        staging.innerHTML = D.cardHtml({ ...item, photo: signedPhoto.signedUrl }, qrId);
+        const qrHost = staging.querySelector(`#${qrId}`);
+        if (!qrHost) throw new Error(`Le QR de ${fullName(item)} n’a pas pu être préparé.`);
+        new QRCode(qrHost, { text: `IRGIB-CARTE:${item.finalMatricule}`, width: 256, height: 256, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const faces = [...staging.querySelectorAll(".card-v2")];
+        if (faces.length !== 2) throw new Error(`Le recto et le verso de ${fullName(item)} ne sont pas prêts.`);
+        const portrait = staging.querySelector(".card-v2-portrait img");
+        if (portrait) {
+          try { await portrait.decode(); } catch { throw new Error(`La photo de ${fullName(item)} ne peut pas être imprimée. Actualisez la liste et réessayez.`); }
+          if (!portrait.naturalWidth) throw new Error(`La photo de ${fullName(item)} ne peut pas être imprimée. Actualisez la liste et réessayez.`);
+        }
+        const qrHostInCard = staging.querySelector(`#${qrId}`);
+        const qrImage = [...(qrHostInCard?.querySelectorAll("img") || [])].find(image => image.naturalWidth > 0);
+        if (!qrHostInCard?.querySelector("canvas") && !qrImage) throw new Error(`Le QR de ${fullName(item)} n’a pas été généré. Aucun PDF incomplet n’a été préparé.`);
+        faces.forEach(face => sheets.push(`<section class=\"card-print-sheet\">${printableCardFace(face)}</section>`));
+        staging.replaceChildren();
+      }
+      const stylesUrl = new URL("../assets/styles.css?v=20261030b", location.href).href;
+      printWindow.document.open();
+      printWindow.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Badges IRGIB AFRICA</title><link rel="stylesheet" href="${stylesUrl}"><style>@page{size:A4 portrait;margin:0}*{box-sizing:border-box}html,body{margin:0!important;padding:0!important;width:210mm!important;min-width:210mm!important;background:#fff!important}.card-print-sheet{width:210mm;height:297mm;display:grid;place-items:center;overflow:hidden;break-after:page;page-break-after:always}.card-print-sheet:last-child{break-after:auto;page-break-after:auto}.card-print-sheet .card-v2{width:85.6mm!important;height:53.98mm!important;min-width:85.6mm!important;max-width:85.6mm!important;aspect-ratio:auto!important;margin:0!important;padding:2.2mm 2.4mm!important;border-radius:2mm!important;box-shadow:none!important;overflow:hidden!important;break-inside:avoid!important;page-break-inside:avoid!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}.card-print-sheet .card-v2-front{break-after:auto!important;page-break-after:auto!important}.card-print-sheet .card-v2.card-back{display:grid!important;break-before:auto!important;page-break-before:auto!important}.card-print-sheet img{print-color-adjust:exact;-webkit-print-color-adjust:exact}@media print{html,body{width:210mm!important;min-width:210mm!important}.card-print-sheet{height:297mm!important;break-after:page!important;page-break-after:always!important}.card-print-sheet:last-child{break-after:auto!important;page-break-after:auto!important}}.card-print-sheet .card-v2-qr{width:18mm!important;height:18mm!important;min-width:18mm!important;min-height:18mm!important;padding:.5mm!important;background:#fff!important;overflow:hidden!important;display:grid!important;place-items:center!important}.card-print-sheet .card-v2-verification{overflow:hidden!important;align-content:center!important;justify-items:center!important}.card-print-sheet .card-v2-qr img{display:block!important;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain!important;background:#fff!important;filter:none!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}</style></head><body>${sheets.join("")}<script>window.addEventListener('load',async()=>{await Promise.all([...document.images].map(i=>i.decode?.().catch(()=>{})));if(document.fonts?.ready)await document.fonts.ready;window.focus();setTimeout(()=>window.print(),250)});window.addEventListener('afterprint',()=>window.close());</script></body></html>`);
+      printWindow.document.close();
+      toast(`PDF préparé pour ${selected.length} badge${selected.length === 1 ? "" : "s"}.`);
+    } catch (error) {
+      printWindow.close();
+      toast(error.message || "Les badges sélectionnés n’ont pas pu être préparés.");
+    } finally { staging.remove(); }
+  }
   function exportCsv(kind) {
     let rows = [];
     let filename = "";
@@ -562,10 +649,11 @@
 
   let adminClient = null;
   let appInitialized = false;
-  function showAdminGate(message = "") {
+  function showAdminGate(message = "", canRetrySession = false) {
     byId("admin-app").hidden = true;
     byId("admin-auth-screen").hidden = false;
     byId("admin-auth-message").textContent = message;
+    byId("admin-retry-session").hidden = !canRetrySession;
   }
   function initAdminApp() {
     // Rebuild scope-dependent options on every login. Event handlers are
@@ -598,6 +686,21 @@
     byId("attendance-search").addEventListener("input", renderAttendance);
     ["attendance-site", "attendance-program", "attendance-level", "attendance-status"].forEach(id => byId(id).addEventListener("change", renderAttendance));
     byId("card-search").addEventListener("input", renderCards);
+    byId("card-rows").addEventListener("change", event => {
+      const input = event.target.closest("[data-card-select]");
+      if (!input) return;
+      if (input.checked) selectedCardIds.add(input.dataset.cardSelect);
+      else selectedCardIds.delete(input.dataset.cardSelect);
+      renderCards();
+    });
+    byId("card-select-visible").addEventListener("change", event => {
+      byId("card-rows").querySelectorAll("[data-card-select]:not(:disabled)").forEach(input => {
+        if (event.currentTarget.checked) selectedCardIds.add(input.dataset.cardSelect);
+        else selectedCardIds.delete(input.dataset.cardSelect);
+      });
+      renderCards();
+    });
+    byId("download-selected-cards").addEventListener("click", () => void downloadSelectedCards());
     ["group-site", "group-program", "group-level"].forEach(id => byId(id).addEventListener("change", renderGroups));
     byId("announcement-form").addEventListener("submit", event => void publishAnnouncement(event));
     document.addEventListener("submit", event => {
@@ -657,7 +760,7 @@
     if (!session) { showAdminGate("Connectez-vous avec votre compte administrateur."); return false; }
     currentAdminId = session.user.id;
     const { data: siteMemberships, error: siteError } = await adminClient.from("admin_site_members").select("site").eq("user_id", session.user.id);
-    if (siteError) { showAdminGate("Impossible de vérifier votre site. Réessayez ou contactez l’administration principale."); return false; }
+    if (siteError) { showAdminGate("Votre session est conservée, mais le site n’a pas pu être vérifié. Réessayez sans vous reconnecter.", true); return false; }
     if (siteMemberships?.length > 1) {
       await adminClient.auth.signOut();
       showAdminGate("Ce compte est associé à plusieurs sites. Contactez l’administrateur principal.");
@@ -666,7 +769,7 @@
     if (siteMemberships?.length === 1) adminSite = siteMemberships[0].site;
     else {
       const { data: globalMembership, error: globalError } = await adminClient.from("admin_members").select("user_id").eq("user_id", session.user.id).maybeSingle();
-      if (globalError) { showAdminGate("Impossible de vérifier votre autorisation. Réessayez ou contactez l’administration principale."); return false; }
+      if (globalError) { showAdminGate("Votre session est conservée, mais l’autorisation n’a pas pu être vérifiée. Réessayez sans vous reconnecter.", true); return false; }
       if (!globalMembership) {
         await adminClient.auth.signOut();
         showAdminGate("Ce compte n’est pas autorisé à accéder à l’administration.");
@@ -676,7 +779,7 @@
     }
     try { await loadAdminData(); }
     catch (error) {
-      showAdminGate("Les informations du campus ne sont pas disponibles pour le moment. Réessayez plus tard.");
+      showAdminGate("Votre session est conservée, mais les données du campus ne sont pas disponibles. Réessayez sans vous reconnecter.", true);
       return false;
     }
     byId("admin-user-label").textContent = adminSite ? `${session.user.email || "Administration"} · ${siteName(adminSite)}` : (session.user.email || "Administration");
@@ -703,7 +806,19 @@
     }
     if (!window.supabase?.createClient) { showAdminGate("Le service d’authentification n’a pas pu se charger. Vérifiez la connexion Internet puis rechargez la page."); return; }
     try {
-      adminClient = window.supabase.createClient(config.url, config.anonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+      const projectRef = new URL(config.url).hostname.split(".")[0];
+      const authStorageKey = `irgib-admin-${projectRef}-auth`;
+      const legacyAuthStorageKey = `sb-${projectRef}-auth-token`;
+      try {
+        if (!localStorage.getItem(authStorageKey)) {
+          const legacySession = localStorage.getItem(legacyAuthStorageKey);
+          if (legacySession) {
+            localStorage.setItem(authStorageKey, legacySession);
+            localStorage.removeItem(legacyAuthStorageKey);
+          }
+        }
+      } catch { /* Session persistence is handled by Supabase when browser storage is available. */ }
+      adminClient = window.supabase.createClient(config.url, config.anonKey, { auth: { storageKey: authStorageKey, persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
       const { data, error } = await adminClient.auth.getSession();
       if (error) throw error;
       await authorizeAdmin(data.session);
@@ -711,9 +826,22 @@
         if (event === "SIGNED_OUT") showAdminGate("Vous êtes déconnecté.");
       });
     } catch {
-      showAdminGate("Impossible de vérifier votre session. Rechargez la page ou reconnectez-vous.");
+      showAdminGate("La session n’a pas pu être vérifiée pour le moment. Réessayez avant de saisir à nouveau vos identifiants.", true);
     }
   }
+  byId("admin-retry-session").addEventListener("click", async () => {
+    const button = byId("admin-retry-session");
+    button.disabled = true;
+    byId("admin-auth-message").textContent = "Vérification de la session conservée…";
+    try {
+      const { data, error } = await adminClient.auth.getSession();
+      if (error) throw error;
+      if (!data.session) { showAdminGate("La session a expiré. Connectez-vous pour continuer."); return; }
+      await authorizeAdmin(data.session);
+    } catch {
+      showAdminGate("Impossible de joindre le service pour vérifier la session. Réessayez dans un instant.", true);
+    } finally { button.disabled = false; }
+  });
   byId("admin-login-form").addEventListener("submit", async event => {
     event.preventDefault();
     const email = byId("admin-email").value.trim();

@@ -1,13 +1,70 @@
 (() => {
   const D = window.IRGIB_DATA;
   const cfg = window.IRGIB_SUPABASE_CONFIG;
-  const db = window.supabase.createClient(cfg.url, cfg.anonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+  const projectRef = new URL(cfg.url).hostname.split(".")[0];
+  const authStorageKey = `irgib-student-${projectRef}-auth`;
+  const legacyAuthStorageKey = `sb-${projectRef}-auth-token`;
+  try {
+    if (!localStorage.getItem(authStorageKey)) {
+      const legacySession = localStorage.getItem(legacyAuthStorageKey);
+      if (legacySession) {
+        localStorage.setItem(authStorageKey, legacySession);
+        localStorage.removeItem(legacyAuthStorageKey);
+      }
+    }
+  } catch { /* Session persistence is handled by Supabase when browser storage is available. */ }
+  const db = window.supabase.createClient(cfg.url, cfg.anonKey, { auth: { storageKey: authStorageKey, persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+  const PENDING_SIGNUP_KEY = "irgib-pending-signup-v1";
+  let otpResendAvailableAt = 0;
+  let otpResendTimer = 0;
+  let otpSending = false;
+  function readPendingSignupEmail() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(PENDING_SIGNUP_KEY) || "null");
+      if (saved?.email && Date.now() - Number(saved.savedAt || 0) < 30 * 24 * 60 * 60 * 1000) {
+        otpResendAvailableAt = Number(saved.resendAvailableAt || 0);
+        return String(saved.email).trim().toLowerCase();
+      }
+      localStorage.removeItem(PENDING_SIGNUP_KEY);
+    } catch {}
+    return "";
+  }
+  function savePendingSignupEmail(email, cooldownSeconds = 0) {
+    pendingSignupEmail = String(email || "").trim().toLowerCase();
+    otpResendAvailableAt = cooldownSeconds ? Date.now() + cooldownSeconds * 1000 : 0;
+    try { if (pendingSignupEmail) localStorage.setItem(PENDING_SIGNUP_KEY, JSON.stringify({ email: pendingSignupEmail, savedAt: Date.now(), resendAvailableAt: otpResendAvailableAt })); } catch {}
+    refreshOtpResendButton();
+  }
+  function setOtpResendCooldown(seconds) {
+    otpResendAvailableAt = Date.now() + seconds * 1000;
+    try {
+      const saved = JSON.parse(localStorage.getItem(PENDING_SIGNUP_KEY) || "null");
+      if (saved && pendingSignupEmail) localStorage.setItem(PENDING_SIGNUP_KEY, JSON.stringify({ ...saved, resendAvailableAt: otpResendAvailableAt }));
+    } catch {}
+    refreshOtpResendButton();
+  }
+  function refreshOtpResendButton() {
+    const button = document.getElementById("resend-code");
+    if (!button) return;
+    const seconds = Math.max(0, Math.ceil((otpResendAvailableAt - Date.now()) / 1000));
+    button.disabled = otpSending || seconds > 0;
+    button.textContent = seconds ? `Renvoyer le code (${seconds}s)` : "Renvoyer le code";
+    if (otpResendTimer) { clearInterval(otpResendTimer); otpResendTimer = 0; }
+    if (seconds) otpResendTimer = setInterval(refreshOtpResendButton, 1000);
+  }
+  function clearPendingSignupEmail() {
+    pendingSignupEmail = "";
+    otpResendAvailableAt = 0;
+    try { localStorage.removeItem(PENDING_SIGNUP_KEY); } catch {}
+    refreshOtpResendButton();
+  }
   const byId = id => document.getElementById(id);
   const esc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
   const fullName = person => `${person.firstName || ""} ${person.lastName || ""}`.trim();
   const friendlyError = (error, fallback) => {
     const message = String(error?.message || "").toLowerCase();
     if (error?.name === "StudentProfileMissingError") return error.message;
+    if (error?.status === 429 || error?.code === "over_email_send_rate_limit" || /rate limit|too many requests|email rate limit|60 seconds/.test(message)) return "Trop de demandes rapprochées. Attendez environ une minute avant de demander un autre code.";
     if (/already registered|user already exists/.test(message)) return "Un compte utilise déjà cette adresse e-mail. Essayez de vous connecter.";
     if (/permission denied|row-level security|not authorized|unauthorized/.test(message)) return "Cette action n’est pas autorisée pour votre compte.";
     if (/network|failed to fetch|fetcherror|timeout/.test(message)) return "Connexion interrompue. Vérifiez votre connexion puis réessayez.";
@@ -24,10 +81,11 @@
     ["signup-country-options", "request-country-options"].forEach(id => byId(id).innerHTML = countryOptions);
   };
   initSelects();
+  refreshOtpResendButton();
 
   let profile = null;
   let currentUser = null;
-  let pendingSignupEmail = "";
+  let pendingSignupEmail = readPendingSignupEmail();
   let application = null;
   let attendanceRows = [];
   let studentChannel = null;
@@ -131,8 +189,9 @@
     byId("signup-message").textContent = "";
   };
   const setScreen = screen => {
-    ["loading-screen", "auth-screen", "verify-screen", "portal-screen", "banned-screen", "account-pending-screen"].forEach(id => byId(id).style.display = id === screen ? "block" : "none");
+    ["loading-screen", "auth-screen", "verify-screen", "portal-screen", "banned-screen", "account-pending-screen", "session-error-screen"].forEach(id => byId(id).style.display = id === screen ? "block" : "none");
     byId("signout").style.display = screen === "portal-screen" ? "inline-flex" : "none";
+    if (screen === "verify-screen") refreshOtpResendButton();
   };
   function showBlockedAccount(message) {
     blockedAccountNotice = message || "Votre compte a été banni par l’administration de votre établissement. Contactez l’administration de votre site.";
@@ -149,7 +208,8 @@
     byId("account-pending-message").textContent = pendingAccountNotice;
     setScreen("account-pending-screen");
     if (currentUser && "Notification" in window && Notification.permission === "granted" && profile) await registerPushSubscription();
-    await db.auth.signOut();
+    // Keep the verified session while account approval is pending. RLS still
+    // blocks student features, and the next visit can re-check approval.
   }
   function dayGreeting(date = new Date()) {
     const hour = date.getHours();
@@ -808,8 +868,11 @@
     catch (error) {
       if (error.name === "AccountBannedError") { showBlockedAccount(error.message); return; }
       if (error.name === "AccountPendingError" || error.name === "AccountRejectedError") { await showPendingAccount(error.message, error.name === "AccountRejectedError"); return; }
-      setScreen("auth-screen"); byId("login-message").textContent = friendlyError(error, "Impossible de charger votre espace. Vérifiez votre connexion ou contactez l’administration de votre site."); return;
+      setScreen("session-error-screen");
+      byId("session-error-message").textContent = friendlyError(error, "Votre session est conservée, mais l’espace n’a pas pu charger les données. Vérifiez la connexion et réessayez.");
+      return;
     }
+    pendingAccountNotice = "";
     setScreen("portal-screen");
     byId("news-campus-label").textContent = D.getSite(profile.site).city;
     if ("Notification" in window && Notification.permission === "granted") void registerPushSubscription();
@@ -901,15 +964,32 @@
     try {
       const { data, error } = await db.auth.signUp({ email: draft.email, password, options: { data: { account_type: "student", first_name: draft.firstName, last_name: draft.lastName, phone: draft.phone, sex: draft.sex, origin_group: draft.originGroup, country_of_origin: draft.countryOfOrigin, program: draft.program, level: draft.level, site: draft.site } } });
       if (error) throw error;
-      if (data.session) { currentUser = data.user; byId("signup-form").reset(); await activatePortal(); }
+      if (data.session) { clearPendingSignupEmail(); currentUser = data.user; byId("signup-form").reset(); await activatePortal(); }
       else {
-        pendingSignupEmail = draft.email;
+        const existingAccountResponse = Array.isArray(data.user?.identities) && data.user.identities.length === 0;
+        savePendingSignupEmail(draft.email, existingAccountResponse ? 0 : 60);
         byId("verify-code").value = "";
         byId("verify-message").textContent = "";
-        byId("demo-code-note").textContent = `Un code de confirmation a été envoyé à ${draft.email}. Copiez-le depuis votre boîte e-mail et collez-le ci-dessus.`;
+        byId("demo-code-note").textContent = `Un code a été demandé pour ${draft.email}. Si vous avez déjà demandé un code pour cette adresse, utilisez uniquement le plus récent. S’il n’arrive pas, appuyez sur « Renvoyer le code ». Si cette adresse a déjà été confirmée, revenez à la connexion.`;
         setScreen("verify-screen");
       }
-    } catch (error) { byId("signup-message").textContent = friendlyError(error, "La création du compte a échoué. Vérifiez les informations puis réessayez."); }
+    } catch (error) {
+      const errorMessage = String(error?.message || "");
+      const rateLimited = error?.status === 429 || error?.code === "over_email_send_rate_limit" || /rate limit|too many requests|email rate limit/i.test(errorMessage);
+      if (rateLimited) {
+        savePendingSignupEmail(draft.email, 60);
+        byId("verify-code").value = "";
+        byId("demo-code-note").textContent = `La demande de code pour ${draft.email} est temporairement limitée. Attendez la fin du compte à rebours avant de demander un nouveau code.`;
+        byId("verify-message").textContent = friendlyError(error, "Patientez avant de demander un nouveau code.");
+        setScreen("verify-screen");
+      } else if (error?.code === "user_already_exists" || /already registered|user already exists|already been registered/i.test(errorMessage)) {
+        savePendingSignupEmail(draft.email);
+        byId("verify-code").value = "";
+        byId("demo-code-note").textContent = `Une inscription existe déjà pour ${draft.email}. Si elle n’a pas encore été confirmée, demandez un nouveau code ci-dessous. Si l’adresse est déjà confirmée, revenez à la connexion.`;
+        byId("verify-message").textContent = "Aucun nouveau code n’a été demandé automatiquement afin de ne pas invalider un code déjà reçu.";
+        setScreen("verify-screen");
+      } else byId("signup-message").textContent = friendlyError(error, "La création du compte a échoué. Vérifiez les informations puis réessayez.");
+    }
     finally { button.disabled = false; }
   });
   byId("verify-form").addEventListener("submit", async event => {
@@ -928,7 +1008,7 @@
       if (error) throw error;
       if (!data.user) throw new Error("La confirmation a réussi mais le compte étudiant n’a pas été retourné. Connectez-vous pour continuer.");
       currentUser = data.user;
-      pendingSignupEmail = "";
+      clearPendingSignupEmail();
       byId("verify-form").reset();
       await activatePortal();
     } catch (error) {
@@ -937,17 +1017,24 @@
   });
   byId("resend-code").addEventListener("click", async () => {
     if (!pendingSignupEmail) { byId("verify-message").textContent = "Recommencez l’inscription pour demander un nouveau code."; return; }
-    const button = byId("resend-code"); button.disabled = true;
+    if (otpResendAvailableAt > Date.now()) { byId("verify-message").textContent = "Patientez avant de demander un autre code."; return; }
+    otpSending = true;
+    refreshOtpResendButton();
     byId("verify-message").textContent = "Envoi d’un nouveau code…";
     try {
       const { error } = await db.auth.resend({ type: "signup", email: pendingSignupEmail });
       if (error) throw error;
       byId("verify-code").value = "";
-      byId("verify-message").textContent = `Un nouveau code a été envoyé à ${pendingSignupEmail}.`;
-    } catch (error) { byId("verify-message").textContent = friendlyError(error, "Le code n’a pas pu être renvoyé. Attendez un instant puis réessayez."); }
-    finally { button.disabled = false; }
+      setOtpResendCooldown(60);
+      byId("verify-message").textContent = `Un nouveau code a été envoyé à ${pendingSignupEmail}. Utilisez uniquement le dernier code reçu.`;
+    } catch (error) {
+      if (error?.status === 429 || error?.code === "over_email_send_rate_limit" || /rate limit|too many requests|60 seconds/i.test(error?.message || "")) setOtpResendCooldown(60);
+      byId("verify-message").textContent = friendlyError(error, "Le code n’a pas pu être renvoyé. Si vous venez de demander un code, patientez une minute avant de réessayer.");
+    } finally { otpSending = false; refreshOtpResendButton(); }
   });
+  byId("back-to-signup").textContent = "Retour à l’inscription";
   byId("back-to-signup").addEventListener("click", () => { setScreen("auth-screen"); showAuthPage("signup"); });
+  byId("retry-session").addEventListener("click", () => { setScreen("loading-screen"); void activatePortal(); });
   byId("password-open").addEventListener("click", () => {
     resetPasswordFlow(false);
     byId("current-password").focus();
@@ -1225,7 +1312,14 @@
     showAuthPage("login");
   });
   byId("account-pending-return-login").addEventListener("click", () => {
+    setScreen("loading-screen");
+    void activatePortal();
+  });
+  byId("pending-signout").addEventListener("click", async () => {
+    if (!window.confirm("Se déconnecter de cet espace étudiant ?")) return;
     pendingAccountNotice = "";
+    currentUser = null;
+    await db.auth.signOut();
     setScreen("auth-screen");
     showAuthPage("login");
   });
@@ -1245,7 +1339,10 @@
     else {
       try { blockedAccountNotice = localStorage.getItem("irgib-banned-account-notice") || ""; } catch {}
       if (blockedAccountNotice) { setScreen("banned-screen"); byId("banned-account-message").textContent = blockedAccountNotice; }
-      else setScreen("auth-screen");
+      else if (pendingSignupEmail) {
+        byId("demo-code-note").textContent = `Vous aviez commencé une inscription avec ${pendingSignupEmail}. Saisissez le dernier code reçu ou demandez-en un nouveau.`;
+        setScreen("verify-screen");
+      } else setScreen("auth-screen");
     }
   }).catch(() => { setScreen("auth-screen"); byId("login-message").textContent = "Connexion au service impossible. Rechargez la page ou contactez l’administration."; });
   window.setInterval(async () => {
