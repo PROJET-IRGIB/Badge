@@ -189,13 +189,13 @@
     byId("signup-panel").style.display = login ? "none" : "block";
     byId("show-login").classList.toggle("active", login);
     byId("show-signup").classList.toggle("active", !login);
-    byId("auth-title").textContent = login ? "Connexion au portail" : "Créer mon compte étudiant";
+    byId("auth-title").textContent = login ? "Connexion" : "Inscription";
     byId("auth-intro").textContent = login ? "Connectez-vous avec l’adresse e-mail et le mot de passe utilisés lors de votre inscription." : "Créez votre compte étudiant en renseignant vos informations et en confirmant votre adresse e-mail avec un code.";
     byId("login-message").textContent = "";
     byId("signup-message").textContent = "";
   };
   const setScreen = screen => {
-    ["loading-screen", "auth-screen", "verify-screen", "portal-screen", "banned-screen", "account-pending-screen", "session-error-screen"].forEach(id => byId(id).style.display = id === screen ? (id === "auth-screen" ? "grid" : "block") : "none");
+    ["loading-screen", "auth-screen", "verify-screen", "portal-screen", "banned-screen", "account-pending-screen", "session-error-screen"].forEach(id => byId(id).style.display = id === screen ? "block" : "none");
     byId("signout").style.display = screen === "portal-screen" ? "inline-flex" : "none";
     if (screen === "verify-screen") refreshOtpResendButton();
   };
