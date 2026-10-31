@@ -6,31 +6,17 @@ Document unique. Le mode d'emploi du site publié reste le README à la racine. 
 
 Année affichée sur la carte : 2026-2027. Le portail est le site statique de la racine, relié à Supabase. Le monorepo Next.js et NestJS décrit plus bas est le cadrage, pas ce site.
 
-## Déjà en place
+## État du portail publié
 
-- Inscription étudiant, confirmation d’e-mail, connexion et changement de mot de passe.
-- Profil et demande de badge : photo privée, naissance, sexe, téléphone, filière, niveau et site.
-- File d’administration : approuver ou rejeter. Le rejet permet une nouvelle demande. Le matricule définitif est attribué à l’approbation.
-- Carte bilingue 85,60 × 53,98 mm, recto et verso, QR `IRGIB-CARTE:<matricule>`.
-- Présence du jour : l’administration crée un QR de séance pour un groupe ; l’étudiant le scanne et confirme.
-- Huit filières, cinq niveaux (`LP1`, `LP2`, `LP3`, `M1`, `M2`) et six sites. Le Siège et Akpakpa sont deux sites. L’écran Groupes compte les cartes approuvées par site, filière et niveau.
-- Les tables refusent l’accès anonyme. Un administrateur est un compte Auth présent dans `admin_members`.
+Cette section décrit le portail statique actuellement relié à Supabase; les sections de cadrage plus bas sont historiques et ne constituent pas la liste des fonctions manquantes.
 
-## Manques encore ouverts
-
-Ces points viennent du cadrage. Ils ne sont pas des pannes du portail actuel.
-
-1. **Avis de carte prête.** Aucun e-mail, message dans l’application ni notification n’annonce l’approbation. L’étudiant le voit en rouvrant son espace.
-2. **PDF et trace de téléchargement.** La carte s’imprime depuis l’écran. Il n’y a pas de PDF généré à la validation ni de registre des téléchargements.
-3. **Nationalité.** Le cadrage la met sur la carte. Le formulaire et la carte publiés ne l’ont pas.
-4. **Arrivée au portail.** Il n’y a pas de rôle sereno, ni de QR d’entrée qui change toutes les quelques minutes, ni d’heure d’arrivée distincte de la séance de cours.
-5. **Liste de classe complète.** Le mode actuel est le scan du QR de séance par l’étudiant. L’administration voit ensuite les présents et les absents du jour, séparés par cycle (licence ou master), année de carrière (LP1 à M2), filière et site. Il manque encore le scan par un responsable, la clôture de la séance et l’envoi de la fiche au professeur.
-6. **File hors ligne.** Sans réseau, le scan n’est pas conservé sur le téléphone.
-7. **QR dynamique de 30 à 60 secondes.** Seul le QR imprimé sur la carte existe.
-8. **Blocage.** Un étudiant qui n’est pas à jour, radié, ou dont la carte est perdue n’est pas refusé automatiquement.
-9. **Bibliothèque et emprunts.** Pas d’écran ni de registre.
-10. **Rôles fins.** Seuls l’étudiant et l’administrateur existent. Sereno, responsable de classe, professeur et bibliothèque restent à créer.
-11. **Codes de filière.** `PEA`, `PP`, `BBA` et `SJ` sont encore marqués « À confirmer ». `NUT` est un code proposé.
+- Les étudiants s’inscrivent, confirment leur e-mail, puis attendent l’approbation du compte par l’administration de leur site avant d’accéder à leur espace.
+- L’administration examine séparément la demande de badge, attribue le matricule, gère les comptes et les cartes, désigne les responsables et consulte les présences de son site.
+- Un responsable valide la présence d’un camarade de son groupe après avoir vérifié son QR de badge. L’étudiant peut aussi pointer lui-même avec le QR quotidien de son groupe.
+- Le recto du badge comporte les informations étudiantes, le pays d’origine et le QR; le verso porte les coordonnées et la zone de validation. L’impression PDF présente les deux faces sur des pages distinctes.
+- Les annonces peuvent être publiées pour un site ou tous les sites. Les notifications push dépendent de l’autorisation de l’appareil.
+- Les administrateurs de site sont affectés à un campus précis. L’accès aux données reste contrôlé par les politiques Supabase; la migration `20261030150000_enforce_single_site_admin_membership.sql` interdit les affectations multi-sites.
+- Les sites d’étude sont Akpakpa, Calavi, Porto-Novo, Parakou et Djougou. Cotonou-Siège est le siège administratif, pas un site d’étude.
 
 ## 2. Cadrage
 

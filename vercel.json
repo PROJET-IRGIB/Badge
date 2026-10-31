@@ -9,8 +9,8 @@
         { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "Permissions-Policy", "value": "camera=(self), microphone=(), geolocation=()" },
         {
-          "key": "Content-Security-Policy-Report-Only",
-          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://cnzmoktoujawmmtstknm.supabase.co; media-src 'self' blob: https://cnzmoktoujawmmtstknm.supabase.co; connect-src 'self' https://cnzmoktoujawmmtstknm.supabase.co wss://cnzmoktoujawmmtstknm.supabase.co; worker-src 'self' blob:; manifest-src 'self'"
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://cdn.jsdelivr.net 'sha256-JRK0xtqhmT3fAQlPFwj3FGj4YXVW6mZQeyTT2ktWrYU='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://cnzmoktoujawmmtstknm.supabase.co; media-src 'self' blob: https://cnzmoktoujawmmtstknm.supabase.co; connect-src 'self' https://cnzmoktoujawmmtstknm.supabase.co wss://cnzmoktoujawmmtstknm.supabase.co; worker-src 'self' blob:; manifest-src 'self'"
         }
       ]
     }

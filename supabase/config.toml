@@ -33,3 +33,6 @@ verify_jwt = true
 
 [functions.manage-student-account]
 verify_jwt = true
+
+[functions.representative-daily-qr]
+verify_jwt = true

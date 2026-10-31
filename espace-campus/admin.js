@@ -94,7 +94,7 @@
     document.querySelectorAll(".side-nav [data-view]").forEach(node => node.classList.toggle("active", node.dataset.view === view));
     const labels = { dashboard: "Vue d’ensemble", requests: "Demandes de badge", accounts: "Comptes étudiants", students: "Étudiants", attendance: "Présences", groups: "Groupes", representatives: "Responsables de classe", catalog: "Catalogue", announcements: "Actualités", cards: "Cartes" };
     byId("breadcrumb").textContent = `Campus / ${labels[view]}`;
-    ({ dashboard: renderDashboard, requests: renderRequests, accounts: renderStudentAccounts, students: () => void loadRepresentatives().then(renderStudents), attendance: renderAttendance, groups: renderGroups, representatives: () => void loadRepresentatives(), catalog: renderCatalog, announcements: () => void loadAnnouncements(), cards: renderCards })[view]?.();
+    ({ dashboard: renderDashboard, requests: renderRequests, accounts: renderStudentAccounts, students: renderStudents, attendance: renderAttendance, groups: renderGroups, representatives: () => void loadRepresentatives(), catalog: renderCatalog, announcements: () => void loadAnnouncements(), cards: renderCards })[view]?.();
   }
   function renderStudentAccounts() {
     const query = (byId("account-search").value || "").trim().toLowerCase();
@@ -126,9 +126,11 @@
     const actionLabel = approve ? "confirmer" : "refuser";
     let reason = "";
     if (!approve) {
-      reason = window.prompt(`Motif du refus pour ${fullName(person)} (facultatif) :`) || "";
-      if (!window.confirm(`Refuser le compte étudiant de ${fullName(person)} ?`)) return;
-    } else if (!window.confirm(`Confirmer que ${fullName(person)} est bien étudiant à ${siteName(person.site)} et autoriser son accès à l’espace étudiant ?`)) return;
+      const answer = await window.IRGIBDialog.prompt({ title: "Refuser le compte", message: `Indiquez le motif du refus pour ${fullName(person)}.`, confirmText: "Continuer", danger: true, input: { label: "Motif (facultatif)", maxLength: 500 } });
+      if (answer === null) return;
+      reason = answer;
+      if (!(await window.IRGIBDialog.confirm({ title: "Confirmer le refus", message: `Refuser le compte étudiant de ${fullName(person)} ?`, confirmText: "Refuser", danger: true }))) return;
+    } else if (!(await window.IRGIBDialog.confirm({ title: "Confirmer le compte étudiant", message: `Confirmer que ${fullName(person)} est bien étudiant à ${siteName(person.site)} et autoriser son accès à l’espace étudiant ?`, confirmText: "Confirmer le compte" }))) return;
     const { error } = await adminClient.rpc("admin_decide_student_account", { p_student_id: studentId, p_approve: approve, p_reason: reason });
     if (error) { toast(friendlyError(error, `Le compte n’a pas pu être ${actionLabel}. Vérifiez la migration Supabase puis réessayez.`)); return; }
     if (approve) {
@@ -172,9 +174,8 @@
     byId("student-count").textContent = `${list.length} étudiant${list.length === 1 ? "" : "s"}`;
     byId("student-rows").innerHTML = list.map(person => {
       const app = applications().find(item => item.studentId === person.studentId);
-      const rep = representativesCache.find(item => item.user_id === person.studentId);
-      return `<tr><td>${app ? photoCell(app) : `<span class="table-photo photo-empty">—</span>`}</td><td><strong>${esc(fullName(person))}</strong><span class="sub">${esc(person.email)}</span>${person.cardSuspendedAt ? `<span class="sub status rejected">Carte désactivée</span>` : ""}</td><td><strong>${esc(app?.finalMatricule || app?.temporaryMatricule || "—")}</strong><span class="sub">${app ? statusText(app.status) : "Inscrit · demande non envoyée"}</span></td><td>${esc(person.sex)}</td><td>${esc(programName(person.program))}<span class="sub">${esc(person.level)}</span></td><td>${esc(siteName(person.site))}</td><td>${esc(keyFor(person))}</td><td class="student-admin-actions"><button class="btn secondary sm" type="button" data-student-role="${esc(person.studentId)}" ${person.cardSuspendedAt || rep ? "disabled" : ""}>${rep ? "Déjà responsable" : "Nommer responsable"}</button></td></tr>`;
-    }).join("") || `<tr><td colspan="8" class="table-empty">Aucun étudiant inscrit trouvé.</td></tr>`;
+      return `<tr><td>${app ? photoCell(app) : `<span class="table-photo photo-empty">—</span>`}</td><td><strong>${esc(fullName(person))}</strong><span class="sub">${esc(person.email)}</span>${person.cardSuspendedAt ? `<span class="sub status rejected">Carte désactivée</span>` : ""}</td><td><strong>${esc(app?.finalMatricule || app?.temporaryMatricule || "—")}</strong><span class="sub">${app ? statusText(app.status) : "Inscrit · demande non envoyée"}</span></td><td>${esc(person.sex)}</td><td>${esc(programName(person.program))}<span class="sub">${esc(person.level)}</span></td><td>${esc(siteName(person.site))}</td><td>${esc(keyFor(person))}</td></tr>`;
+    }).join("") || `<tr><td colspan="7" class="table-empty">Aucun étudiant inscrit trouvé.</td></tr>`;
   }
   const careerCycles = [
     { name: "Licence", levels: ["LP1", "LP2", "LP3"] },
@@ -186,7 +187,7 @@
   }
   function renderAttendance() {
     const query = (byId("attendance-search").value || "").trim().toLowerCase();
-    const site = byId("attendance-site").value;
+    const site = adminSite;
     const program = byId("attendance-program").value;
     const level = byId("attendance-level").value;
     const status = byId("attendance-status").value;
@@ -225,18 +226,15 @@
     byId("attendance-board").innerHTML = blocks.join("") || `<p class="table-empty">Aucune séance active aujourd’hui pour ces critères.</p>`;
   }
   function initGroupFilters() {
-    const scopedSites = D.sites.filter(item => !adminSite || item.id === adminSite);
     byId("student-program-filter").innerHTML = `<option value="">Toutes les filières</option>${D.programs.map(item => `<option value="${item.code}">${item.code} · ${esc(item.shortName)}</option>`).join("")}`;
     byId("student-level-filter").innerHTML = `<option value="">Toutes les années</option>${D.levels.map(level => `<option value="${level}">${level} · ${careerYear[level] || level}</option>`).join("")}`;
-    byId("group-site").innerHTML = `${adminSite ? "" : `<option value="">Tous les sites</option>`}${scopedSites.map(item => `<option value="${item.id}">${esc(item.city)}</option>`).join("")}`;
     byId("group-program").innerHTML = `<option value="">Toutes les filières</option>${D.programs.map(item => `<option value="${item.code}">${item.code} · ${esc(item.shortName)}</option>`).join("")}`;
     byId("group-level").innerHTML = `<option value="">Tous les niveaux</option>${D.levels.map(level => `<option value="${level}">${level} · ${careerYear[level] || level}</option>`).join("")}`;
-    byId("attendance-site").innerHTML = `${adminSite ? "" : `<option value="">Tous les sites · 200 QR</option>`}${scopedSites.map(item => `<option value="${item.id}">${esc(item.city)} · 40 QR</option>`).join("")}`;
     byId("attendance-program").innerHTML = `<option value="">Toutes les filières</option>${D.programs.map(item => `<option value="${item.code}">${item.code} · ${esc(item.shortName)}</option>`).join("")}`;
     byId("attendance-level").innerHTML = `<option value="">Toutes les années</option>${D.levels.map(level => `<option value="${level}">${level} · ${careerYear[level] || level}</option>`).join("")}`;
   }
   function renderGroups() {
-    const site = byId("group-site").value;
+    const site = adminSite;
     const program = byId("group-program").value;
     const level = byId("group-level").value;
     const query = (byId("group-search").value || "").trim().toLowerCase();
@@ -287,7 +285,7 @@
     const file = byId("announcement-media").files?.[0] || null;
     if (title.length < 4 || body.length < 10) { message.textContent = "Ajoutez un titre précis et une information d’au moins 10 caractères."; return; }
     if (file && (!/^(image\/(jpeg|png|webp)|video\/(mp4|webm))$/.test(file.type) || file.size > 50 * 1024 * 1024)) { message.textContent = "Choisissez une image ou vidéo JPG, PNG, WebP, MP4 ou WebM de 50 Mo maximum."; return; }
-    if (!window.confirm(`Publier l’actualité « ${title} » aux destinataires sélectionnés ?`)) return;
+    if (!(await window.IRGIBDialog.confirm({ title: "Publier l’actualité", message: `Publier « ${title} » aux destinataires sélectionnés ?`, confirmText: "Publier" }))) return;
     button.disabled = true;
     message.textContent = "Publication en cours…";
     let mediaPath = null;
@@ -328,7 +326,11 @@
     renderRepresentativeManager();
   }
   function renderRepresentativeManager() {
-    const site = byId("rep-site").value || adminSite || D.sites[0].id;
+    if (!adminSite) {
+      byId("representative-manager").innerHTML = `<div class="notice">L’affectation des responsables nécessite un compte administrateur associé à un site.</div>`;
+      return;
+    }
+    const site = adminSite;
     const program = byId("rep-program").value || D.programs[0].code;
     const level = byId("rep-level").value || D.levels[0];
     const assignments = representativesCache.filter(item => item.site === site && item.program === program && item.level === level);
@@ -349,7 +351,7 @@
     if (!userId) { toast("Choisissez un étudiant approuvé dans ce groupe."); return; }
     const student = studentProfilesCache.find(item => item.studentId === userId && item.site === site && item.program === program && item.level === level && !item.bannedAt);
     if (!student) { toast("Cet étudiant n’appartient pas au groupe sélectionné."); return; }
-    if (!window.confirm(`Désigner ${fullName(student)} comme responsable du groupe ${siteName(site)} · ${programName(program)} · ${level} ?`)) return;
+    if (!(await window.IRGIBDialog.confirm({ title: "Ajouter un responsable", message: `Désigner ${fullName(student)} comme responsable du groupe ${siteName(site)} · ${programName(program)} · ${level} ?`, confirmText: "Ajouter" }))) return;
     const { error } = await adminClient.rpc("admin_assign_class_representative", { p_student_id: userId, p_site: site, p_program: program, p_level: level });
     if (error) {
       toast(friendlyError(error, "Le responsable n’a pas pu être désigné. Vérifiez le groupe puis réessayez."));
@@ -357,17 +359,6 @@
     }
     toast(`${fullName(student)} a été ajouté aux responsables de ce groupe.`);
     await loadRepresentatives();
-  }
-  async function assignStudentFromRegistry(userId) {
-    const person = studentProfilesCache.find(item => item.studentId === userId);
-    if (!person) return;
-    if (person.bannedAt) { toast("Un compte banni ne peut pas être responsable."); return; }
-    if (!window.confirm(`Désigner ${fullName(person)} comme responsable de ${keyFor(person)} ? Les autres responsables de ce groupe restent en place.`)) return;
-    const { error } = await adminClient.rpc("admin_assign_class_representative", { p_student_id: person.studentId, p_site: person.site, p_program: person.program, p_level: person.level });
-    if (error) { toast(friendlyError(error, "Le rôle n’a pas pu être modifié. Réessayez.")); return; }
-    toast(`${fullName(person)} est maintenant responsable de ${keyFor(person)}.`);
-    await loadRepresentatives();
-    renderStudents();
   }
   async function manageStudentAccount(userId, action) {
     const person = studentProfilesCache.find(item => item.studentId === userId);
@@ -378,7 +369,7 @@
       : action === "unban"
         ? `Débannir ${fullName(person)} et rétablir son accès étudiant ?`
         : `Supprimer définitivement le compte de ${fullName(person)} ? Ses demandes, photos et présences liées seront supprimées. Cette action est irréversible.`;
-    if (!window.confirm(warning)) return;
+    if (!(await window.IRGIBDialog.confirm({ title: actionLabel, message: warning, confirmText: actionLabel, danger: action !== "unban" }))) return;
     const { data, error } = await adminClient.functions.invoke("manage-student-account", { body: { action, studentId: userId } });
     if (error || data?.error) {
       let detail = data?.error || "";
@@ -393,8 +384,8 @@
     const [site, program, level, userId] = key.split("|");
     const person = studentProfilesCache.find(item => item.studentId === userId);
     const name = person ? fullName(person) : "ce responsable";
-    if (!window.confirm(`Retirer ${name} des responsables du groupe ${siteName(site)} · ${programName(program)} · ${level} ?`)) return;
-    const { error } = await adminClient.from("class_representatives").delete().eq("site", site).eq("program", program).eq("level", level).eq("user_id", userId);
+    if (!(await window.IRGIBDialog.confirm({ title: "Retirer le responsable", message: `Retirer ${name} des responsables du groupe ${siteName(site)} · ${programName(program)} · ${level} ?`, confirmText: "Retirer", danger: true }))) return;
+    const { error } = await adminClient.rpc("admin_remove_class_representative", { p_site: site, p_program: program, p_level: level, p_student_id: userId });
     if (error) { toast(friendlyError(error, "Le responsable n’a pas pu être retiré. Réessayez.")); return; }
     toast("Responsable retiré du groupe.");
     await loadRepresentatives();
@@ -403,7 +394,7 @@
     const [site, program, level, userId] = key.split("|");
     const person = studentProfilesCache.find(item => item.studentId === userId);
     const name = person ? fullName(person) : "ce responsable";
-    if (!window.confirm(`Réinitialiser le code secret de ${name} ? Cette personne devra en créer un nouveau.`)) return;
+    if (!(await window.IRGIBDialog.confirm({ title: "Réinitialiser le code secret", message: `Réinitialiser le code secret de ${name} ? Cette personne devra en créer un nouveau.`, confirmText: "Réinitialiser", danger: true }))) return;
     const { error } = await adminClient.rpc("admin_reset_representative_daily_qr_pin", { p_site: site, p_program: program, p_level: level, p_student_id: userId });
     if (error) {
       const message = String(error.message || "").toLowerCase();
@@ -416,7 +407,7 @@
     const item = announcementsCache.find(row => row.id === id);
     if (!item) return;
     const publish = item.status !== "published";
-    if (!window.confirm(publish ? `Publier « ${item.title} » dans l’espace étudiant ?` : `Retirer « ${item.title} » de l’espace étudiant ?`)) return;
+    if (!(await window.IRGIBDialog.confirm({ title: publish ? "Publier l’actualité" : "Retirer l’actualité", message: publish ? `Publier « ${item.title} » dans l’espace étudiant ?` : `Retirer « ${item.title} » de l’espace étudiant ?`, confirmText: publish ? "Publier" : "Retirer", danger: !publish }))) return;
     try {
       const { data, error } = await adminClient.rpc("admin_set_campus_announcement_status", { p_announcement_id: id, p_status: publish ? "published" : "draft" });
       if (error || !data) { toast(friendlyError(error, "Cette actualité n’a pas pu être modifiée. Vérifiez que la migration du module Actualités est appliquée.")); return; }
@@ -434,7 +425,7 @@
     const question = suspended
       ? `Désactiver temporairement la carte de ${fullName(person)} ? Son QR ne fonctionnera plus et il sera retiré des listes de pointage. Son inscription et son matricule seront conservés.`
       : `Réactiver la carte de ${fullName(person)} ? Le même QR redeviendra valide.`;
-    if (!window.confirm(question)) return;
+    if (!(await window.IRGIBDialog.confirm({ title: suspended ? "Désactiver la carte" : "Réactiver la carte", message: question, confirmText: suspended ? "Désactiver" : "Réactiver", danger: suspended }))) return;
     const { error } = await adminClient.rpc("admin_set_student_card_suspension", { p_student_id: studentId, p_suspended: suspended });
     if (error) { toast(friendlyError(error, "La carte n’a pas pu être mise à jour. Vérifiez que la migration de gestion des cartes est appliquée.")); return; }
     await refreshCurrent();
@@ -446,7 +437,7 @@
     const site = form.dataset.siteContact;
     if (adminSite && site !== adminSite) { toast("Vous ne pouvez modifier que les contacts de votre site."); return; }
     const values = new FormData(form);
-    if (!window.confirm(`Enregistrer les coordonnées de ${siteName(site)} ? Elles seront visibles par les étudiants de ce site.`)) return;
+    if (!(await window.IRGIBDialog.confirm({ title: "Enregistrer les contacts", message: `Enregistrer les coordonnées de ${siteName(site)} ? Elles seront visibles par les étudiants de ce site.`, confirmText: "Enregistrer" }))) return;
     const button = form.querySelector('button[type="submit"]');
     button.disabled = true;
     const { data, error } = await adminClient.from("campus_site_contacts").update({ contact_name: String(values.get("contact_name")).trim(), address: String(values.get("address")).trim(), phone: String(values.get("phone")).trim(), updated_at: new Date().toISOString() }).eq("site", site).select("site,contact_name,address,phone,updated_at").maybeSingle();
@@ -513,7 +504,7 @@
     if (!item || item.status !== "pending") return;
     const report = auditReport(item);
     if (!report.ok || !byId("photo-check")?.checked) { toast("Terminez les contrôles et confirmez la vérification visuelle de la photo."); return; }
-    if (!window.confirm(`Approuver la demande de ${fullName(item)} et attribuer son matricule définitif ?`)) return;
+    if (!(await window.IRGIBDialog.confirm({ title: "Approuver la demande", message: `Approuver la demande de ${fullName(item)} et attribuer son matricule définitif ?`, confirmText: "Approuver" }))) return;
     const button = byId("approve-request"); button.disabled = true;
     const { data, error } = await adminClient.rpc("admin_decide_application", { p_application_id: item.id, p_decision: "approved", p_reason: null });
     if (error) { button.disabled = false; toast(friendlyError(error, "La décision n’a pas pu être enregistrée. Réessayez.")); return; }
@@ -529,7 +520,7 @@
     if (!item || item.status !== "pending") return;
     const reason = byId("reject-reason").value.trim();
     if (!reason) { toast("Indiquez un motif de rejet pour informer l’étudiant."); byId("reject-reason").focus(); return; }
-    if (!window.confirm(`Rejeter la demande de ${fullName(item)} avec le motif indiqué ?`)) return;
+    if (!(await window.IRGIBDialog.confirm({ title: "Rejeter la demande", message: `Rejeter la demande de ${fullName(item)} avec le motif indiqué ?`, confirmText: "Rejeter", danger: true }))) return;
     const button = byId("reject-request"); button.disabled = true;
     const { error } = await adminClient.rpc("admin_decide_application", { p_application_id: item.id, p_decision: "rejected", p_reason: reason });
     if (error) { button.disabled = false; toast(friendlyError(error, "Le rejet n’a pas pu être enregistré. Réessayez.")); return; }
@@ -626,7 +617,7 @@
       }
       const stylesUrl = new URL("../assets/styles.css?v=20261030d", location.href).href;
       printWindow.document.open();
-      printWindow.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Badges IRGIB AFRICA</title><link rel="stylesheet" href="${stylesUrl}"><style>@page{size:A4 portrait;margin:0}*{box-sizing:border-box}html,body{margin:0!important;padding:0!important;width:210mm!important;min-width:210mm!important;background:#fff!important}.card-print-sheet{width:210mm;height:297mm;display:grid;place-items:center;overflow:hidden;break-after:page;page-break-after:always}.card-print-sheet:last-child{break-after:auto;page-break-after:auto}.card-print-sheet .card-v2{width:85.6mm!important;height:53.98mm!important;min-width:85.6mm!important;max-width:85.6mm!important;aspect-ratio:auto!important;margin:0!important;padding:2.2mm 2.4mm!important;border-radius:2mm!important;box-shadow:none!important;overflow:hidden!important;break-inside:avoid!important;page-break-inside:avoid!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}.card-print-sheet .card-v2-front{break-after:auto!important;page-break-after:auto!important}.card-print-sheet .card-v2.card-back{display:grid!important;break-before:auto!important;page-break-before:auto!important}.card-print-sheet img{print-color-adjust:exact;-webkit-print-color-adjust:exact}@media print{html,body{width:210mm!important;min-width:210mm!important}.card-print-sheet{height:297mm!important;break-after:page!important;page-break-after:always!important}.card-print-sheet:last-child{break-after:auto!important;page-break-after:auto!important}}.card-print-sheet .card-v2-qr{width:18mm!important;height:18mm!important;min-width:18mm!important;min-height:18mm!important;padding:.5mm!important;background:#fff!important;overflow:hidden!important;display:grid!important;place-items:center!important}.card-print-sheet .card-v2-verification{overflow:hidden!important;align-content:center!important;justify-items:center!important}.card-print-sheet .card-v2-qr img{display:block!important;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain!important;background:#fff!important;filter:none!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}</style></head><body>${sheets.join("")}<script>window.addEventListener('load',async()=>{await Promise.all([...document.images].map(i=>i.decode?.().catch(()=>{})));if(document.fonts?.ready)await document.fonts.ready;window.focus();setTimeout(()=>window.print(),250)});window.addEventListener('afterprint',()=>window.close());</script></body></html>`);
+      printWindow.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Badges IRGIB AFRICA</title><link rel="stylesheet" href="${stylesUrl}"><style>@page{size:A4 portrait;margin:0}*{box-sizing:border-box}html,body{margin:0!important;padding:0!important;width:210mm!important;min-width:210mm!important;background:#fff!important}.card-print-sheet{width:210mm;height:297mm;display:grid;place-items:center;overflow:hidden;break-after:page;page-break-after:always}.card-print-sheet:last-child{break-after:auto;page-break-after:auto}.card-print-sheet .card-v2{width:85.6mm!important;height:53.98mm!important;min-width:85.6mm!important;max-width:85.6mm!important;aspect-ratio:auto!important;margin:0!important;padding:2.2mm 2.4mm!important;border-radius:2mm!important;box-shadow:none!important;overflow:hidden!important;break-inside:avoid!important;page-break-inside:avoid!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}.card-print-sheet .card-v2-front{break-after:auto!important;page-break-after:auto!important}.card-print-sheet .card-v2.card-back{display:grid!important;break-before:auto!important;page-break-before:auto!important}.card-print-sheet img{print-color-adjust:exact;-webkit-print-color-adjust:exact}@media print{html,body{width:210mm!important;min-width:210mm!important}.card-print-sheet{height:297mm!important;break-after:page!important;page-break-after:always!important}.card-print-sheet:last-child{break-after:auto!important;page-break-after:auto!important}}.card-print-sheet .card-v2-qr{width:18mm!important;height:18mm!important;min-width:18mm!important;min-height:18mm!important;padding:.5mm!important;background:#fff!important;overflow:hidden!important;display:grid!important;place-items:center!important}.card-print-sheet .card-v2-verification{overflow:hidden!important;align-content:center!important;justify-items:center!important}.card-print-sheet .card-v2-qr img{display:block!important;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain!important;background:#fff!important;filter:none!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}</style></head><body>${sheets.join("")}<script src="/assets/card-print.js"></script></body></html>`);
       printWindow.document.close();
       toast(`PDF préparé pour ${selected.length} badge${selected.length === 1 ? "" : "s"}.`);
     } catch (error) {
@@ -645,7 +636,12 @@
     } else {
       rows = [["matricule_final", "matricule_temporaire", "nom", "prenom", "email", "sexe", "code_filiere", "filiere", "niveau", "ville", "groupe", "statut_demande"], ...studentProfilesCache.map(person => { const app = applications().find(item => item.studentId === person.studentId); return [app?.finalMatricule || "", app?.temporaryMatricule || "", person.lastName, person.firstName, person.email, person.sex, person.program, programName(person.program), person.level, siteName(person.site), keyFor(person), app ? statusText(app.status) : "inscrit sans demande"]; })]; filename = "etudiants-irgib.csv";
     }
-    const csv = "\uFEFF" + rows.map(row => row.map(value => `"${String(value ?? "").replace(/"/g, '""')}"`).join(";")).join("\r\n");
+    const csvCell = value => {
+      const text = String(value ?? "");
+      const safe = /^[\u0000-\u0020]*[=+\-@]/.test(text) || /^[\t\r\n]/.test(text) ? `'${text}` : text;
+      return `"${safe.replace(/"/g, '""')}"`;
+    };
+    const csv = "\uFEFF" + rows.map(row => row.map(csvCell).join(";")).join("\r\n");
     const link = document.createElement("a"); link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(link.href), 1000); toast("Export CSV préparé.");
   }
 
@@ -661,7 +657,6 @@
     // Rebuild scope-dependent options on every login. Event handlers are
     // installed once, but a new account must never inherit another site's filters.
     initGroupFilters();
-    byId("rep-site").innerHTML = (adminSite ? D.sites.filter(site => site.id === adminSite) : D.sites).map(site => `<option value="${esc(site.id)}">${esc(site.city)}</option>`).join("");
     byId("rep-program").innerHTML = D.programs.map(item => `<option value="${esc(item.code)}">${esc(item.code)} · ${esc(programName(item.code))}</option>`).join("");
     byId("rep-level").innerHTML = D.levels.map(level => `<option value="${esc(level)}">${esc(level)}</option>`).join("");
     const announcementSite = byId("announcement-site");
@@ -686,7 +681,7 @@
     byId("student-search").addEventListener("input", renderStudents);
     ["student-program-filter", "student-level-filter"].forEach(id => byId(id).addEventListener("change", renderStudents));
     byId("attendance-search").addEventListener("input", renderAttendance);
-    ["attendance-site", "attendance-program", "attendance-level", "attendance-status"].forEach(id => byId(id).addEventListener("change", renderAttendance));
+    ["attendance-program", "attendance-level", "attendance-status"].forEach(id => byId(id).addEventListener("change", renderAttendance));
     byId("card-search").addEventListener("input", renderCards);
     byId("card-rows").addEventListener("change", event => {
       const input = event.target.closest("[data-card-select]");
@@ -703,7 +698,7 @@
       renderCards();
     });
     byId("download-selected-cards").addEventListener("click", () => void downloadSelectedCards());
-    ["group-site", "group-program", "group-level"].forEach(id => byId(id).addEventListener("change", renderGroups));
+    ["group-program", "group-level"].forEach(id => byId(id).addEventListener("change", renderGroups));
     byId("announcement-form").addEventListener("submit", event => void publishAnnouncement(event));
     document.addEventListener("submit", event => {
       const contactForm = event.target instanceof HTMLFormElement ? event.target.closest("form[data-site-contact]") : null;
@@ -724,8 +719,6 @@
       if (announcementToggle) void toggleAnnouncement(announcementToggle.dataset.announcementToggle);
       const repAssign = target?.closest("[data-rep-assign]");
       if (repAssign) void assignRepresentative(repAssign.dataset.repAssign);
-      const studentRole = target?.closest("[data-student-role]");
-      if (studentRole) void assignStudentFromRegistry(studentRole.dataset.studentRole);
       const accountApprove = target?.closest("[data-account-approve]");
       if (accountApprove) void decideStudentAccount(accountApprove.dataset.accountApprove, true);
       const accountReject = target?.closest("[data-account-reject]");
@@ -751,11 +744,11 @@
     });
     byId("print-admin-card").addEventListener("click", () => { document.body.classList.add("print-card-mode", "admin-print-mode"); window.print(); setTimeout(() => document.body.classList.remove("print-card-mode", "admin-print-mode"), 900); });
     byId("admin-logout").addEventListener("click", async () => {
-      if (!window.confirm("Voulez-vous vraiment vous déconnecter de l’espace administration ?")) return;
+      if (!(await window.IRGIBDialog.confirm({ title: "Déconnexion", message: "Voulez-vous vraiment vous déconnecter de l’espace administration ?", confirmText: "Déconnexion", danger: true }))) return;
       const { error } = await adminClient.auth.signOut();
       showAdminGate(error ? "La déconnexion a échoué. Réessayez." : "Vous êtes déconnecté.");
     });
-    ["rep-site", "rep-program", "rep-level"].forEach(id => byId(id).addEventListener("change", renderRepresentativeManager));
+    ["rep-program", "rep-level"].forEach(id => byId(id).addEventListener("change", renderRepresentativeManager));
     renderDashboard();
   }
   async function authorizeAdmin(session) {

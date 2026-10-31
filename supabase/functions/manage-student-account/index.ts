@@ -78,6 +78,8 @@ Deno.serve(async req => {
       await serviceClient.from("student_profiles").update({ banned_at: null, banned_by: null, ban_reason: null }).eq("user_id", body.studentId);
       return reply(500, { error: "Le statut est enregistré mais la fermeture de l’accès Supabase a échoué. Réessayez." });
     }
+    const { error: representativeError } = await serviceClient.from("class_representatives").delete().eq("user_id", body.studentId);
+    if (representativeError) return reply(500, { error: "Le compte est banni, mais le rôle de responsable n’a pas pu être retiré. Réessayez." });
     await serviceClient.from("push_subscriptions").delete().eq("user_id", body.studentId);
     return reply(200, { ok: true, action: "ban" });
   }

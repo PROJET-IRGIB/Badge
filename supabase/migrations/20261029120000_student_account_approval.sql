@@ -98,7 +98,7 @@ begin
   set account_status = case when p_approve then 'approved' else 'rejected' end,
       account_reviewed_at = pg_catalog.now(),
       account_reviewed_by = (select auth.uid()),
-      account_rejection_reason = case when p_approve then null else nullif(pg_catalog.left(pg_catalog.trim(coalesce(p_reason,'')),500),'') end,
+      account_rejection_reason = case when p_approve then null else nullif(pg_catalog.left(pg_catalog.btrim(coalesce(p_reason,'')),500),'') end,
       updated_at = pg_catalog.now()
   where user_id = p_student_id;
   return case when p_approve then 'approved' else 'rejected' end;
@@ -163,8 +163,8 @@ begin
   if exists (select 1 from public.badge_applications where student_id = (select auth.uid()) and status in ('pending','approved')) then
     raise exception 'Le profil est verrouillé après l’envoi de la demande';
   end if;
-  update public.student_profiles set first_name = pg_catalog.trim(p_first_name), last_name = pg_catalog.trim(p_last_name),
-    phone = pg_catalog.trim(p_phone), sex = p_sex, program = p_program, level = p_level, site = p_site,
+  update public.student_profiles set first_name = pg_catalog.btrim(p_first_name), last_name = pg_catalog.btrim(p_last_name),
+    phone = pg_catalog.btrim(p_phone), sex = p_sex, program = p_program, level = p_level, site = p_site,
     birth_date = p_birth_date, updated_at = pg_catalog.now()
     where user_id = (select auth.uid()) returning * into p;
   return p;

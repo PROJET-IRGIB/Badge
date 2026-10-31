@@ -15,31 +15,37 @@
   } catch { /* Session persistence is handled by Supabase when browser storage is available. */ }
   const db = window.supabase.createClient(cfg.url, cfg.anonKey, { auth: { storageKey: authStorageKey, persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
   const PENDING_SIGNUP_KEY = "irgib-pending-signup-v1";
+  const SESSION_PENDING_SIGNUP_KEY = "irgib-pending-signup-session-v1";
+  try {
+    const legacyPending = localStorage.getItem(PENDING_SIGNUP_KEY);
+    if (legacyPending && !sessionStorage.getItem(SESSION_PENDING_SIGNUP_KEY)) sessionStorage.setItem(SESSION_PENDING_SIGNUP_KEY, legacyPending);
+    localStorage.removeItem(PENDING_SIGNUP_KEY);
+  } catch {}
   let otpResendAvailableAt = 0;
   let otpResendTimer = 0;
   let otpSending = false;
   function readPendingSignupEmail() {
     try {
-      const saved = JSON.parse(localStorage.getItem(PENDING_SIGNUP_KEY) || "null");
-      if (saved?.email && Date.now() - Number(saved.savedAt || 0) < 30 * 24 * 60 * 60 * 1000) {
+      const saved = JSON.parse(sessionStorage.getItem(SESSION_PENDING_SIGNUP_KEY) || "null");
+      if (saved?.email && Date.now() - Number(saved.savedAt || 0) < 24 * 60 * 60 * 1000) {
         otpResendAvailableAt = Number(saved.resendAvailableAt || 0);
         return String(saved.email).trim().toLowerCase();
       }
-      localStorage.removeItem(PENDING_SIGNUP_KEY);
+      sessionStorage.removeItem(SESSION_PENDING_SIGNUP_KEY);
     } catch {}
     return "";
   }
   function savePendingSignupEmail(email, cooldownSeconds = 0) {
     pendingSignupEmail = String(email || "").trim().toLowerCase();
     otpResendAvailableAt = cooldownSeconds ? Date.now() + cooldownSeconds * 1000 : 0;
-    try { if (pendingSignupEmail) localStorage.setItem(PENDING_SIGNUP_KEY, JSON.stringify({ email: pendingSignupEmail, savedAt: Date.now(), resendAvailableAt: otpResendAvailableAt })); } catch {}
+    try { if (pendingSignupEmail) sessionStorage.setItem(SESSION_PENDING_SIGNUP_KEY, JSON.stringify({ email: pendingSignupEmail, savedAt: Date.now(), resendAvailableAt: otpResendAvailableAt })); } catch {}
     refreshOtpResendButton();
   }
   function setOtpResendCooldown(seconds) {
     otpResendAvailableAt = Date.now() + seconds * 1000;
     try {
-      const saved = JSON.parse(localStorage.getItem(PENDING_SIGNUP_KEY) || "null");
-      if (saved && pendingSignupEmail) localStorage.setItem(PENDING_SIGNUP_KEY, JSON.stringify({ ...saved, resendAvailableAt: otpResendAvailableAt }));
+      const saved = JSON.parse(sessionStorage.getItem(SESSION_PENDING_SIGNUP_KEY) || "null");
+      if (saved && pendingSignupEmail) sessionStorage.setItem(SESSION_PENDING_SIGNUP_KEY, JSON.stringify({ ...saved, resendAvailableAt: otpResendAvailableAt }));
     } catch {}
     refreshOtpResendButton();
   }
@@ -55,7 +61,7 @@
   function clearPendingSignupEmail() {
     pendingSignupEmail = "";
     otpResendAvailableAt = 0;
-    try { localStorage.removeItem(PENDING_SIGNUP_KEY); } catch {}
+    try { sessionStorage.removeItem(SESSION_PENDING_SIGNUP_KEY); } catch {}
     refreshOtpResendButton();
   }
   const byId = id => document.getElementById(id);
@@ -568,10 +574,9 @@
     submit.disabled = true;
     message.textContent = "Vérification…";
     try {
-      const rpc = representativeHasPin ? "representative_daily_attendance_qr" : "set_representative_daily_qr_pin";
-      const { data, error } = await db.rpc(rpc, { p_pin: pin });
-      if (error) throw error;
       if (!representativeHasPin) {
+        const { error } = await db.rpc("set_representative_daily_qr_pin", { p_pin: pin });
+        if (error) throw error;
         representativeHasPin = true;
         byId("rep-pin-label").textContent = "Code secret à 4 chiffres";
         byId("rep-pin-submit").textContent = "Voir le QR du jour";
@@ -579,7 +584,10 @@
         byId("rep-daily-pin").value = "";
         return;
       }
-      if (!data?.ok) throw new Error(data?.message || "Code incorrect");
+      const { data, error } = await db.functions.invoke("representative-daily-qr", { body: { pin } });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      if (!data?.token) throw new Error("Le QR du jour est indisponible.");
       const host = byId("rep-daily-qr-image");
       host.replaceChildren();
       if (!window.QRCode) throw new Error("Le générateur QR n’est pas chargé. Rechargez puis réessayez.");
@@ -590,7 +598,9 @@
       message.textContent = "QR révélé. Masquez-le en quittant cette page ou après le pointage.";
       byId("rep-daily-pin").value = "";
     } catch (error) {
-      message.textContent = friendlyError(error, "Le QR n’a pas pu être révélé. Vérifiez le code puis réessayez.");
+      let detail = error?.message || "";
+      if (error?.context?.json) { try { detail = (await error.context.json())?.error || detail; } catch {} }
+      message.textContent = friendlyError({ ...error, message: detail }, "Le QR n’a pas pu être révélé. Vérifiez le code puis réessayez.");
     } finally { submit.disabled = false; }
   }
   function renderRepresentativeGroupmates() {
@@ -653,7 +663,7 @@
   async function markSelectedClassmateAttendance() {
     if (!selectedRepresentativeStudent || !representativeBadgeVerified || !representativeLastQr) return;
     const current = selectedRepresentativeStudent;
-    if (!window.confirm(`Confirmer la présence de ${current.last_name} ${current.first_name} après vérification de son badge ?`)) return;
+    if (!(await window.IRGIBDialog.confirm({ title: "Confirmer la présence", message: `Confirmer la présence de ${current.last_name} ${current.first_name} après vérification de son badge ?`, confirmText: "Marquer présent" }))) return;
     const button = byId("rep-confirm-attendance");
     button.disabled = true;
     byId("rep-attendance-message").textContent = "Enregistrement de la présence…";
@@ -667,6 +677,7 @@
       byId("rep-badge-confirm-actions").hidden = true;
       byId("rep-attendance-message").dataset.state = "success";
       byId("rep-attendance-message").textContent = `Présence mise à jour : ${current.last_name} ${current.first_name} est maintenant présent.`;
+      window.IRGIBDialog.notify(`${current.last_name} ${current.first_name} est marqué présent.`);
       await loadStudentData();
       renderAttendance();
       await loadRepresentativeGroupmates();
@@ -959,7 +970,7 @@
     const password = String(values.get("password"));
     const draft = { firstName: String(values.get("firstName")).trim(), lastName: String(values.get("lastName")).trim(), email: String(values.get("email")).trim().toLowerCase(), phone: String(values.get("phone")).trim(), sex: String(values.get("sex")), originGroup: String(values.get("originGroup")), countryOfOrigin: String(values.get("countryOfOrigin")).trim(), program: String(values.get("program")), level: String(values.get("level")), site: String(values.get("site")) };
     if (password.length < 8 || !draft.phone || !draft.countryOfOrigin || !["francophone", "anglophone"].includes(draft.originGroup)) { byId("signup-message").textContent = "Renseignez le téléphone, le pays et l’origine francophone ou anglophone, puis vérifiez le mot de passe (8 caractères minimum)."; return; }
-    if (!window.confirm(`Confirmer la création du compte étudiant pour ${draft.firstName} ${draft.lastName} (${draft.email}) ?`)) return;
+    if (!(await window.IRGIBDialog.confirm({ title: "Créer le compte étudiant", message: `Confirmer la création du compte pour ${draft.firstName} ${draft.lastName} (${draft.email}) ?`, confirmText: "Créer le compte" }))) return;
     const button = event.currentTarget.querySelector('[type="submit"]'); button.disabled = true;
     try {
       const { data, error } = await db.auth.signUp({ email: draft.email, password, options: { data: { account_type: "student", first_name: draft.firstName, last_name: draft.lastName, phone: draft.phone, sex: draft.sex, origin_group: draft.originGroup, country_of_origin: draft.countryOfOrigin, program: draft.program, level: draft.level, site: draft.site } } });
@@ -970,7 +981,7 @@
         savePendingSignupEmail(draft.email, existingAccountResponse ? 0 : 60);
         byId("verify-code").value = "";
         byId("verify-message").textContent = "";
-        byId("demo-code-note").textContent = `Un code a été demandé pour ${draft.email}. Si vous avez déjà demandé un code pour cette adresse, utilisez uniquement le plus récent. S’il n’arrive pas, appuyez sur « Renvoyer le code ». Si cette adresse a déjà été confirmée, revenez à la connexion.`;
+        byId("demo-code-note").textContent = "Si cette adresse peut poursuivre l’inscription, un code de confirmation vient d’être demandé. Consultez votre boîte de réception et vos courriers indésirables, puis utilisez le code le plus récent.";
         setScreen("verify-screen");
       }
     } catch (error) {
@@ -983,10 +994,11 @@
         byId("verify-message").textContent = friendlyError(error, "Patientez avant de demander un nouveau code.");
         setScreen("verify-screen");
       } else if (error?.code === "user_already_exists" || /already registered|user already exists|already been registered/i.test(errorMessage)) {
-        savePendingSignupEmail(draft.email);
+        savePendingSignupEmail(draft.email, 60);
+        try { await db.auth.resend({ type: "signup", email: draft.email }); } catch { /* Réponse volontairement générique. */ }
         byId("verify-code").value = "";
-        byId("demo-code-note").textContent = `Une inscription existe déjà pour ${draft.email}. Si elle n’a pas encore été confirmée, demandez un nouveau code ci-dessous. Si l’adresse est déjà confirmée, revenez à la connexion.`;
-        byId("verify-message").textContent = "Aucun nouveau code n’a été demandé automatiquement afin de ne pas invalider un code déjà reçu.";
+        byId("demo-code-note").textContent = "Si cette adresse peut poursuivre l’inscription, un code de confirmation vient d’être demandé. Consultez votre boîte de réception et vos courriers indésirables, puis utilisez le code le plus récent.";
+        byId("verify-message").textContent = "Vérifiez votre boîte de réception ou connectez-vous si votre compte est déjà actif.";
         setScreen("verify-screen");
       } else byId("signup-message").textContent = friendlyError(error, "La création du compte a échoué. Vérifiez les informations puis réessayez.");
     }
@@ -997,7 +1009,7 @@
     const token = byId("verify-code").value.replace(/\s/g, "");
     if (!pendingSignupEmail) { byId("verify-message").textContent = "Recommencez l’inscription pour demander un nouveau code."; return; }
     if (!/^\d{6,8}$/.test(token)) { byId("verify-message").textContent = "Saisissez le code numérique reçu par e-mail."; return; }
-    if (!window.confirm("Confirmer ce code et transmettre votre compte à l’administration de votre site pour validation ?")) return;
+    if (!(await window.IRGIBDialog.confirm({ title: "Transmettre le compte", message: "Confirmer ce code et transmettre votre compte à l’administration de votre site pour validation ?", confirmText: "Confirmer le code" }))) return;
     const button = event.currentTarget.querySelector('[type="submit"]'); button.disabled = true;
     byId("verify-message").textContent = "Vérification du code…";
     try {
@@ -1010,6 +1022,7 @@
       currentUser = data.user;
       clearPendingSignupEmail();
       byId("verify-form").reset();
+      window.IRGIBDialog.notify("Adresse e-mail confirmée. Votre compte attend maintenant la validation de l’administration.");
       await activatePortal();
     } catch (error) {
       byId("verify-message").textContent = /expired|invalid|token|otp/i.test(error.message || "") ? "Code incorrect ou expiré. Vérifiez le code reçu ou demandez-en un nouveau." : friendlyError(error, "La vérification a échoué. Réessayez.");
@@ -1078,7 +1091,7 @@
     const next = byId("new-password").value;
     if (next.length < 8) { byId("password-message").textContent = "Le nouveau mot de passe doit contenir au moins 8 caractères."; setPasswordStage(1); return; }
     if (next !== byId("confirm-password").value) { byId("password-message").textContent = "Les deux nouveaux mots de passe ne correspondent pas."; return; }
-    if (!window.confirm("Confirmer le changement de votre mot de passe ? Vous devrez utiliser le nouveau lors de votre prochaine connexion.")) return;
+    if (!(await window.IRGIBDialog.confirm({ title: "Changer le mot de passe", message: "Confirmer le changement de votre mot de passe ? Vous devrez utiliser le nouveau lors de votre prochaine connexion.", confirmText: "Changer le mot de passe" }))) return;
     const button = event.currentTarget.querySelector('button[type="submit"]');
     button.disabled = true;
     byId("password-message").textContent = "Mise à jour sécurisée en cours…";
@@ -1088,12 +1101,13 @@
       resetPasswordFlow(true);
       passwordSuccessNotice.textContent = "Votre mot de passe a été modifié.";
       passwordSuccessNotice.hidden = false;
+      window.IRGIBDialog.notify("Votre mot de passe a été modifié.");
     } catch {
       byId("password-message").textContent = "La mise à jour n’a pas abouti. Vérifiez votre connexion puis réessayez.";
     } finally { button.disabled = false; }
   });
   byId("signout").addEventListener("click", async () => {
-    if (!window.confirm("Voulez-vous vraiment vous déconnecter de votre espace étudiant ?")) return;
+    if (!(await window.IRGIBDialog.confirm({ title: "Déconnexion", message: "Voulez-vous vraiment vous déconnecter de votre espace étudiant ?", confirmText: "Déconnexion", danger: true }))) return;
     stopCamera();
     stopRepresentativeCamera();
     if (studentChannel) { await db.removeChannel(studentChannel); studentChannel = null; }
@@ -1130,11 +1144,11 @@
     byId("rep-badge-verification").hidden = true;
     void startRepresentativeCamera();
   });
-  byId("rep-pin-form").addEventListener("submit", event => {
+  byId("rep-pin-form").addEventListener("submit", async event => {
     event.preventDefault();
     const pin = byId("rep-daily-pin").value;
     if (!/^\d{4}$/.test(pin)) { byId("rep-pin-message").textContent = "Saisissez exactement 4 chiffres."; return; }
-    if (!representativeHasPin && !window.confirm("Créer ce code secret à 4 chiffres pour protéger l’accès au QR quotidien de votre groupe ?")) return;
+    if (!representativeHasPin && !(await window.IRGIBDialog.confirm({ title: "Créer le code secret", message: "Créer ce code secret à 4 chiffres pour protéger l’accès au QR quotidien de votre groupe ?", confirmText: "Créer le code" }))) return;
     void revealRepresentativeDailyQr(pin);
   });
   byId("rep-hide-daily-qr").addEventListener("click", () => {
@@ -1196,7 +1210,7 @@
     const lastName = String(values.get("lastName")).trim();
     const safeName = /^[\p{L}\p{M} .’'-]+$/u;
     if (!safeName.test(firstName) || !safeName.test(lastName)) { byId("request-message").textContent = "Vérifiez le nom et le prénom : lettres, espaces, apostrophe ou trait d’union uniquement."; return; }
-    if (!window.confirm(`Confirmer l’envoi de votre demande de badge pour ${firstName} ${lastName} ? Vérifiez bien les informations et la photo avant de continuer.`)) return;
+    if (!(await window.IRGIBDialog.confirm({ title: "Envoyer la demande de badge", message: `Confirmer l’envoi de votre demande de badge pour ${firstName} ${lastName} ? Vérifiez les informations et la photo avant de continuer.`, confirmText: "Envoyer la demande" }))) return;
     const button = event.currentTarget.querySelector('[type="submit"]'); button.disabled = true;
     let photoPath = "";
     try {
@@ -1220,6 +1234,7 @@
       selectedPhoto = ""; selectedPhotoBlob = null;
       applicationSummary(application); renderNotification(application); renderProfile(); renderMyCard(); renderAttendance();
       byId("request-status-box").innerHTML = `<span>Statut</span><strong>En attente · ${esc(application.temporaryMatricule)}</strong>`;
+      window.IRGIBDialog.notify("Votre demande de badge a été transmise à l’administration.");
     } catch (error) {
       if (photoPath) await db.storage.from("student-photos").remove([photoPath]);
       byId("request-message").textContent = friendlyError(error, "La demande n’a pas pu être enregistrée. Vérifiez votre connexion puis réessayez.");
@@ -1236,7 +1251,7 @@
   byId("submit-attendance").addEventListener("click", async () => {
     if (!scannedSession) return;
     const sessionLabel = scannedSessionInfo?.course_title || "la séance du jour";
-    if (!window.confirm(`Confirmer votre présence pour ${sessionLabel} ? Cette validation ne pourra pas être annulée depuis l’application.`)) return;
+    if (!(await window.IRGIBDialog.confirm({ title: "Confirmer la présence", message: `Confirmer votre présence pour ${sessionLabel} ? Cette validation ne pourra pas être annulée depuis l’application.`, confirmText: "Confirmer ma présence" }))) return;
     const button = byId("submit-attendance"); button.disabled = true;
     byId("attendance-message").textContent = "Enregistrement sécurisé de votre présence…";
     const tokenBeingSubmitted = scannedSession;
@@ -1256,6 +1271,7 @@
       return;
     }
     byId("attendance-message").textContent = "Présence enregistrée dans la liste du jour.";
+    window.IRGIBDialog.notify("Votre présence est enregistrée.");
     try { await loadStudentData(); }
     catch { byId("attendance-message").textContent = "Présence enregistrée. L’actualisation de l’appel est temporairement indisponible."; }
     scannedSession = "";
@@ -1300,7 +1316,7 @@
     printWindow.document.open();
     printWindow.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Carte étudiante IRGIB AFRICA</title><link rel="stylesheet" href="${stylesUrl}"><style>
       @page{size:A4 portrait;margin:0}*{box-sizing:border-box}html,body{margin:0!important;padding:0!important;width:210mm!important;min-width:210mm!important;background:#fff!important}.card-print-sheet{width:210mm;height:297mm;display:grid;place-items:center;overflow:hidden;break-after:page;page-break-after:always}.card-print-sheet:last-child{break-after:auto;page-break-after:auto}.card-print-sheet .card-v2{width:85.6mm!important;height:53.98mm!important;min-width:85.6mm!important;max-width:85.6mm!important;aspect-ratio:auto!important;margin:0!important;padding:2.2mm 2.4mm!important;border-radius:2mm!important;box-shadow:none!important;overflow:hidden!important;break-inside:avoid!important;page-break-inside:avoid!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}.card-print-sheet .card-v2-front{break-after:auto!important;page-break-after:auto!important}.card-print-sheet .card-v2.card-back{display:grid!important;break-before:auto!important;page-break-before:auto!important}.card-print-sheet img{print-color-adjust:exact;-webkit-print-color-adjust:exact} @media print{html,body{width:210mm!important;min-width:210mm!important}.card-print-sheet{height:297mm!important;break-after:page!important;page-break-after:always!important}.card-print-sheet:last-child{break-after:auto!important;page-break-after:auto!important}}
-      </style><style>.card-print-sheet .card-v2-qr{width:18mm!important;height:18mm!important;min-width:18mm!important;min-height:18mm!important;padding:.5mm!important;background:#fff!important;overflow:hidden!important;display:grid!important;place-items:center!important}.card-print-sheet .card-v2-verification{overflow:hidden!important;align-content:center!important;justify-items:center!important}.card-print-sheet .card-v2-qr img{display:block!important;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain!important;background:#fff!important;filter:none!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}</style></head><body>${sheets}<script>window.addEventListener('load',async()=>{await Promise.all([...document.images].map(i=>i.decode?.().catch(()=>{})));if(document.fonts?.ready)await document.fonts.ready;window.focus();setTimeout(()=>window.print(),150)});window.addEventListener('afterprint',()=>window.close());</script></body></html>`);
+      </style><style>.card-print-sheet .card-v2-qr{width:18mm!important;height:18mm!important;min-width:18mm!important;min-height:18mm!important;padding:.5mm!important;background:#fff!important;overflow:hidden!important;display:grid!important;place-items:center!important}.card-print-sheet .card-v2-verification{overflow:hidden!important;align-content:center!important;justify-items:center!important}.card-print-sheet .card-v2-qr img{display:block!important;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain!important;background:#fff!important;filter:none!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}</style></head><body>${sheets}<script src="/assets/card-print.js"></script></body></html>`);
     printWindow.document.close();
   });
 
@@ -1316,7 +1332,7 @@
     void activatePortal();
   });
   byId("pending-signout").addEventListener("click", async () => {
-    if (!window.confirm("Se déconnecter de cet espace étudiant ?")) return;
+    if (!(await window.IRGIBDialog.confirm({ title: "Déconnexion", message: "Se déconnecter de cet espace étudiant ?", confirmText: "Déconnexion", danger: true }))) return;
     pendingAccountNotice = "";
     currentUser = null;
     await db.auth.signOut();
