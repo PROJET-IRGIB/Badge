@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#12315a"><meta name="robots" content="noindex,nofollow"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <title>Espace étudiant · IRGIB AFRICA</title><link rel="manifest" href="/manifest.webmanifest?v=4"><link rel="icon" type="image/png" sizes="192x192" href="/assets/pwa-192-v4.png"><link rel="apple-touch-icon" href="/assets/pwa-192-v4.png"><link rel="stylesheet" href="../assets/styles.css?v=20261031d">
+  <title>Espace étudiant · IRGIB AFRICA</title><link rel="manifest" href="/manifest.webmanifest?v=4"><link rel="icon" type="image/png" sizes="192x192" href="/assets/pwa-192-v4.png"><link rel="apple-touch-icon" href="/assets/pwa-192-v4.png"><link rel="stylesheet" href="../assets/styles.css?v=20261031e">
 </head>
 <body>
   <canvas id="portal-flow" aria-hidden="true"></canvas>
@@ -24,7 +24,7 @@
       <section id="login-panel" class="auth-page">
         <form id="login-form"><div class="form-grid auth-single-column">
           <div class="field"><label for="login-email">Adresse e-mail</label><input id="login-email" name="email" type="email" required autocomplete="email"></div>
-          <div class="field"><label for="login-password">Mot de passe</label><input id="login-password" name="password" type="password" required autocomplete="current-password"></div>
+            <div class="field"><label for="login-password">Mot de passe</label><input id="login-password" name="password" type="password" required autocomplete="current-password"><button class="text-button recovery-link" id="forgot-password-open" type="button">Mot de passe oublié ?</button></div>
         </div><div class="form-actions"><button class="btn" type="submit">Me connecter</button><span id="login-message" class="form-message" aria-live="polite"></span></div></form>
         <p class="field-help auth-switch-hint">Vous n’avez pas encore de compte ? <button class="text-button" type="button" data-open-signup>Créer un compte</button></p>
       </section>
@@ -45,6 +45,18 @@
       </div><div class="form-actions"><button class="btn" type="submit">Continuer l’inscription</button><span id="signup-message" class="form-message" aria-live="polite"></span></div></form>
       <p class="field-help auth-switch-hint">Vous avez déjà un compte ? <button class="text-button" type="button" data-open-login>Me connecter</button></p>
       </section>
+    </section>
+
+    <section id="forgot-password-screen" class="panel auth-panel recovery-panel" style="display:none" aria-labelledby="forgot-password-title">
+      <div class="eyebrow">Récupération du compte</div><h1 id="forgot-password-title">Mot de passe oublié ?</h1><p class="subhead">Saisissez l’adresse e-mail associée à votre compte étudiant.</p>
+      <form id="forgot-password-form"><div class="form-grid auth-single-column"><div class="field"><label for="recovery-email">Adresse e-mail</label><input id="recovery-email" type="email" required autocomplete="email"></div></div><div class="form-actions"><button class="btn" id="recovery-send" type="submit">Envoyer les instructions</button><span id="recovery-send-message" class="form-message" role="status" aria-live="polite"></span></div></form>
+      <form id="forgot-password-code-form" hidden><div class="form-grid auth-single-column"><div class="field"><label for="recovery-code">Code reçu par e-mail</label><input id="recovery-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="12" pattern="[0-9]{4,12}"></div></div><p class="field-help">Si le courriel contient un lien, ouvrez-le pour continuer. Vous pouvez aussi saisir le code ici.</p><div class="form-actions"><button class="btn" type="submit">Vérifier le code</button><span id="recovery-code-message" class="form-message" role="status" aria-live="polite"></span></div></form>
+      <button class="text-button recovery-back" id="recovery-back-login" type="button">Retour à la connexion</button>
+    </section>
+
+    <section id="password-recovery-screen" class="panel auth-panel recovery-panel" style="display:none" aria-labelledby="password-recovery-title">
+      <div class="eyebrow">Sécurité du compte</div><h1 id="password-recovery-title">Choisir un nouveau mot de passe</h1><p class="subhead">Saisissez puis confirmez votre nouveau mot de passe.</p>
+      <form id="password-recovery-form"><div class="form-grid auth-single-column"><div class="field"><label for="recovery-new-password">Nouveau mot de passe</label><input id="recovery-new-password" type="password" required minlength="8" autocomplete="new-password"><span class="field-help">8 caractères minimum.</span></div><div class="field"><label for="recovery-confirm-password">Confirmer le mot de passe</label><input id="recovery-confirm-password" type="password" required minlength="8" autocomplete="new-password"></div></div><div class="form-actions"><button class="btn" type="submit">Enregistrer le nouveau mot de passe</button><span id="password-recovery-message" class="form-message" role="status" aria-live="polite"></span></div></form>
     </section>
 
     <section id="verify-screen" class="panel auth-panel" style="display:none;max-width:620px;margin:auto">

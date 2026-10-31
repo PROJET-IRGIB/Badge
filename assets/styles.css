@@ -586,3 +586,7 @@ body:has(#portal-screen[style*="display: block"])>.footer{position:relative;z-in
 #view-cards [data-card-select]:disabled{cursor:not-allowed;opacity:.45}
 #card-selection-count{margin-right:auto}
 @media(max-width:700px){.card-bulk-toolbar{align-items:stretch;gap:11px;padding:13px}.card-bulk-toolbar .checkbox-inline{width:100%}#card-selection-count{width:100%}.card-bulk-toolbar #download-selected-cards{width:100%;min-height:44px}}
+.recovery-link{align-self:flex-end;margin-top:1px;font-size:12px}
+.recovery-panel{max-width:620px;margin:22px auto}
+.recovery-panel .form-message{display:block;min-height:20px;overflow-wrap:anywhere}
+.recovery-back{margin-top:18px}

@@ -2,6 +2,13 @@
   const D = window.IRGIB_DATA;
   const cfg = window.IRGIB_SUPABASE_CONFIG;
   const projectRef = new URL(cfg.url).hostname.split(".")[0];
+  const recoveryCallbackDetected = (() => {
+    const query = new URLSearchParams(window.location.search);
+    const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+    return query.get("type") === "recovery" || hash.get("type") === "recovery" || query.has("code");
+  })();
+  let passwordRecoveryMode = recoveryCallbackDetected;
+  let recoveryEmail = "";
   const authStorageKey = `irgib-student-${projectRef}-auth`;
   const legacyAuthStorageKey = `sb-${projectRef}-auth-token`;
   try {
@@ -195,7 +202,7 @@
     byId("signup-message").textContent = "";
   };
   const setScreen = screen => {
-    ["loading-screen", "auth-screen", "verify-screen", "portal-screen", "banned-screen", "account-pending-screen", "session-error-screen"].forEach(id => byId(id).style.display = id === screen ? "block" : "none");
+    ["loading-screen", "auth-screen", "forgot-password-screen", "password-recovery-screen", "verify-screen", "portal-screen", "banned-screen", "account-pending-screen", "session-error-screen"].forEach(id => byId(id).style.display = id === screen ? "block" : "none");
     byId("signout").style.display = screen === "portal-screen" ? "inline-flex" : "none";
     if (screen === "verify-screen") refreshOtpResendButton();
   };
@@ -874,15 +881,18 @@
   }
 
   async function activatePortal() {
+    if (passwordRecoveryMode) { setScreen("password-recovery-screen"); return; }
     if (!currentUser) { setScreen("auth-screen"); return; }
     try { await loadStudentData(); }
     catch (error) {
+      if (passwordRecoveryMode) { setScreen("password-recovery-screen"); return; }
       if (error.name === "AccountBannedError") { showBlockedAccount(error.message); return; }
       if (error.name === "AccountPendingError" || error.name === "AccountRejectedError") { await showPendingAccount(error.message, error.name === "AccountRejectedError"); return; }
       setScreen("session-error-screen");
       byId("session-error-message").textContent = friendlyError(error, "Votre session est conservée, mais l’espace n’a pas pu charger les données. Vérifiez la connexion et réessayez.");
       return;
     }
+    if (passwordRecoveryMode) { setScreen("password-recovery-screen"); return; }
     pendingAccountNotice = "";
     setScreen("portal-screen");
     byId("news-campus-label").textContent = D.getSite(profile.site).city;
@@ -963,6 +973,87 @@
       else byId("login-message").textContent = "Connexion impossible. Vérifiez vos identifiants et confirmez votre e-mail.";
     }
     finally { button.disabled = false; }
+  });
+  byId("forgot-password-open").addEventListener("click", () => {
+    recoveryEmail = byId("login-email").value.trim().toLowerCase();
+    byId("recovery-email").value = recoveryEmail;
+    byId("recovery-send-message").textContent = "";
+    byId("recovery-code-message").textContent = "";
+    byId("recovery-code").value = "";
+    byId("forgot-password-code-form").hidden = true;
+    setScreen("forgot-password-screen");
+  });
+  byId("recovery-back-login").addEventListener("click", () => {
+    setScreen("auth-screen");
+    showAuthPage("login");
+  });
+  byId("forgot-password-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    recoveryEmail = byId("recovery-email").value.trim().toLowerCase();
+    const button = byId("recovery-send");
+    button.disabled = true;
+    byId("recovery-send-message").textContent = "Envoi en cours…";
+    try {
+      const redirectTo = new URL("/etudiant/", window.location.origin).href;
+      const { error } = await db.auth.resetPasswordForEmail(recoveryEmail, { redirectTo });
+      if (error) throw error;
+      byId("recovery-send-message").textContent = "Si cette adresse correspond à un compte, un e-mail de récupération vient d’être envoyé.";
+      byId("forgot-password-code-form").hidden = false;
+      byId("recovery-code").focus();
+    } catch (error) {
+      byId("recovery-send-message").textContent = friendlyError(error, "L’e-mail de récupération n’a pas pu être envoyé. Réessayez dans un instant.");
+    } finally { button.disabled = false; }
+  });
+  byId("forgot-password-code-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    const token = byId("recovery-code").value.trim().replace(/\s/g, "");
+    if (!recoveryEmail || !/^\d{4,12}$/.test(token)) {
+      byId("recovery-code-message").textContent = "Saisissez l’adresse e-mail et le code reçu.";
+      return;
+    }
+    const button = event.currentTarget.querySelector('[type="submit"]');
+    button.disabled = true;
+    byId("recovery-code-message").textContent = "Vérification du code…";
+    passwordRecoveryMode = true;
+    try {
+      const { data, error } = await db.auth.verifyOtp({ email: recoveryEmail, token, type: "recovery" });
+      if (error) throw error;
+      currentUser = data.user || data.session?.user || null;
+      if (!currentUser) throw new Error("Aucune session de récupération n’a été créée.");
+      setScreen("password-recovery-screen");
+    } catch (error) {
+      passwordRecoveryMode = false;
+      byId("recovery-code-message").textContent = friendlyError(error, "Ce code est invalide ou expiré. Demandez un nouvel e-mail de récupération.");
+    } finally { button.disabled = false; }
+  });
+  byId("password-recovery-form").addEventListener("submit", async event => {
+    event.preventDefault();
+    const nextPassword = byId("recovery-new-password").value;
+    const confirmation = byId("recovery-confirm-password").value;
+    if (nextPassword.length < 8) {
+      byId("password-recovery-message").textContent = "Le nouveau mot de passe doit contenir au moins 8 caractères.";
+      return;
+    }
+    if (nextPassword !== confirmation) {
+      byId("password-recovery-message").textContent = "Les deux mots de passe ne correspondent pas.";
+      return;
+    }
+    const button = event.currentTarget.querySelector('[type="submit"]');
+    button.disabled = true;
+    byId("password-recovery-message").textContent = "Enregistrement…";
+    try {
+      const { error } = await db.auth.updateUser({ password: nextPassword });
+      if (error) throw error;
+      passwordRecoveryMode = false;
+      await db.auth.signOut();
+      window.history.replaceState({}, document.title, window.location.pathname);
+      byId("password-recovery-form").reset();
+      setScreen("auth-screen");
+      showAuthPage("login");
+      byId("login-message").textContent = "Mot de passe modifié. Connectez-vous avec votre nouveau mot de passe.";
+    } catch (error) {
+      byId("password-recovery-message").textContent = friendlyError(error, "Le mot de passe n’a pas pu être modifié. Le lien de récupération a peut-être expiré.");
+    } finally { button.disabled = false; }
   });
   byId("signup-form").addEventListener("submit", async event => {
     event.preventDefault();
@@ -1346,12 +1437,23 @@
       else if (pendingAccountNotice) { setScreen("account-pending-screen"); byId("account-pending-message").textContent = pendingAccountNotice; }
       else { setScreen("auth-screen"); showAuthPage("login"); }
     }
-    else if (event === "SIGNED_IN" && session?.user && !currentUser) { currentUser = session.user; void activatePortal(); }
+    else if (event === "PASSWORD_RECOVERY" && session?.user) {
+      passwordRecoveryMode = true;
+      currentUser = session.user;
+      byId("password-recovery-message").textContent = "";
+      setScreen("password-recovery-screen");
+    }
+    else if (event === "SIGNED_IN" && session?.user && !currentUser) {
+      currentUser = session.user;
+      if (passwordRecoveryMode) setScreen("password-recovery-screen");
+      else void activatePortal();
+    }
   });
   db.auth.getSession().then(({ data, error }) => {
     if (error) throw error;
     currentUser = data.session?.user || null;
-    if (currentUser) void activatePortal();
+    if (currentUser && passwordRecoveryMode) setScreen("password-recovery-screen");
+    else if (currentUser) void activatePortal();
     else {
       try { blockedAccountNotice = localStorage.getItem("irgib-banned-account-notice") || ""; } catch {}
       if (blockedAccountNotice) { setScreen("banned-screen"); byId("banned-account-message").textContent = blockedAccountNotice; }
