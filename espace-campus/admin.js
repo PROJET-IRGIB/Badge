@@ -343,7 +343,7 @@
       const key = `${site}|${program}|${level}|${assignment.user_id}`;
       return `<div class="representative-current"><div><small>Responsable</small><strong>${esc(current ? fullName(current) : "Compte affecté, étudiant non trouvé")}</strong><span>${esc(matricule)}</span></div><button class="btn secondary sm" type="button" data-rep-reset-pin="${esc(key)}">Réinitialiser son code QR</button><button class="btn danger sm" type="button" data-rep-remove="${esc(key)}">Retirer</button></div>`;
     }).join("");
-    byId("representative-manager").innerHTML = `<div class="representative-group-summary"><span class="news-tag">${esc(siteName(site))}</span><span class="news-tag">${esc(programName(program))}</span><span class="news-tag">${esc(level)}</span></div>${cards ? `<div class="representative-list">${cards}</div>` : `<div class="notice">Aucun responsable n’est encore désigné pour ce groupe.</div>`}<div class="representative-assign">${select}<button class="btn" type="button" data-rep-assign="${esc(`${site}|${program}|${level}`)}" ${candidates.length ? "" : "disabled"}>Ajouter un responsable</button></div><p class="field-help">Vous pouvez nommer plusieurs responsables pour le même groupe. Chacun garde son propre code pour afficher le QR du jour. Un étudiant ne peut être responsable que d’un seul groupe.</p>`;
+    byId("representative-manager").innerHTML = `<div class="representative-group-summary"><span class="news-tag">${esc(siteName(site))}</span><span class="news-tag">${esc(programName(program))}</span><span class="news-tag">${esc(level)}</span></div>${cards ? `<div class="representative-list">${cards}</div>` : `<div class="notice">Aucun responsable n’est encore désigné pour ce groupe.</div>`}<div class="representative-assign">${select}<button class="btn" type="button" data-rep-assign="${esc(`${site}|${program}|${level}`)}" ${candidates.length ? "" : "disabled"}>Ajouter un responsable</button></div>`;
   }
   async function assignRepresentative(key) {
     const [site, program, level] = key.split("|");
@@ -494,7 +494,7 @@
       byId("reject-request").addEventListener("click", rejectRequest);
     } else {
       const final = item.finalMatricule ? `Matricule définitif : ${item.finalMatricule}` : "Aucun matricule définitif attribué.";
-      byId("review-actions").innerHTML = `<div class="decision-summary">${statusHtml(item.status)} <strong>${esc(final)}</strong></div><span class="field-help">Cette décision est enregistrée et ne peut pas être remise en attente.</span>`;
+      byId("review-actions").innerHTML = `<div class="decision-summary">${statusHtml(item.status)} <strong>${esc(final)}</strong></div>`;
     }
     byId("review-modal").classList.add("open");
   }
