@@ -68,7 +68,7 @@
 .card-v2-back-block small{font-size:1.45cqw;font-weight:600;line-height:1.15;color:#d5e0ea}
 .card-v2-back-block strong{font-size:1.85cqw;font-weight:700;line-height:1.15;color:#fff}
 .card-v2-back-block em{font-style:normal;font-size:1.5cqw;line-height:1.15;color:#d5e0ea}
-.card-v2-authority-mark{width:29cqw;height:20cqw;max-width:42%;object-fit:contain;justify-self:end;align-self:center;background:#fff;border-radius:1cqw;padding:.7cqw}
+.card-v2-authority-mark{width:29cqw;height:20cqw;max-width:42%;object-fit:contain;justify-self:end;align-self:center;background:transparent;border-radius:0;padding:0;mix-blend-mode:multiply;print-color-adjust:exact;-webkit-print-color-adjust:exact}
 .card-v2-back-footer{display:flex;align-items:center;justify-content:space-between;gap:2cqw;border-top:1px solid rgba(255,255,255,.28);padding-top:2%;font-size:1.7cqw;line-height:1.15;color:#e8eef5}
 .card-v2-back-footer em{display:block;font-style:normal;font-size:1.48cqw;line-height:1.15;color:#d5e0ea}
 .card-v2-back-mark{display:flex;align-items:center;gap:1.1cqw;flex:none;color:#fff;font:800 1.55cqw/1 Manrope,sans-serif;letter-spacing:.04em}
