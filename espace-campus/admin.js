@@ -100,9 +100,9 @@
     currentView = view;
     document.querySelectorAll(".view").forEach(node => node.classList.toggle("active", node.id === `view-${view}`));
     document.querySelectorAll(".side-nav [data-view]").forEach(node => node.classList.toggle("active", node.dataset.view === view));
-    const labels = { dashboard: "Vue d’ensemble", requests: "Demandes de badge", accounts: "Comptes étudiants", students: "Étudiants", attendance: "Présences", groups: "Groupes", representatives: "Responsables de classe", catalog: "Catalogue", announcements: "Actualités", cards: "Cartes" };
+    const labels = { dashboard: "Vue d’ensemble", requests: "Demandes de badge", accounts: "Comptes étudiants", students: "Étudiants", attendance: "Présences", groups: "Groupes", representatives: "Responsables de classe", announcements: "Actualités", cards: "Cartes" };
     byId("breadcrumb").textContent = `Campus / ${labels[view]}`;
-    ({ dashboard: renderDashboard, requests: renderRequests, accounts: renderStudentAccounts, students: renderStudents, attendance: renderAttendance, groups: renderGroups, representatives: () => void loadRepresentatives(), catalog: renderCatalog, announcements: () => void loadAnnouncements(), cards: renderCards })[view]?.();
+    ({ dashboard: renderDashboard, requests: renderRequests, accounts: renderStudentAccounts, students: renderStudents, attendance: renderAttendance, groups: renderGroups, representatives: () => void loadRepresentatives(), announcements: () => void loadAnnouncements(), cards: renderCards })[view]?.();
   }
   function renderStudentAccounts() {
     const query = (byId("account-search").value || "").trim().toLowerCase();
@@ -576,7 +576,7 @@
   async function refreshCurrent() {
     try { await loadAdminData(); }
     catch (error) { toast(friendlyError(error, "Les informations ne sont pas disponibles pour le moment. Réessayez.")); return; }
-    renderDashboard(); if (currentView === "requests") renderRequests(); if (currentView === "accounts") renderStudentAccounts(); if (currentView === "students") renderStudents(); if (currentView === "attendance") renderAttendance(); if (currentView === "groups") renderGroups(); if (currentView === "representatives") await loadRepresentatives(); if (currentView === "catalog") renderCatalog(); if (currentView === "announcements") await loadAnnouncements(); if (currentView === "cards") renderCards();
+    renderDashboard(); if (currentView === "requests") renderRequests(); if (currentView === "accounts") renderStudentAccounts(); if (currentView === "students") renderStudents(); if (currentView === "attendance") renderAttendance(); if (currentView === "groups") renderGroups(); if (currentView === "representatives") await loadRepresentatives(); if (currentView === "announcements") await loadAnnouncements(); if (currentView === "cards") renderCards();
   }
   async function drawAdminCard(item) {
     const { data: signedPhoto, error } = await adminClient.storage.from("student-photos").createSignedUrl(item.photoPath, 600);
