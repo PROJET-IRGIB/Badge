@@ -2,8 +2,6 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.118.0";
 
 const allowedOrigins = new Set([
   "https://irgib-africa-badge.vercel.app",
-  "http://localhost:8765",
-  "http://127.0.0.1:8765",
 ]);
 const cors = (origin: string | null) => ({
   ...(origin && allowedOrigins.has(origin) ? { "Access-Control-Allow-Origin": origin, "Vary": "Origin" } : {}),

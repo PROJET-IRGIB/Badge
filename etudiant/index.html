@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#12315a"><meta name="robots" content="noindex,nofollow"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <title>Espace étudiant · IRGIB AFRICA</title><link rel="manifest" href="/manifest.webmanifest?v=4"><link rel="icon" type="image/png" sizes="192x192" href="/assets/pwa-192-v4.png"><link rel="apple-touch-icon" href="/assets/pwa-192-v4.png"><link rel="stylesheet" href="../assets/styles.css?v=20261031e">
+  <title>Espace étudiant · IRGIB AFRICA</title><link rel="manifest" href="/manifest.webmanifest?v=4"><link rel="icon" type="image/png" sizes="192x192" href="/assets/pwa-192-v4.png"><link rel="apple-touch-icon" href="/assets/pwa-192-v4.png"><link rel="stylesheet" href="../assets/styles.css?v=20261101a">
 </head>
 <body>
   <canvas id="portal-flow" aria-hidden="true"></canvas>
@@ -83,7 +83,7 @@
               <div class="field"><label for="request-program">Filière</label><select id="request-program" name="program" required></select></div>
               <div class="field"><label for="request-level">Niveau d’étude</label><select id="request-level" name="level" required></select></div>
               <div class="field"><label for="request-site">Ville / site</label><select id="request-site" name="site" required></select></div>
-              <div class="field full"><label for="request-photo">Photo d’identité en tenue de l’école</label><input id="request-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" required><span class="field-help">Photo nette, de face, en tenue de l’école; cheveux bien peignés. Formats JPG, PNG ou WebP.</span><div class="photo-preview" id="photo-preview"><span>Aucune photo sélectionnée</span></div></div>
+              <div class="field full"><label for="request-photo">Photo d’identité en tenue de l’école</label><div class="file-picker"><input id="request-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" required><label class="file-picker-button" for="request-photo"><span aria-hidden="true">＋</span> Choisir une photo</label><span class="file-picker-name" id="request-photo-name">Aucun fichier choisi</span></div><span class="field-help">Photo nette, de face, en tenue de l’école; cheveux bien peignés. Formats JPG, PNG ou WebP.</span><div class="photo-preview" id="photo-preview"><span>Aucune photo sélectionnée</span></div></div>
             </div><div class="form-actions"><button class="btn" type="submit">Envoyer ma demande</button><span id="request-message" class="form-message" aria-live="polite"></span></div></form>
           </div>
           <div id="request-readonly" style="display:none"></div>
@@ -107,7 +107,7 @@
   </main>
   <footer class="footer"><span>IRGIB AFRICA · Espace étudiant</span><a href="https://irgibafrica.university/catalogue-formations.html" target="_blank" rel="noreferrer">Catalogue officiel des formations</a></footer>
   <script src="../assets/portal-flow.js?v=20261028l" defer></script>
-  <script src="../assets/catalog.js?v=20261031b"></script>
+  <script src="../assets/catalog.js?v=20261101a"></script>
   <script src="../assets/dialog.js?v=20261030a"></script>
   <script src="../assets/password-visibility.js?v=1" defer></script>
   <script src="../assets/push-config.js?v=20261024c"></script>
@@ -115,6 +115,6 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx" crossorigin="anonymous"></script>
   <script src="/assets/pwa-install.js?v=20261024b" defer></script>
-  <script src="/assets/bootstrap.js?v=backend3" data-entry="/etudiant/student.js?v=backend33" data-error-target="login-message"></script>
+  <script src="/assets/bootstrap.js?v=backend3" data-entry="/etudiant/student.js?v=backend34" data-error-target="login-message"></script>
 </body>
 </html>

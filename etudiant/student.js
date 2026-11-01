@@ -102,7 +102,7 @@
   let application = null;
   let attendanceRows = [];
   let studentChannel = null;
-  let selectedPhoto = "";
+  let selectedPhotoPreviewUrl = "";
   let selectedPhotoName = "";
   let selectedPhotoBlob = null;
   let passwordChangeStage = 0;
@@ -139,6 +139,8 @@
   let photoSignedUrl = "";
   let photoSignedPath = "";
   let photoSignedUntil = 0;
+  let authorityMarkUrl = "";
+  let authorityMarkUntil = 0;
 
   const getApplication = () => application;
   const cardKey = app => app ? [app.id, app.status, app.finalMatricule, app.photoPath, app.firstName, app.lastName, app.birthDate, app.sex, app.countryOfOrigin || profile?.countryOfOrigin || "", app.program, app.level, app.site, profile?.cardSuspendedAt || ""].join("|") : "";
@@ -157,6 +159,13 @@
     photoSignedPath = app.photoPath;
     photoSignedUntil = Date.now() + 3600 * 1000;
     app.photo = photoSignedUrl;
+  }
+  async function loadAuthorityMark() {
+    if (authorityMarkUrl && authorityMarkUntil - Date.now() > 120000) return;
+    const { data } = await db.storage.from("irgib-official-assets").createSignedUrl("official/director-stamp-signature.png", 3600);
+    authorityMarkUrl = data?.signedUrl || "";
+    authorityMarkUntil = Date.now() + 3600 * 1000;
+    D.setAuthorityMarkUrl(authorityMarkUrl);
   }
   const approvalNoticeKey = app => `irgib-approval-notice:${currentUser?.id || "student"}:${app?.id || "none"}`;
   const fromProfileRow = row => row && ({ userId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, originGroup: row.origin_group || "", countryOfOrigin: row.country_of_origin || "", accountStatus: row.account_status || "pending", accountRejectionReason: row.account_rejection_reason || "", emailVerifiedAt: row.email_verified_at || null, bannedAt: row.banned_at || null, banReason: row.ban_reason || "", cardSuspendedAt: row.card_suspended_at || null });
@@ -186,6 +195,7 @@
     if (appError) throw appError;
     application = fromApplicationRow(apps?.[0]);
     await attachPhotoUrl(application);
+    await loadAuthorityMark();
     const { data: records, error: attendanceError } = await db.from("attendance_records").select("status,attended_at,session_id,marked_by,attendance_sessions!inner(site,program,level,session_day,course_title)").eq("student_id", currentUser.id).order("attended_at", { ascending: false, nullsFirst: false });
     if (attendanceError) throw attendanceError;
     attendanceRows = (records || []).map(row => ({ sessionId: row.session_id, markedBy: row.marked_by, createdAt: row.attended_at, sessionCode: row.session_id.slice(0, 8), courseTitle: row.attendance_sessions.course_title || "Séance du jour", status: row.status, site: row.attendance_sessions.site, program: row.attendance_sessions.program, level: row.attendance_sessions.level, day: row.attendance_sessions.session_day }));
@@ -314,8 +324,12 @@
       byId("request-form-wrap").style.display = "block";
       byId("request-readonly").style.display = "none";
       populateRequestForm();
-      selectedPhoto = "";
+      if (selectedPhotoPreviewUrl) URL.revokeObjectURL(selectedPhotoPreviewUrl);
+      selectedPhotoPreviewUrl = "";
       selectedPhotoName = "";
+      selectedPhotoBlob = null;
+      byId("request-photo").value = "";
+      byId("request-photo-name").textContent = "Aucun fichier choisi";
       byId("request-photo").required = true;
       byId("photo-preview").innerHTML = "<span>Aucune photo sélectionnée</span>";
     });
@@ -1045,7 +1059,7 @@
       const { error } = await db.auth.updateUser({ password: nextPassword });
       if (error) throw error;
       passwordRecoveryMode = false;
-      await db.auth.signOut();
+      await db.auth.signOut({ scope: "global" });
       window.history.replaceState({}, document.title, window.location.pathname);
       byId("password-recovery-form").reset();
       setScreen("auth-screen");
@@ -1189,10 +1203,13 @@
     try {
       const { error } = await db.auth.updateUser({ password: next });
       if (error) { byId("password-message").textContent = friendlyError(error, "Le mot de passe n’a pas pu être modifié. Réessayez."); return; }
+      const { error: sessionError } = await db.auth.signOut({ scope: "others" });
       resetPasswordFlow(true);
-      passwordSuccessNotice.textContent = "Votre mot de passe a été modifié.";
+      passwordSuccessNotice.textContent = sessionError
+        ? "Votre mot de passe a été modifié, mais les autres sessions n’ont pas pu être fermées. Reconnectez-vous à votre compte depuis les autres appareils pour les fermer."
+        : "Votre mot de passe a été modifié. Les autres sessions ont été déconnectées.";
       passwordSuccessNotice.hidden = false;
-      window.IRGIBDialog.notify("Votre mot de passe a été modifié.");
+      window.IRGIBDialog.notify(passwordSuccessNotice.textContent);
     } catch {
       byId("password-message").textContent = "La mise à jour n’a pas abouti. Vérifiez votre connexion puis réessayez.";
     } finally { button.disabled = false; }
@@ -1268,11 +1285,13 @@
 
   byId("request-photo").addEventListener("change", async event => {
     const file = event.target.files?.[0];
-    selectedPhoto = "";
+    if (selectedPhotoPreviewUrl) URL.revokeObjectURL(selectedPhotoPreviewUrl);
+    selectedPhotoPreviewUrl = "";
     selectedPhotoName = "";
     selectedPhotoBlob = null;
+    byId("request-photo-name").textContent = file?.name || "Aucun fichier choisi";
     if (!file) { byId("photo-preview").innerHTML = "<span>Aucune photo sélectionnée</span>"; return; }
-    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024) { event.target.value = ""; byId("photo-preview").innerHTML = "<span>Choisissez une photo JPG, PNG ou WebP de 5 Mo maximum.</span>"; return; }
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 5 * 1024 * 1024) { event.target.value = ""; byId("request-photo-name").textContent = "Aucun fichier choisi"; byId("photo-preview").innerHTML = "<span>Choisissez une photo JPG, PNG ou WebP de 5 Mo maximum.</span>"; return; }
     selectedPhotoName = file.name;
     try {
       const bitmap = await createImageBitmap(file);
@@ -1282,20 +1301,18 @@
       canvas.height = Math.round(bitmap.height * scale);
       canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
       bitmap.close?.();
-      selectedPhoto = canvas.toDataURL("image/jpeg", 0.82);
       selectedPhotoBlob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.82));
+      if (!selectedPhotoBlob) throw new Error("La photo n’a pas pu être préparée.");
     } catch {
-      try {
-        selectedPhoto = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error("Lecture de la photo impossible.")); reader.readAsDataURL(file); });
-        selectedPhotoBlob = file;
-      } catch (error) { selectedPhoto = ""; selectedPhotoBlob = null; byId("photo-preview").innerHTML = `<span>${esc(error.message)}</span>`; return; }
+      selectedPhotoBlob = file;
     }
-    byId("photo-preview").innerHTML = `<img src="${selectedPhoto}" alt="Aperçu de la photo d’identité"><span>${esc(selectedPhotoName)}</span>`;
+    selectedPhotoPreviewUrl = URL.createObjectURL(selectedPhotoBlob);
+    byId("photo-preview").innerHTML = `<img src="${esc(selectedPhotoPreviewUrl)}" alt="Aperçu de la photo d’identité"><span>${esc(selectedPhotoName)}</span>`;
   });
 
   byId("request-form").addEventListener("submit", async event => {
     event.preventDefault();
-    if (!selectedPhoto) { byId("request-message").textContent = "Ajoutez une photo d’identité en tenue de l’école."; return; }
+    if (!selectedPhotoBlob) { byId("request-message").textContent = "Ajoutez une photo d’identité en tenue de l’école."; return; }
     const values = new FormData(event.currentTarget);
     const firstName = String(values.get("firstName")).trim();
     const lastName = String(values.get("lastName")).trim();
@@ -1322,7 +1339,8 @@
       application = fromApplicationRow(inserted);
       const { data: signed } = await db.storage.from("student-photos").createSignedUrl(photoPath, 600);
       application.photo = signed?.signedUrl || "";
-      selectedPhoto = ""; selectedPhotoBlob = null;
+      if (selectedPhotoPreviewUrl) URL.revokeObjectURL(selectedPhotoPreviewUrl);
+      selectedPhotoPreviewUrl = ""; selectedPhotoBlob = null;
       applicationSummary(application); renderNotification(application); renderProfile(); renderMyCard(); renderAttendance();
       byId("request-status-box").innerHTML = `<span>Statut</span><strong>En attente · ${esc(application.temporaryMatricule)}</strong>`;
       window.IRGIBDialog.notify("Votre demande de badge a été transmise à l’administration.");
@@ -1378,7 +1396,7 @@
     const printWindow = window.open("", "irgib-card-print", "popup,width=980,height=820");
     if (!printWindow) { byId("my-card-status").insertAdjacentHTML("beforeend", '<p class="form-message" role="status">Autorisez l’ouverture de la fenêtre d’impression pour créer le PDF.</p>'); return; }
     printWindow.opener = null;
-    const stylesUrl = new URL("../assets/styles.css?v=20261028a", location.href).href;
+    const stylesUrl = new URL("../assets/styles.css?v=20261101a", location.href).href;
     const sheets = faces.map(face => {
       const clone = face.cloneNode(true);
       clone.querySelectorAll(".card-v2-qr").forEach(qrHost => {

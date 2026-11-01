@@ -590,3 +590,12 @@ body:has(#portal-screen[style*="display: block"])>.footer{position:relative;z-in
 .recovery-panel{max-width:620px;margin:22px auto}
 .recovery-panel .form-message{display:block;min-height:20px;overflow-wrap:anywhere}
 .recovery-back{margin-top:18px}
+.file-picker{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-height:48px}
+.file-picker input[type=file]{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;clip-path:inset(50%);border:0}
+.file-picker-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 17px;border:1px solid #173b66;border-radius:10px;background:linear-gradient(135deg,#173b66,#265d80);color:#fff;font:700 13px Manrope,sans-serif;cursor:pointer;box-shadow:0 5px 14px rgba(18,49,90,.16);transition:transform .18s ease,box-shadow .18s ease,background .18s ease}
+.file-picker-button:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(18,49,90,.22)}
+.file-picker-button:focus-within,.file-picker input[type=file]:focus-visible+.file-picker-button{outline:3px solid rgba(45,111,180,.25);outline-offset:2px}
+.file-picker-name{max-width:min(100%,360px);color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.student-edit-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px}
+.card-v2-authority-placeholder{width:29cqw;height:20cqw;max-width:42%;justify-self:end;align-self:center}
+@media(max-width:600px){.student-edit-grid{grid-template-columns:1fr}.file-picker{align-items:flex-start;flex-direction:column}}

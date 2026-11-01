@@ -23,6 +23,8 @@
   let adminSite = null;
   let currentAdminId = "";
   const selectedCardIds = new Set();
+  let authorityMarkUrl = "";
+  let authorityMarkUntil = 0;
   const applications = () => applicationsCache;
   const approved = () => applications().filter(item => item.status === "approved");
   const siteName = id => D.getSite(id).city;
@@ -30,6 +32,12 @@
   const keyFor = item => D.groupKey(item.site, item.program, item.level);
   const mapApplication = row => ({ id: row.id, studentId: row.student_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, birthDate: row.birth_date, program: row.program, level: row.level, site: row.site, status: row.status, temporaryMatricule: row.temporary_matricule, finalMatricule: row.final_matricule, photoPath: row.photo_path, photoFileName: row.photo_path.split("/").at(-1), rejectionReason: row.rejection_reason, submittedAt: row.submitted_at, approvedAt: row.decided_at });
   async function loadAdminData() {
+    if (!authorityMarkUrl || authorityMarkUntil - Date.now() <= 120000) {
+      const { data: officialAsset } = await adminClient.storage.from("irgib-official-assets").createSignedUrl("official/director-stamp-signature.png", 3600);
+      authorityMarkUrl = officialAsset?.signedUrl || "";
+      authorityMarkUntil = Date.now() + 3600 * 1000;
+      D.setAuthorityMarkUrl(authorityMarkUrl);
+    }
     const rows = [];
     for (let from = 0; ; from += 500) {
       const { data, error } = await adminClient.from("badge_applications").select("*")
@@ -142,7 +150,7 @@
   function requestTableRows(list, recent = false) {
     const count = recent ? 6 : 7;
     if (!list.length) return `<tr><td colspan="${count}" class="table-empty">Aucune demande ne correspond aux critères.</td></tr>`;
-    return list.map(item => `<tr><td>${photoCell(item)}</td><td><strong>${esc(fullName(item))}</strong><span class="sub">${esc(item.email)}</span></td><td>${esc(item.temporaryMatricule || "—")}${item.finalMatricule ? `<span class="sub">Final : ${esc(item.finalMatricule)}</span>` : ""}</td><td>${esc(programName(item.program))}<span class="sub">${esc(item.level)} · ${esc(item.sex)}</span></td><td>${esc(siteName(item.site))}</td><td>${statusHtml(item.status)}</td>${recent ? "" : `<td><button class="btn ${item.status === "pending" ? "" : "secondary"} sm" data-review="${esc(item.id)}">${item.status === "pending" ? "Examiner" : "Consulter"}</button></td>`}</tr>`).join("");
+    return list.map(item => `<tr><td>${photoCell(item)}</td><td><strong>${esc(fullName(item))}</strong><span class="sub">${esc(item.email)}</span></td><td>${esc(item.temporaryMatricule || "—")}${item.finalMatricule ? `<span class="sub">Final : ${esc(item.finalMatricule)}</span>` : ""}</td><td>${esc(programName(item.program))}<span class="sub">${esc(item.level)} · ${esc(item.sex)}</span></td><td>${esc(siteName(item.site))}</td><td>${statusHtml(item.status)}</td>${recent ? "" : `<td><div class="table-actions"><button class="btn ${item.status === "pending" ? "" : "secondary"} sm" data-review="${esc(item.id)}">${item.status === "pending" ? "Examiner" : "Consulter"}</button><button class="btn secondary sm" data-edit-student="${esc(item.studentId)}">Modifier les informations</button></div></td>`}</tr>`).join("");
   }
   function renderDashboard() {
     const list = applications();
@@ -174,7 +182,7 @@
     byId("student-count").textContent = `${list.length} étudiant${list.length === 1 ? "" : "s"}`;
     byId("student-rows").innerHTML = list.map(person => {
       const app = applications().find(item => item.studentId === person.studentId);
-      return `<tr><td>${app ? photoCell(app) : `<span class="table-photo photo-empty">—</span>`}</td><td><strong>${esc(fullName(person))}</strong><span class="sub">${esc(person.email)}</span>${person.cardSuspendedAt ? `<span class="sub status rejected">Carte désactivée</span>` : ""}</td><td><strong>${esc(app?.finalMatricule || app?.temporaryMatricule || "—")}</strong><span class="sub">${app ? statusText(app.status) : "Inscrit · demande non envoyée"}</span></td><td>${esc(person.sex)}</td><td>${esc(programName(person.program))}<span class="sub">${esc(person.level)}</span></td><td>${esc(siteName(person.site))}</td><td>${esc(keyFor(person))}</td></tr>`;
+      return `<tr><td>${app ? photoCell(app) : `<span class="table-photo photo-empty">—</span>`}</td><td><strong>${esc(fullName(person))}</strong><span class="sub">${esc(person.email)}</span>${person.cardSuspendedAt ? `<span class="sub status rejected">Carte désactivée</span>` : ""}</td><td><strong>${esc(app?.finalMatricule || app?.temporaryMatricule || "—")}</strong><span class="sub">${app ? statusText(app.status) : "Inscrit · demande non envoyée"}</span></td><td>${esc(person.sex)}</td><td>${esc(programName(person.program))}<span class="sub">${esc(person.level)}</span></td><td>${esc(siteName(person.site))}</td><td><div class="table-actions"><span>${esc(keyFor(person))}</span><button class="btn secondary sm" data-edit-student="${esc(person.studentId)}">Modifier</button></div></td></tr>`;
     }).join("") || `<tr><td colspan="7" class="table-empty">Aucun étudiant inscrit trouvé.</td></tr>`;
   }
   const careerCycles = [
@@ -453,7 +461,7 @@
     const list = approved().filter(item => [fullName(item), item.finalMatricule, programName(item.program), siteName(item.site)].join(" ").toLowerCase().includes(query));
     const selectableIds = new Set(approved().filter(item => !studentProfilesCache.find(row => row.studentId === item.studentId)?.cardSuspendedAt && item.photoPath).map(item => item.id));
     for (const id of selectedCardIds) if (!selectableIds.has(id)) selectedCardIds.delete(id);
-    byId("card-rows").innerHTML = list.map(item => { const person = studentProfilesCache.find(row => row.studentId === item.studentId); const suspended = Boolean(person?.cardSuspendedAt); const selectable = !suspended && Boolean(item.photoPath); return `<tr><td><input type="checkbox" data-card-select="${esc(item.id)}" ${selectedCardIds.has(item.id) ? "checked" : ""} ${selectable ? "" : "disabled"} aria-label="Sélectionner le badge de ${esc(fullName(item))}"></td><td>${photoCell(item)}</td><td><strong>${esc(fullName(item))}</strong>${suspended ? `<span class="sub status rejected">Carte temporairement désactivée</span>` : ""}</td><td>${esc(item.finalMatricule)}</td><td>${esc(programName(item.program))}<span class="sub">${esc(item.level)}</span></td><td>${esc(siteName(item.site))}</td><td><div class="table-actions"><button class="btn secondary sm" data-preview-card="${esc(item.id)}">Prévisualiser</button><button class="btn ${suspended ? "" : "danger"} sm" data-card-suspension="${esc(item.studentId)}" data-suspended="${suspended ? "1" : "0"}">${suspended ? "Réactiver la carte" : "Désactiver temporairement"}</button></div></td></tr>`; }).join("") || `<tr><td colspan="7" class="table-empty">Aucune carte approuvée.</td></tr>`;
+    byId("card-rows").innerHTML = list.map(item => { const person = studentProfilesCache.find(row => row.studentId === item.studentId); const suspended = Boolean(person?.cardSuspendedAt); const selectable = !suspended && Boolean(item.photoPath); return `<tr><td><input type="checkbox" data-card-select="${esc(item.id)}" ${selectedCardIds.has(item.id) ? "checked" : ""} ${selectable ? "" : "disabled"} aria-label="Sélectionner le badge de ${esc(fullName(item))}"></td><td>${photoCell(item)}</td><td><strong>${esc(fullName(item))}</strong>${suspended ? `<span class="sub status rejected">Carte temporairement désactivée</span>` : ""}</td><td>${esc(item.finalMatricule)}</td><td>${esc(programName(item.program))}<span class="sub">${esc(item.level)}</span></td><td>${esc(siteName(item.site))}</td><td><div class="table-actions"><button class="btn secondary sm" data-preview-card="${esc(item.id)}">Prévisualiser</button><button class="btn secondary sm" data-edit-student="${esc(item.studentId)}">Modifier</button><button class="btn ${suspended ? "" : "danger"} sm" data-card-suspension="${esc(item.studentId)}" data-suspended="${suspended ? "1" : "0"}">${suspended ? "Réactiver la carte" : "Désactiver temporairement"}</button></div></td></tr>`; }).join("") || `<tr><td colspan="7" class="table-empty">Aucune carte approuvée.</td></tr>`;
     const visibleChecks = [...byId("card-rows").querySelectorAll("[data-card-select]:not(:disabled)")];
     const checkedVisible = visibleChecks.filter(input => input.checked).length;
     byId("card-select-visible").checked = visibleChecks.length > 0 && checkedVisible === visibleChecks.length;
@@ -497,6 +505,42 @@
       byId("review-actions").innerHTML = `<div class="decision-summary">${statusHtml(item.status)} <strong>${esc(final)}</strong></div>`;
     }
     byId("review-modal").classList.add("open");
+  }
+  function openStudentEdit(studentId) {
+    const person = studentProfilesCache.find(profile => profile.studentId === studentId);
+    if (!person) { toast("Les informations de cet étudiant ne sont pas disponibles."); return; }
+    const app = applications().filter(item => item.studentId === studentId && ["pending", "approved"].includes(item.status)).sort((a, b) => (b.submittedAt || "").localeCompare(a.submittedAt || ""))[0];
+    byId("review-title").textContent = `Modifier · ${fullName(person)}`;
+    byId("review-subtitle").textContent = `Site : ${siteName(person.site)} · les changements seront reportés sur le badge.`;
+    byId("review-content").innerHTML = `<form id="student-edit-form" class="student-edit-grid"><div class="field"><label for="edit-first-name">Prénom(s)</label><input id="edit-first-name" name="first_name" maxlength="80" required value="${esc(person.firstName)}"></div><div class="field"><label for="edit-last-name">Nom</label><input id="edit-last-name" name="last_name" maxlength="80" required value="${esc(person.lastName)}"></div><div class="field"><label for="edit-phone">Téléphone</label><input id="edit-phone" name="phone" type="tel" maxlength="40" value="${esc(person.phone || "")}"></div><div class="field"><label for="edit-sex">Sexe</label><select id="edit-sex" name="sex" required><option value="M" ${person.sex === "M" ? "selected" : ""}>Masculin</option><option value="F" ${person.sex === "F" ? "selected" : ""}>Féminin</option></select></div><div class="field"><label for="edit-birth-date">Date de naissance</label><input id="edit-birth-date" name="birth_date" type="date" required value="${esc(person.birthDate || app?.birthDate || "")}"></div><div class="field"><label for="edit-country">Pays d’origine</label><input id="edit-country" name="country_of_origin" maxlength="80" required value="${esc(person.countryOfOrigin || app?.countryOfOrigin || "")}"></div><div class="field"><label for="edit-origin">Provenance</label><select id="edit-origin" name="origin_group" required><option value="francophone" ${person.originGroup === "francophone" ? "selected" : ""}>Francophone</option><option value="anglophone" ${person.originGroup === "anglophone" ? "selected" : ""}>Anglophone</option></select></div><div class="field"><label for="edit-program">Filière</label><select id="edit-program" name="program" required>${D.programs.map(program => `<option value="${esc(program.code)}" ${person.program === program.code ? "selected" : ""}>${esc(program.shortName)}</option>`).join("")}</select></div><div class="field"><label for="edit-level">Niveau</label><select id="edit-level" name="level" required>${D.levels.map(level => `<option value="${esc(level)}" ${person.level === level ? "selected" : ""}>${esc(level)}</option>`).join("")}</select></div></form><p class="field-help">Le site et l’adresse e-mail restent inchangés. Si la provenance d’un badge validé change, un nouveau matricule de la série F ou A correspondante sera attribué automatiquement.</p>`;
+    byId("review-actions").innerHTML = `<div class="review-buttons"><button class="btn secondary" type="button" id="cancel-student-edit">Annuler</button><button class="btn" type="button" id="save-student-edit">Enregistrer les modifications</button></div>`;
+    byId("cancel-student-edit").addEventListener("click", closeReview);
+    byId("save-student-edit").addEventListener("click", () => void saveStudentEdit(studentId));
+    byId("review-modal").classList.add("open");
+  }
+  async function saveStudentEdit(studentId) {
+    const form = byId("student-edit-form");
+    if (!form.reportValidity()) return;
+    const values = new FormData(form);
+    const person = studentProfilesCache.find(profile => profile.studentId === studentId);
+    if (!(await window.IRGIBDialog.confirm({ title: "Enregistrer les corrections", message: `Mettre à jour les informations de ${person ? fullName(person) : "cet étudiant"} et son badge ?`, confirmText: "Enregistrer" }))) return;
+    const button = byId("save-student-edit"); button.disabled = true;
+    const { error } = await adminClient.rpc("admin_update_student_card_details", {
+      p_student_id: studentId,
+      p_first_name: String(values.get("first_name")).trim(),
+      p_last_name: String(values.get("last_name")).trim(),
+      p_phone: String(values.get("phone")).trim(),
+      p_sex: String(values.get("sex")),
+      p_program: String(values.get("program")),
+      p_level: String(values.get("level")),
+      p_birth_date: String(values.get("birth_date")),
+      p_origin_group: String(values.get("origin_group")),
+      p_country_of_origin: String(values.get("country_of_origin")).trim()
+    });
+    if (error) { button.disabled = false; toast(friendlyError(error, "Les informations n’ont pas pu être modifiées. Vérifiez la migration Supabase puis réessayez.")); return; }
+    closeReview();
+    await refreshCurrent();
+    toast("Informations mises à jour. Le badge utilisera les données corrigées.");
   }
   async function approveRequest() {
     const list = applications();
@@ -615,7 +659,7 @@
         faces.forEach(face => sheets.push(`<section class=\"card-print-sheet\">${printableCardFace(face)}</section>`));
         staging.replaceChildren();
       }
-      const stylesUrl = new URL("../assets/styles.css?v=20261030d", location.href).href;
+      const stylesUrl = new URL("../assets/styles.css?v=20261101a", location.href).href;
       printWindow.document.open();
       printWindow.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Badges IRGIB AFRICA</title><link rel="stylesheet" href="${stylesUrl}"><style>@page{size:A4 portrait;margin:0}*{box-sizing:border-box}html,body{margin:0!important;padding:0!important;width:210mm!important;min-width:210mm!important;background:#fff!important}.card-print-sheet{width:210mm;height:297mm;display:grid;place-items:center;overflow:hidden;break-after:page;page-break-after:always}.card-print-sheet:last-child{break-after:auto;page-break-after:auto}.card-print-sheet .card-v2{width:85.6mm!important;height:53.98mm!important;min-width:85.6mm!important;max-width:85.6mm!important;aspect-ratio:auto!important;margin:0!important;padding:2.2mm 2.4mm!important;border-radius:2mm!important;box-shadow:none!important;overflow:hidden!important;break-inside:avoid!important;page-break-inside:avoid!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}.card-print-sheet .card-v2-front{break-after:auto!important;page-break-after:auto!important}.card-print-sheet .card-v2.card-back{display:grid!important;break-before:auto!important;page-break-before:auto!important}.card-print-sheet img{print-color-adjust:exact;-webkit-print-color-adjust:exact}@media print{html,body{width:210mm!important;min-width:210mm!important}.card-print-sheet{height:297mm!important;break-after:page!important;page-break-after:always!important}.card-print-sheet:last-child{break-after:auto!important;page-break-after:auto!important}}.card-print-sheet .card-v2-qr{width:18mm!important;height:18mm!important;min-width:18mm!important;min-height:18mm!important;padding:.5mm!important;background:#fff!important;overflow:hidden!important;display:grid!important;place-items:center!important}.card-print-sheet .card-v2-verification{overflow:hidden!important;align-content:center!important;justify-items:center!important}.card-print-sheet .card-v2-qr img{display:block!important;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain!important;background:#fff!important;filter:none!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}</style></head><body>${sheets.join("")}<script src="/assets/card-print.js"></script></body></html>`);
       printWindow.document.close();
@@ -634,7 +678,8 @@
     } else if (kind === "attendance") {
       rows = [["date", "heure", "cours", "etudiant", "matricule", "statut", "saisi_par", "cycle", "annee", "code_filiere", "filiere", "niveau", "site"], ...attendanceRoster().map(item => [D.todayKey(), item.createdAt ? new Date(item.createdAt).toLocaleTimeString("fr-FR") : "", item.courseTitle, fullName(item), item.matricule, item.present ? "present" : "absent", item.markedByName || "", item.level.startsWith("M") ? "Master" : "Licence", careerYear[item.level] || item.level, item.program, programName(item.program), item.level, siteName(item.site)])]; filename = "presences-jour.csv";
     } else {
-      rows = [["matricule_final", "matricule_temporaire", "nom", "prenom", "email", "sexe", "code_filiere", "filiere", "niveau", "ville", "groupe", "statut_demande"], ...studentProfilesCache.map(person => { const app = applications().find(item => item.studentId === person.studentId); return [app?.finalMatricule || "", app?.temporaryMatricule || "", person.lastName, person.firstName, person.email, person.sex, person.program, programName(person.program), person.level, siteName(person.site), keyFor(person), app ? statusText(app.status) : "inscrit sans demande"]; })]; filename = "etudiants-irgib.csv";
+      const exportable = studentProfilesCache.filter(person => person.accountStatus === "approved" && !person.bannedAt && !person.cardSuspendedAt);
+      rows = [["matricule_final", "matricule_temporaire", "nom", "prenom", "email", "sexe", "code_filiere", "filiere", "niveau", "ville", "groupe", "statut_demande"], ...exportable.map(person => { const app = applications().find(item => item.studentId === person.studentId && item.status === "approved"); return [app?.finalMatricule || "", app?.temporaryMatricule || "", person.lastName, person.firstName, person.email, person.sex, person.program, programName(person.program), person.level, siteName(person.site), keyFor(person), app ? statusText(app.status) : "inscrit sans demande"]; })]; filename = "etudiants-irgib.csv";
     }
     const csvCell = value => {
       const text = String(value ?? "");
@@ -735,6 +780,8 @@
       if (repResetPin) void resetRepresentativePin(repResetPin.dataset.repResetPin);
       const review = target?.closest("[data-review]");
       if (review) void openReview(review.dataset.review);
+      const editStudent = target?.closest("[data-edit-student]");
+      if (editStudent) openStudentEdit(editStudent.dataset.editStudent);
       const preview = target?.closest("[data-preview-card]");
       if (preview) { const item = approved().find(application => application.id === preview.dataset.previewCard); if (item) void drawAdminCard(item); }
       const exportButton = target?.closest("[data-export]");
