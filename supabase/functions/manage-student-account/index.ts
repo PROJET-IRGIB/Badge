@@ -12,15 +12,34 @@ const reply = (status: number, body: Record<string, unknown>) => new Response(JS
 
 async function listAllFiles(client: any, path: string): Promise<string[]> {
   const bucket = client.storage.from("student-photos");
-  const { data, error } = await bucket.list(path, { limit: 1000 });
-  if (error) throw error;
   const paths: string[] = [];
-  for (const item of data || []) {
-    const child = path ? `${path}/${item.name}` : item.name;
-    if (item.id === null) paths.push(...await listAllFiles(client, child));
-    else paths.push(child);
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await bucket.list(path, { limit: pageSize, offset });
+    if (error) throw error;
+    for (const item of data || []) {
+      const child = path ? `${path}/${item.name}` : item.name;
+      if (item.id === null) paths.push(...await listAllFiles(client, child));
+      else paths.push(child);
+    }
+    if (!data || data.length < pageSize) break;
   }
   return paths;
+}
+
+async function recordAccountAction(client: any, site: string, actorId: string, studentId: string, action: string) {
+  const { error } = await client.from("admin_action_log").insert({
+    site,
+    actor_id: actorId,
+    subject_id: studentId,
+    action,
+    details: { source: "student-account-management" },
+  });
+  if (error) {
+    console.error("Account action audit log could not be written");
+    return false;
+  }
+  return true;
 }
 
 Deno.serve(async req => {
@@ -78,10 +97,11 @@ Deno.serve(async req => {
       await serviceClient.from("student_profiles").update({ banned_at: null, banned_by: null, ban_reason: null }).eq("user_id", body.studentId);
       return reply(500, { error: "Le statut est enregistré mais la fermeture de l’accès Supabase a échoué. Réessayez." });
     }
+    const auditLogged = await recordAccountAction(serviceClient, profile.site, authData.user.id, body.studentId, "student_account_banned");
     const { error: representativeError } = await serviceClient.from("class_representatives").delete().eq("user_id", body.studentId);
     if (representativeError) return reply(500, { error: "Le compte est banni, mais le rôle de responsable n’a pas pu être retiré. Réessayez." });
     await serviceClient.from("push_subscriptions").delete().eq("user_id", body.studentId);
-    return reply(200, { ok: true, action: "ban" });
+    return reply(200, { ok: true, action: "ban", auditLogged, auditWarning: !auditLogged });
   }
 
   if (body.action === "unban") {
@@ -95,7 +115,8 @@ Deno.serve(async req => {
       await serviceClient.auth.admin.updateUserById(body.studentId, { ban_duration: "876000h" });
       return reply(500, { error: "Le bannissement Auth a été levé, mais le statut du compte n’a pas pu être actualisé. Réessayez." });
     }
-    return reply(200, { ok: true, action: "unban" });
+    const auditLogged = await recordAccountAction(serviceClient, profile.site, authData.user.id, body.studentId, "student_account_unbanned");
+    return reply(200, { ok: true, action: "unban", auditLogged, auditWarning: !auditLogged });
   }
 
   // Revoke sign-in first, then remove personal records and owned photos. If a later
@@ -118,7 +139,8 @@ Deno.serve(async req => {
     if (removals.some(result => result.error)) return reply(500, { error: "Le compte est bloqué, mais le nettoyage de ses données est incomplet. Réessayez." });
     const { error: deleteError } = await serviceClient.auth.admin.deleteUser(body.studentId);
     if (deleteError) return reply(500, { error: "Le compte est bloqué, mais Supabase n’a pas pu supprimer l’utilisateur. Réessayez." });
-    return reply(200, { ok: true, action: "delete" });
+    const auditLogged = await recordAccountAction(serviceClient, profile.site, authData.user.id, body.studentId, "student_account_deleted");
+    return reply(200, { ok: true, action: "delete", auditLogged, auditWarning: !auditLogged });
   } catch (error) {
     console.error("Account cleanup failed");
     return reply(500, { error: "Le compte est bloqué, mais le nettoyage n’a pas pu aboutir. Réessayez." });

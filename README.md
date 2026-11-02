@@ -14,7 +14,7 @@ Les migrations dans supabase/migrations créent les profils étudiants, demandes
 ### Mise en service
 
 1. Dans les paramètres Vercel du projet, ajouter SUPABASE_URL et SUPABASE_PUBLISHABLE_KEY aux environnements Production, Preview et Development. Le fichier .env.local est ignoré par Git et ne doit jamais être ajouté.
-2. Exécuter toutes les migrations SQL dans l’ordre chronologique dans le SQL Editor du projet Supabase, ou les appliquer avec Supabase CLI lié au bon projet. Les nouvelles migrations `20261030150000_enforce_single_site_admin_membership.sql` et `20261030160000_fix_student_profile_trim.sql` imposent un seul site par compte admin (sans supprimer d’affectation automatiquement) et réparent la mise à jour du profil étudiant sur les bases déjà migrées.
+2. Exécuter toutes les migrations SQL dans l’ordre chronologique dans le SQL Editor du projet Supabase, ou les appliquer avec Supabase CLI lié au bon projet. Les migrations récentes ajoutent notamment l’approbation des comptes étudiants, les protections par site, les matricules distincts F/A, la gestion des comptes depuis une fonction serveur et la journalisation des décisions de bannissement, rétablissement et suppression (`20261102130000_account_lifecycle_audit.sql`).
 3. Dans Supabase Auth, activer la confirmation d’adresse e-mail et autoriser le retour vers https://irgib-africa-badge.vercel.app/etudiant/.
 4. Un compte dans `public.admin_members` reste administrateur général. Pour un administrateur limité à un site, l’ajouter plutôt à `public.admin_site_members` et le retirer de `public.admin_members` :
    `insert into public.admin_site_members(user_id,site) select id,'COT-AKPAKPA' from auth.users where lower(email)=lower('adresse-admin') on conflict do nothing;`

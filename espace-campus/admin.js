@@ -499,7 +499,7 @@
     const list = approved().filter(item => [fullName(item), item.finalMatricule, programName(item.program), siteName(item.site)].join(" ").toLowerCase().includes(query));
     const selectableIds = new Set(approved().filter(item => !studentProfilesCache.find(row => row.studentId === item.studentId)?.cardSuspendedAt && item.photoPath).map(item => item.id));
     for (const id of selectedCardIds) if (!selectableIds.has(id)) selectedCardIds.delete(id);
-    byId("card-rows").innerHTML = list.map(item => { const person = studentProfilesCache.find(row => row.studentId === item.studentId); const suspended = Boolean(person?.cardSuspendedAt); const selectable = !suspended && Boolean(item.photoPath); return `<tr><td><input type="checkbox" data-card-select="${esc(item.id)}" ${selectedCardIds.has(item.id) ? "checked" : ""} ${selectable ? "" : "disabled"} aria-label="Sélectionner le badge de ${esc(fullName(item))}"></td><td>${photoCell(item)}</td><td><strong>${esc(fullName(item))}</strong>${suspended ? `<span class="sub status rejected">Carte temporairement désactivée</span>` : ""}</td><td>${esc(item.finalMatricule)}</td><td>${esc(programName(item.program))}<span class="sub">${esc(item.level)}</span></td><td>${esc(siteName(item.site))}</td><td><div class="table-actions"><button class="btn secondary sm" data-preview-card="${esc(item.id)}">Prévisualiser</button><button class="btn ${suspended ? "" : "danger"} sm" data-card-suspension="${esc(item.studentId)}" data-suspended="${suspended ? "1" : "0"}">${suspended ? "Réactiver la carte" : "Désactiver temporairement"}</button></div></td></tr>`; }).join("") || `<tr><td colspan="7" class="table-empty">Aucune carte approuvée.</td></tr>`;
+    byId("card-rows").innerHTML = list.map(item => { const person = studentProfilesCache.find(row => row.studentId === item.studentId); const suspended = Boolean(person?.cardSuspendedAt); const selectable = !suspended && Boolean(item.photoPath); return `<tr><td><input type="checkbox" data-card-select="${esc(item.id)}" ${selectedCardIds.has(item.id) ? "checked" : ""} ${selectable ? "" : "disabled"} aria-label="Sélectionner le badge de ${esc(fullName(item))}"></td><td>${photoCell(item)}</td><td><strong>${esc(fullName(item))}</strong>${suspended ? `<span class="sub status rejected">Carte temporairement désactivée</span>` : ""}</td><td>${esc(item.finalMatricule)}</td><td>${esc(programName(item.program))}<span class="sub">${esc(item.level)}</span></td><td>${esc(siteName(item.site))}</td><td><div class="table-actions"><button class="btn ${suspended ? "" : "danger"} sm" data-card-suspension="${esc(item.studentId)}" data-suspended="${suspended ? "1" : "0"}">${suspended ? "Réactiver la carte" : "Désactiver temporairement"}</button></div></td></tr>`; }).join("") || `<tr><td colspan="7" class="table-empty">Aucune carte approuvée.</td></tr>`;
     const visibleChecks = [...byId("card-rows").querySelectorAll("[data-card-select]:not(:disabled)")];
     const checkedVisible = visibleChecks.filter(input => input.checked).length;
     byId("card-select-visible").checked = visibleChecks.length > 0 && checkedVisible === visibleChecks.length;
@@ -621,22 +621,6 @@
     if (generation !== adminAuthGeneration || !currentAdminId) return;
     renderDashboard(); if (currentView === "requests") renderRequests(); if (currentView === "accounts") renderStudentAccounts(); if (currentView === "students") renderStudents(); if (currentView === "attendance") renderAttendance(); if (currentView === "groups") renderGroups(); if (currentView === "representatives") await loadRepresentatives(); if (currentView === "announcements") await loadAnnouncements(); if (currentView === "cards") renderCards();
   }
-  async function drawAdminCard(item) {
-    const generation = adminAuthGeneration;
-    const requestedAdminId = currentAdminId;
-    const { data: signedPhoto, error } = await adminClient.storage.from("student-photos").createSignedUrl(item.photoPath, 600);
-    if (generation !== adminAuthGeneration || !currentAdminId || currentAdminId !== requestedAdminId || !approved().some(application => application.id === item.id && application.studentId === item.studentId)) return;
-    if (error || !signedPhoto?.signedUrl) { toast("La photo privée ne peut pas être chargée pour cette carte."); return; }
-    item.photo = signedPhoto.signedUrl;
-    byId("admin-card-zone").innerHTML = D.cardHtml(item, "admin-card-qr");
-    const person = studentProfilesCache.find(profile => profile.studentId === item.studentId);
-    if (person?.cardSuspendedAt) byId("admin-card-qr").innerHTML = '<span class="card-suspended-qr">CARTE DÉSACTIVÉE</span>';
-    else if (window.QRCode) new QRCode(byId("admin-card-qr"), { text: `IRGIB-CARTE:${item.finalMatricule}`, width: 128, height: 128, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
-    else byId("admin-card-qr").innerHTML = '<div class="qr-fallback">QR indisponible</div>';
-    byId("card-preview-title").textContent = `${fullName(item)} · ${item.finalMatricule}`;
-    byId("card-preview-panel").style.display = "block";
-    byId("card-preview-panel").scrollIntoView({ behavior: "smooth", block: "start" });
-  }
   function printableCardFace(face) {
     const clone = face.cloneNode(true);
     clone.querySelectorAll(".card-v2-qr").forEach(qrHost => {
@@ -714,7 +698,7 @@
         staging.replaceChildren();
       }
       if (generation !== adminAuthGeneration || !currentAdminId || currentAdminId !== requestedAdminId) { printWindow.close(); return; }
-      const stylesUrl = new URL("../assets/styles.css?v=20261102d", location.href).href;
+      const stylesUrl = new URL("../assets/styles.css?v=20261102l", location.href).href;
       printWindow.document.open();
       printWindow.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Badges IRGIB AFRICA</title><link rel="stylesheet" href="${stylesUrl}"><style>@page{size:A4 portrait;margin:0}*{box-sizing:border-box}html,body{margin:0!important;padding:0!important;width:210mm!important;min-width:210mm!important;background:#fff!important}.card-print-sheet{width:210mm;height:297mm;display:grid;place-items:center;overflow:hidden;break-after:page;page-break-after:always}.card-print-sheet:last-child{break-after:auto;page-break-after:auto}.card-print-sheet .card-v2{width:85.6mm!important;height:53.98mm!important;min-width:85.6mm!important;max-width:85.6mm!important;aspect-ratio:auto!important;margin:0!important;padding:2.2mm 2.4mm!important;border-radius:2mm!important;box-shadow:none!important;overflow:hidden!important;break-inside:avoid!important;page-break-inside:avoid!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}.card-print-sheet .card-v2-front{break-after:auto!important;page-break-after:auto!important}.card-print-sheet .card-v2.card-back{display:grid!important;break-before:auto!important;page-break-before:auto!important}.card-print-sheet img{print-color-adjust:exact;-webkit-print-color-adjust:exact}@media print{html,body{width:210mm!important;min-width:210mm!important}.card-print-sheet{height:297mm!important;break-after:page!important;page-break-after:always!important}.card-print-sheet:last-child{break-after:auto!important;page-break-after:auto!important}}.card-print-sheet .card-v2-qr{width:22cqw!important;height:22cqw!important;min-width:22cqw!important;min-height:22cqw!important;padding:.45cqw!important;background:#fff!important;overflow:hidden!important;display:grid!important;place-items:center!important}.card-print-sheet .card-v2-verification{overflow:hidden!important;align-content:end!important;justify-items:center!important}.card-print-sheet .card-v2-qr img{display:block!important;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain!important;background:#fff!important;filter:none!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}</style></head><body>${sheets.join("")}<script src="/assets/card-print.js"></script></body></html>`);
       printWindow.document.close();
@@ -773,13 +757,11 @@
     document.querySelectorAll("#admin-app .searchbox").forEach(input => { input.value = ""; });
     document.querySelectorAll("#admin-app select").forEach(select => { select.selectedIndex = 0; });
     document.querySelectorAll("#admin-app tbody").forEach(body => body.replaceChildren());
-    ["dashboard-stats", "today-attendance-summary", "pending-summary", "representative-manager", "announcement-admin-rows", "attendance-board", "program-grid", "site-grid", "admin-card-zone"].forEach(id => byId(id)?.replaceChildren());
+    ["dashboard-stats", "today-attendance-summary", "pending-summary", "representative-manager", "announcement-admin-rows", "attendance-board", "program-grid", "site-grid"].forEach(id => byId(id)?.replaceChildren());
     ["request-count", "account-count", "student-count", "attendance-count", "group-count", "announcement-message"].forEach(id => { if (byId(id)) byId(id).textContent = ""; });
     byId("attendance-title").textContent = "Appel du jour";
     byId("announcement-form")?.reset();
     byId("announcement-media-preview")?.replaceChildren();
-    byId("card-preview-panel").style.display = "none";
-    byId("card-preview-title").textContent = "Carte étudiante";
     byId("card-select-visible").checked = false;
     byId("card-selection-count").textContent = "0 badge sélectionné";
     byId("download-selected-cards").disabled = true;
@@ -888,14 +870,11 @@
       if (review) void openReview(review.dataset.review);
       const editStudent = target?.closest("[data-edit-student]");
       if (editStudent) openStudentEdit(editStudent.dataset.editStudent);
-      const preview = target?.closest("[data-preview-card]");
-      if (preview) { const item = approved().find(application => application.id === preview.dataset.previewCard); if (item) void drawAdminCard(item); }
       const exportButton = target?.closest("[data-export]");
       if (exportButton) exportCsv(exportButton.dataset.export);
       const cardStatus = target?.closest("[data-card-suspension]");
       if (cardStatus) void setStudentCardSuspension(cardStatus.dataset.cardSuspension, cardStatus.dataset.suspended === "1");
     });
-    byId("print-admin-card").addEventListener("click", () => { document.body.classList.add("print-card-mode", "admin-print-mode"); window.print(); setTimeout(() => document.body.classList.remove("print-card-mode", "admin-print-mode"), 900); });
     byId("admin-logout").addEventListener("click", async () => {
       if (!(await window.IRGIBDialog.confirm({ title: "Déconnexion", message: "Voulez-vous vraiment vous déconnecter de l’espace administration ?", confirmText: "Déconnexion", danger: true }))) return;
       const { error } = await adminClient.auth.signOut();

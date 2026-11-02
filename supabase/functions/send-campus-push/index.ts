@@ -108,22 +108,32 @@ Deno.serve(async req => {
     destination = "/etudiant/";
   } else return response(400, { error: "Type de notification inconnu." }, origin);
 
-  const subscriptionQuery = serviceClient.from("push_subscriptions").select("endpoint,user_id,p256dh,auth_secret");
-  const { data: subscriptions, error: subscriptionError } = targetUser
-    ? await subscriptionQuery.eq("user_id", targetUser)
-    : targetSite ? await subscriptionQuery.eq("site", targetSite) : await subscriptionQuery;
-  if (subscriptionError) return response(500, { error: "Impossible de charger les abonnements aux notifications." }, origin);
-  if (!subscriptions?.length) return response(200, { sent: 0, message: "Aucun appareil n’a activé les notifications." }, origin);
+  const subscriptions: Array<{ endpoint: string; user_id: string; p256dh: string; auth_secret: string }> = [];
+  const subscriptionPageSize = 500;
+  for (let from = 0; ; from += subscriptionPageSize) {
+    let subscriptionQuery = serviceClient.from("push_subscriptions").select("endpoint,user_id,p256dh,auth_secret");
+    if (targetUser) subscriptionQuery = subscriptionQuery.eq("user_id", targetUser);
+    else if (targetSite) subscriptionQuery = subscriptionQuery.eq("site", targetSite);
+    const { data, error } = await subscriptionQuery.order("endpoint", { ascending: true }).range(from, from + subscriptionPageSize - 1);
+    if (error) return response(500, { error: "Impossible de charger les abonnements aux notifications." }, origin);
+    subscriptions.push(...(data || []));
+    if (!data || data.length < subscriptionPageSize) break;
+  }
+  if (!subscriptions.length) return response(200, { sent: 0, message: "Aucun appareil n’a activé les notifications." }, origin);
 
   // Defend even if legacy rows bypass the new database constraint. Push endpoints
   // are server-side URLs, so an untrusted host would otherwise create an SSRF.
   const safeSubscriptions = subscriptions.filter(row => isAllowedPushEndpoint(row.endpoint));
   const userIds = [...new Set(safeSubscriptions.map(row => row.user_id))];
   if (!userIds.length) return response(200, { sent: 0, failed: 0 }, origin);
-  const { data: profiles, error: profileError } = await serviceClient.from("student_profiles")
-    .select("user_id,site,account_status,email_verified_at,banned_at,card_suspended_at")
-    .in("user_id", userIds);
-  if (profileError) return response(500, { error: "Impossible de vérifier les comptes destinataires." }, origin);
+  const profiles: Array<{ user_id: string; site: string; account_status: string; email_verified_at: string | null; banned_at: string | null; card_suspended_at: string | null }> = [];
+  for (let start = 0; start < userIds.length; start += 200) {
+    const { data, error } = await serviceClient.from("student_profiles")
+      .select("user_id,site,account_status,email_verified_at,banned_at,card_suspended_at")
+      .in("user_id", userIds.slice(start, start + 200));
+    if (error) return response(500, { error: "Impossible de vérifier les comptes destinataires." }, origin);
+    profiles.push(...(data || []));
+  }
   const eligible = new Set((profiles || []).filter(profile =>
     profile.account_status === "approved" && profile.email_verified_at && !profile.banned_at && !profile.card_suspended_at
       && (targetUser ? profile.user_id === targetUser : !targetSite || profile.site === targetSite)
@@ -137,16 +147,22 @@ Deno.serve(async req => {
   let sent = 0;
   let failed = 0;
   const expired: string[] = [];
-  await Promise.all(deliverable.map(async row => {
-    try {
-      await webpush.sendNotification({ endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth_secret } }, payload);
-      sent++;
-    } catch (error) {
-      const status = (error as { statusCode?: number }).statusCode;
-      if (status === 404 || status === 410) expired.push(row.endpoint);
-      else failed++;
-    }
-  }));
-  if (expired.length) await serviceClient.from("push_subscriptions").delete().in("endpoint", expired);
+  const deliveryBatchSize = 50;
+  for (let start = 0; start < deliverable.length; start += deliveryBatchSize) {
+    await Promise.all(deliverable.slice(start, start + deliveryBatchSize).map(async row => {
+      try {
+        await webpush.sendNotification({ endpoint: row.endpoint, keys: { p256dh: row.p256dh, auth: row.auth_secret } }, payload);
+        sent++;
+      } catch (error) {
+        const status = (error as { statusCode?: number }).statusCode;
+        if (status === 404 || status === 410) expired.push(row.endpoint);
+        else failed++;
+      }
+    }));
+  }
+  for (let start = 0; start < expired.length; start += 200) {
+    const { error } = await serviceClient.from("push_subscriptions").delete().in("endpoint", expired.slice(start, start + 200));
+    if (error) failed += expired.slice(start, start + 200).length;
+  }
   return response(200, { sent, failed }, origin);
 });
