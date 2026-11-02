@@ -595,10 +595,11 @@
     const clone = face.cloneNode(true);
     clone.querySelectorAll(".card-v2-qr").forEach(qrHost => {
       const canvas = qrHost.querySelector("canvas");
-      const sourceImage = [...qrHost.querySelectorAll("img")].find(image => image.naturalWidth > 0);
-      let qrSource = "";
-      try { if (canvas?.width && canvas?.height) qrSource = canvas.toDataURL("image/png"); } catch {}
-      if (!qrSource && sourceImage) qrSource = sourceImage.currentSrc || sourceImage.src;
+      const sourceImage = [...qrHost.querySelectorAll("img")].find(image => image.complete && image.naturalWidth > 0);
+      let qrSource = sourceImage?.currentSrc || sourceImage?.src || "";
+      if (!qrSource) {
+        try { if (canvas?.width && canvas?.height) qrSource = canvas.toDataURL("image/png"); } catch {}
+      }
       qrHost.replaceChildren();
       if (qrSource) {
         const image = document.createElement("img");
@@ -646,6 +647,8 @@
         if (!qrHost) throw new Error(`Le QR de ${fullName(item)} n’a pas pu être préparé.`);
         new QRCode(qrHost, { text: `IRGIB-CARTE:${item.finalMatricule}`, width: 256, height: 256, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
         await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const qrImage = [...qrHost.querySelectorAll("img")].find(image => image.src);
+        if (qrImage) await qrImage.decode().catch(() => {});
         const faces = [...staging.querySelectorAll(".card-v2")];
         if (faces.length !== 2) throw new Error(`Le recto et le verso de ${fullName(item)} ne sont pas prêts.`);
         const portrait = staging.querySelector(".card-v2-portrait img");
@@ -654,12 +657,13 @@
           if (!portrait.naturalWidth) throw new Error(`La photo de ${fullName(item)} ne peut pas être imprimée. Actualisez la liste et réessayez.`);
         }
         const qrHostInCard = staging.querySelector(`#${qrId}`);
-        const qrImage = [...(qrHostInCard?.querySelectorAll("img") || [])].find(image => image.naturalWidth > 0);
-        if (!qrHostInCard?.querySelector("canvas") && !qrImage) throw new Error(`Le QR de ${fullName(item)} n’a pas été généré. Aucun PDF incomplet n’a été préparé.`);
+        const qrCanvas = qrHostInCard?.querySelector("canvas");
+        const qrImageReady = [...(qrHostInCard?.querySelectorAll("img") || [])].some(image => image.naturalWidth > 0);
+        if (!qrImageReady && !(qrCanvas?.width && qrCanvas?.height)) throw new Error(`Le QR de ${fullName(item)} n’a pas été généré. Aucun PDF incomplet n’a été préparé.`);
         faces.forEach(face => sheets.push(`<section class=\"card-print-sheet\">${printableCardFace(face)}</section>`));
         staging.replaceChildren();
       }
-      const stylesUrl = new URL("../assets/styles.css?v=20261101c", location.href).href;
+      const stylesUrl = new URL("../assets/styles.css?v=20261102a", location.href).href;
       printWindow.document.open();
       printWindow.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Badges IRGIB AFRICA</title><link rel="stylesheet" href="${stylesUrl}"><style>@page{size:A4 portrait;margin:0}*{box-sizing:border-box}html,body{margin:0!important;padding:0!important;width:210mm!important;min-width:210mm!important;background:#fff!important}.card-print-sheet{width:210mm;height:297mm;display:grid;place-items:center;overflow:hidden;break-after:page;page-break-after:always}.card-print-sheet:last-child{break-after:auto;page-break-after:auto}.card-print-sheet .card-v2{width:85.6mm!important;height:53.98mm!important;min-width:85.6mm!important;max-width:85.6mm!important;aspect-ratio:auto!important;margin:0!important;padding:2.2mm 2.4mm!important;border-radius:2mm!important;box-shadow:none!important;overflow:hidden!important;break-inside:avoid!important;page-break-inside:avoid!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}.card-print-sheet .card-v2-front{break-after:auto!important;page-break-after:auto!important}.card-print-sheet .card-v2.card-back{display:grid!important;break-before:auto!important;page-break-before:auto!important}.card-print-sheet img{print-color-adjust:exact;-webkit-print-color-adjust:exact}@media print{html,body{width:210mm!important;min-width:210mm!important}.card-print-sheet{height:297mm!important;break-after:page!important;page-break-after:always!important}.card-print-sheet:last-child{break-after:auto!important;page-break-after:auto!important}}.card-print-sheet .card-v2-qr{width:18mm!important;height:18mm!important;min-width:18mm!important;min-height:18mm!important;padding:.5mm!important;background:#fff!important;overflow:hidden!important;display:grid!important;place-items:center!important}.card-print-sheet .card-v2-verification{overflow:hidden!important;align-content:center!important;justify-items:center!important}.card-print-sheet .card-v2-qr img{display:block!important;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain!important;background:#fff!important;filter:none!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}</style></head><body>${sheets.join("")}<script src="/assets/card-print.js"></script></body></html>`);
       printWindow.document.close();
