@@ -315,10 +315,11 @@ body:has(#portal-screen[style*="display: block"])>.notice{max-width:1100px;margi
 .announcement-form textarea:focus{outline:0;border-color:#3d6ca8;box-shadow:0 0 0 3px rgba(26,68,128,.12)}
 .announcement-admin-rows{display:grid;gap:11px}
 .announcement-admin-item{display:grid;gap:9px;padding:15px;border:1px solid var(--line);border-radius:13px;background:#fbfcfe}
+.announcement-admin-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .announcement-admin-item h3,.announcement-admin-item p{margin:0;overflow-wrap:anywhere}
 .announcement-admin-item p{white-space:pre-line;color:var(--muted);line-height:1.55}
 .announcement-admin-meta{display:flex;justify-content:space-between;align-items:center;gap:8px}
-.announcement-admin-item .btn{justify-self:start;margin-top:3px}
+.announcement-admin-actions .btn{justify-self:start;margin-top:3px}
 @media(max-width:700px){
   body:has(#portal-screen[style*="display: block"]) .content{padding:12px 12px calc(104px + env(safe-area-inset-bottom))}
   body:has(#portal-screen[style*="display: block"]) .topbar{height:60px;padding:0 13px}

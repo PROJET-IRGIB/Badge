@@ -280,7 +280,7 @@
       host.innerHTML = `<div class="news-empty"><strong>Aucune publication pour le moment</strong><p>Les annonces que vous publiez apparaîtront ici.</p></div>`;
       return;
     }
-    host.innerHTML = announcementsCache.map(item => `<article class="announcement-admin-item"><div class="announcement-admin-meta"><span class="news-tag">${item.site ? esc(siteName(item.site)) : "Tous les sites"}</span><span class="status ${item.status === "published" ? "active" : "pending"}">${item.status === "published" ? "Publiée" : item.status === "archived" ? "Archivée" : "Brouillon"}</span></div><small class="announcement-publisher">${item.published_by_site ? `Publié par l’administration de ${esc(siteName(item.published_by_site))}` : "Publié par l’administration générale"}</small><h3>${esc(item.title)}</h3><p>${esc(item.body)}</p>${item.mediaUrl ? (item.media_type === "video" ? `<video class="news-media" src="${esc(item.mediaUrl)}" controls playsinline preload="metadata"></video>` : `<img class="news-media" src="${esc(item.mediaUrl)}" alt="Aperçu : ${esc(item.title)}" loading="lazy">`) : ""}<small>${item.published_at ? new Date(item.published_at).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "Pas encore publiée"}</small><button class="btn secondary sm" type="button" data-announcement-toggle="${esc(item.id)}">${item.status === "published" ? "Retirer de l’espace étudiant" : "Publier maintenant"}</button></article>`).join("");
+    host.innerHTML = announcementsCache.map(item => `<article class="announcement-admin-item"><div class="announcement-admin-meta"><span class="news-tag">${item.site ? esc(siteName(item.site)) : "Tous les sites"}</span><span class="status ${item.status === "published" ? "active" : "pending"}">${item.status === "published" ? "Publiée" : item.status === "archived" ? "Archivée" : "Brouillon"}</span></div><small class="announcement-publisher">${item.published_by_site ? `Publié par l’administration de ${esc(siteName(item.published_by_site))}` : "Publié par l’administration générale"}</small><h3>${esc(item.title)}</h3><p>${esc(item.body)}</p>${item.mediaUrl ? (item.media_type === "video" ? `<video class="news-media" src="${esc(item.mediaUrl)}" controls playsinline preload="metadata"></video>` : `<img class="news-media" src="${esc(item.mediaUrl)}" alt="Aperçu : ${esc(item.title)}" loading="lazy">`) : ""}<small>${item.published_at ? new Date(item.published_at).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" }) : "Pas encore publiée"}</small><div class="announcement-admin-actions">${item.status === "draft" ? `<button class="btn" type="button" data-announcement-toggle="${esc(item.id)}">Publier maintenant</button>` : `<button class="btn secondary sm" type="button" data-announcement-toggle="${esc(item.id)}">${item.status === "published" ? "Retirer de l’espace étudiant" : "Publier maintenant"}</button>`}<button class="btn danger sm" type="button" data-announcement-delete="${esc(item.id)}">${item.status === "draft" ? "Supprimer le brouillon" : "Supprimer l’actualité"}</button></div></article>`).join("");
   }
   async function signedAnnouncementRows(rows) {
     return Promise.all((rows || []).map(async item => {
@@ -436,13 +436,32 @@
     const publish = item.status !== "published";
     if (!(await window.IRGIBDialog.confirm({ title: publish ? "Publier l’actualité" : "Retirer l’actualité", message: publish ? `Publier « ${item.title} » dans l’espace étudiant ?` : `Retirer « ${item.title} » de l’espace étudiant ?`, confirmText: publish ? "Publier" : "Retirer", danger: !publish }))) return;
     try {
-      const { data, error } = await adminClient.rpc("admin_set_campus_announcement_status", { p_announcement_id: id, p_status: publish ? "published" : "draft" });
+      const { data, error } = await adminClient.rpc("admin_set_campus_announcement_status", { p_announcement_id: id, p_status: publish ? "published" : "archived" });
       if (error || !data) { toast(friendlyError(error, "Cette actualité n’a pas pu être modifiée. Vérifiez que la migration du module Actualités est appliquée.")); return; }
       const push = publish ? await dispatchCampusPush({ kind: "announcement", id }) : null;
       await loadAnnouncements();
       toast(!publish ? "Actualité retirée de l’espace étudiant." : push?.error ? "Actualité publiée; notification en arrière-plan indisponible." : push.data?.sent ? `Actualité publiée; notification envoyée à ${push.data.sent} appareil(s).` : "Actualité publiée; aucun appareil n’a activé les notifications.");
     } catch {
       toast("Connexion interrompue : cette actualité n’a pas pu être modifiée.");
+    }
+  }
+  async function deleteAnnouncement(id) {
+    const item = announcementsCache.find(row => row.id === id);
+    if (!item) return;
+    const isDraft = item.status === "draft";
+    if (!(await window.IRGIBDialog.confirm({ title: isDraft ? "Supprimer le brouillon" : "Supprimer l’actualité", message: `Supprimer définitivement « ${item.title} »${item.media_path ? " et son fichier média" : ""} ? Cette action est irréversible.`, confirmText: "Supprimer", danger: true }))) return;
+    try {
+      const { data: mediaPath, error } = await adminClient.rpc("admin_delete_campus_announcement", { p_announcement_id: id });
+      if (error) throw error;
+      let mediaWarning = "";
+      if (mediaPath) {
+        const { error: storageError } = await adminClient.storage.from("campus-announcement-media").remove([mediaPath]);
+        if (storageError) mediaWarning = " Le fichier joint n’a pas pu être supprimé et devra être retiré du stockage.";
+      }
+      await loadAnnouncements();
+      toast(`${isDraft ? "Brouillon" : "Actualité"} supprimé.${mediaWarning}`);
+    } catch (error) {
+      toast(friendlyError(error, "La suppression n’a pas abouti. Vérifiez la migration Supabase puis réessayez."));
     }
   }
   async function setStudentCardSuspension(studentId, wasSuspended) {
@@ -847,6 +866,8 @@
       const target = event.target instanceof Element ? event.target : event.target?.parentElement;
       const announcementToggle = target?.closest("[data-announcement-toggle]");
       if (announcementToggle) void toggleAnnouncement(announcementToggle.dataset.announcementToggle);
+      const announcementDelete = target?.closest("[data-announcement-delete]");
+      if (announcementDelete) void deleteAnnouncement(announcementDelete.dataset.announcementDelete);
       const repAssign = target?.closest("[data-rep-assign]");
       if (repAssign) void assignRepresentative(repAssign.dataset.repAssign);
       const accountApprove = target?.closest("[data-account-approve]");
