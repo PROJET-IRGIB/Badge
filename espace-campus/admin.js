@@ -22,6 +22,8 @@
   let siteContactsAvailable = false;
   let adminSite = null;
   let currentAdminId = "";
+  let adminAuthGeneration = 0;
+  let adminRealtimeChannel = null;
   const selectedCardIds = new Set();
   let authorityMarkUrl = "";
   let authorityMarkUntil = 0;
@@ -31,9 +33,14 @@
   const programName = code => D.getProgram(code).shortName;
   const keyFor = item => D.groupKey(item.site, item.program, item.level);
   const mapApplication = row => ({ id: row.id, studentId: row.student_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, birthDate: row.birth_date, program: row.program, level: row.level, site: row.site, status: row.status, temporaryMatricule: row.temporary_matricule, finalMatricule: row.final_matricule, photoPath: row.photo_path, photoFileName: row.photo_path.split("/").at(-1), rejectionReason: row.rejection_reason, submittedAt: row.submitted_at, approvedAt: row.decided_at });
-  async function loadAdminData() {
+  function assertAdminSession(generation) {
+    if (generation !== adminAuthGeneration || !currentAdminId) throw new Error("Administration session changed.");
+  }
+  async function loadAdminData(generation) {
+    assertAdminSession(generation);
     if (!authorityMarkUrl || authorityMarkUntil - Date.now() <= 120000) {
       const { data: officialAsset } = await adminClient.storage.from("irgib-official-assets").createSignedUrl("official/director-stamp-signature.png", 3600);
+      assertAdminSession(generation);
       authorityMarkUrl = officialAsset?.signedUrl || "";
       authorityMarkUntil = Date.now() + 3600 * 1000;
       D.setAuthorityMarkUrl(authorityMarkUrl);
@@ -43,18 +50,20 @@
       const { data, error } = await adminClient.from("badge_applications").select("*")
         .order("submitted_at", { ascending: false }).order("id", { ascending: false }).range(from, from + 499);
       if (error) throw error;
+      assertAdminSession(generation);
       rows.push(...(data || []));
       if (!data || data.length < 500) break;
     }
-    applicationsCache = rows.map(mapApplication);
+    applicationsCache = rows.map(mapApplication).filter(item => !adminSite || item.site === adminSite);
     const profiles = [];
     for (let from = 0; ; from += 500) {
       const { data, error } = await adminClient.from("student_profiles").select("*").order("created_at", { ascending: false }).range(from, from + 499);
       if (error) throw error;
+      assertAdminSession(generation);
       profiles.push(...(data || []));
       if (!data || data.length < 500) break;
     }
-    studentProfilesCache = profiles.filter(row => row.email_verified_at).map(row => ({ studentId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, originGroup: row.origin_group || "", countryOfOrigin: row.country_of_origin || "", program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, accountStatus: row.account_status || "pending", accountRejectionReason: row.account_rejection_reason || "", emailVerifiedAt: row.email_verified_at, accountReviewedAt: row.account_reviewed_at || null, bannedAt: row.banned_at || null, cardSuspendedAt: row.card_suspended_at || null }));
+    studentProfilesCache = profiles.filter(row => row.email_verified_at && (!adminSite || row.site === adminSite)).map(row => ({ studentId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, originGroup: row.origin_group || "", countryOfOrigin: row.country_of_origin || "", program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, accountStatus: row.account_status || "pending", accountRejectionReason: row.account_rejection_reason || "", emailVerifiedAt: row.email_verified_at, accountReviewedAt: row.account_reviewed_at || null, bannedAt: row.banned_at || null, cardSuspendedAt: row.card_suspended_at || null }));
     const countryByStudent = new Map(studentProfilesCache.map(person => [person.studentId, person.countryOfOrigin]));
     applicationsCache = applicationsCache.map(item => ({ ...item, countryOfOrigin: countryByStudent.get(item.studentId) || "" }));
     const records = [];
@@ -64,19 +73,24 @@
         .eq("attendance_sessions.session_day", D.todayKey())
         .order("attended_at", { ascending: false, nullsFirst: false }).order("id", { ascending: false }).range(from, from + 499);
       if (error) throw error;
+      assertAdminSession(generation);
       records.push(...(data || []));
       if (!data || data.length < 500) break;
     }
     const byStudent = new Map(applicationsCache.map(item => [item.studentId, item]));
-    attendanceCache = (records || []).filter(row => !row.student_profiles.banned_at && !row.student_profiles.card_suspended_at).map(row => {
+    attendanceCache = (records || []).filter(row => !row.student_profiles.banned_at && !row.student_profiles.card_suspended_at && (!adminSite || row.attendance_sessions.site === adminSite)).map(row => {
       const person = row.student_profiles; const app = byStudent.get(person.user_id); const actor = row.marked_by ? byStudent.get(row.marked_by) : null;
       return { studentId: person.user_id, markedBy: row.marked_by, markedByName: actor ? fullName(actor) : "Étudiant", createdAt: row.attended_at, day: row.attendance_sessions.session_day, sessionCode: row.session_id.slice(0, 8), courseTitle: row.attendance_sessions.course_title, present: row.status === "present", firstName: person.first_name, lastName: person.last_name, email: person.email, matricule: app?.finalMatricule || app?.temporaryMatricule || "", program: person.program, level: person.level, site: person.site };
     });
     const { data: contacts, error: contactsError } = await adminClient.from("campus_site_contacts").select("site,contact_name,address,phone,updated_at");
+    assertAdminSession(generation);
     siteContactsAvailable = !contactsError;
     if (!contactsError) {
-      siteContactsCache = contacts || [];
+      siteContactsCache = (contacts || []).filter(row => !adminSite || row.site === adminSite);
       D.applySiteContacts(siteContactsCache);
+    } else {
+      siteContactsCache = [];
+      D.applySiteContacts([]);
     }
   }
   const statusText = status => ({ pending: "En attente", approved: "Approuvée", rejected: "Rejetée" }[status] || status);
@@ -276,11 +290,14 @@
     }));
   }
   async function loadAnnouncements() {
+    const generation = adminAuthGeneration;
     const host = byId("announcement-admin-rows");
     host.innerHTML = `<div class="news-empty"><strong>Chargement…</strong></div>`;
     const { data, error } = await adminClient.from("campus_announcements").select("id,title,body,site,published_by_site,status,published_at,expires_at,created_at,media_path,media_type").order("created_at", { ascending: false }).limit(50);
+    if (generation !== adminAuthGeneration || !currentAdminId) return;
     if (error) { host.innerHTML = `<div class="notice">Les actualités ne sont pas disponibles pour le moment. Réessayez plus tard.</div>`; return; }
-    announcementsCache = await signedAnnouncementRows(data || []);
+    announcementsCache = await signedAnnouncementRows((data || []).filter(item => !adminSite || !item.site || item.site === adminSite));
+    if (generation !== adminAuthGeneration || !currentAdminId) return;
     renderAnnouncements();
   }
   async function publishAnnouncement(event) {
@@ -326,11 +343,13 @@
     }
   }
   async function loadRepresentatives() {
+    const generation = adminAuthGeneration;
     const host = byId("representative-manager");
     host.innerHTML = `<div class="news-empty"><strong>Chargement…</strong></div>`;
     const { data, error } = await adminClient.from("class_representatives").select("site,program,level,user_id,assigned_at").order("site").order("program").order("level");
+    if (generation !== adminAuthGeneration || !currentAdminId) return;
     if (error) { host.innerHTML = `<div class="notice">La liste des responsables n’est pas disponible pour le moment. Réessayez plus tard.</div>`; return; }
-    representativesCache = data || [];
+    representativesCache = (data || []).filter(item => !adminSite || item.site === adminSite);
     renderRepresentativeManager();
   }
   function renderRepresentativeManager() {
@@ -452,7 +471,7 @@
     button.disabled = false;
     if (error || !data) { toast(friendlyError(error, "Les contacts n’ont pas été enregistrés. Vérifiez que la migration du catalogue est appliquée.")); return; }
     siteContactsCache = [...siteContactsCache.filter(row => row.site !== site), data];
-    D.applySiteContacts([data]);
+    D.applySiteContacts(siteContactsCache);
     renderCatalog();
     toast(`Contacts de ${siteName(site)} enregistrés pour les étudiants.`);
   }
@@ -484,9 +503,12 @@
     return { checks, ok: required.every(Boolean) && checks.every(check => check.ok) };
   }
   async function openReview(id) {
+    const generation = adminAuthGeneration;
+    const requestedAdminId = currentAdminId;
     const item = applications().find(application => application.id === id);
     if (!item) return;
     const { data: signedPhoto, error: photoError } = await adminClient.storage.from("student-photos").createSignedUrl(item.photoPath, 600);
+    if (generation !== adminAuthGeneration || !currentAdminId || currentAdminId !== requestedAdminId || !applications().some(application => application.id === id)) return;
     if (photoError || !signedPhoto?.signedUrl) { toast("La photo privée n’a pas pu être ouverte. Vérifiez l’accès au bucket student-photos."); return; }
     item.photo = signedPhoto.signedUrl;
     reviewedId = id;
@@ -574,12 +596,17 @@
   }
   function closeReview() { byId("review-modal").classList.remove("open"); reviewedId = ""; }
   async function refreshCurrent() {
-    try { await loadAdminData(); }
-    catch (error) { toast(friendlyError(error, "Les informations ne sont pas disponibles pour le moment. Réessayez.")); return; }
+    const generation = adminAuthGeneration;
+    try { await loadAdminData(generation); }
+    catch (error) { if (generation === adminAuthGeneration && currentAdminId) toast(friendlyError(error, "Les informations ne sont pas disponibles pour le moment. Réessayez.")); return; }
+    if (generation !== adminAuthGeneration || !currentAdminId) return;
     renderDashboard(); if (currentView === "requests") renderRequests(); if (currentView === "accounts") renderStudentAccounts(); if (currentView === "students") renderStudents(); if (currentView === "attendance") renderAttendance(); if (currentView === "groups") renderGroups(); if (currentView === "representatives") await loadRepresentatives(); if (currentView === "announcements") await loadAnnouncements(); if (currentView === "cards") renderCards();
   }
   async function drawAdminCard(item) {
+    const generation = adminAuthGeneration;
+    const requestedAdminId = currentAdminId;
     const { data: signedPhoto, error } = await adminClient.storage.from("student-photos").createSignedUrl(item.photoPath, 600);
+    if (generation !== adminAuthGeneration || !currentAdminId || currentAdminId !== requestedAdminId || !approved().some(application => application.id === item.id && application.studentId === item.studentId)) return;
     if (error || !signedPhoto?.signedUrl) { toast("La photo privée ne peut pas être chargée pour cette carte."); return; }
     item.photo = signedPhoto.signedUrl;
     byId("admin-card-zone").innerHTML = D.cardHtml(item, "admin-card-qr");
@@ -621,6 +648,8 @@
     return clone.outerHTML;
   }
   async function downloadSelectedCards() {
+    const generation = adminAuthGeneration;
+    const requestedAdminId = currentAdminId;
     const selected = approved().filter(item => selectedCardIds.has(item.id));
     if (!selected.length) { toast("Sélectionnez au moins un badge actif."); return; }
     if (!window.QRCode) { toast("Le générateur QR n’est pas chargé. Rechargez la page puis réessayez."); return; }
@@ -636,10 +665,12 @@
     try {
       const sheets = [];
       for (let index = 0; index < selected.length; index += 1) {
+        if (generation !== adminAuthGeneration || !currentAdminId || currentAdminId !== requestedAdminId) { printWindow.close(); return; }
         const item = selected[index];
         const person = studentProfilesCache.find(profile => profile.studentId === item.studentId);
         if (person?.cardSuspendedAt) throw new Error(`La carte de ${fullName(item)} est temporairement désactivée.`);
         const { data: signedPhoto, error } = await adminClient.storage.from("student-photos").createSignedUrl(item.photoPath, 3600);
+        if (generation !== adminAuthGeneration || !currentAdminId || currentAdminId !== requestedAdminId) { printWindow.close(); return; }
         if (error || !signedPhoto?.signedUrl) throw new Error(`La photo de ${fullName(item)} n’a pas pu être chargée.`);
         const qrId = `admin-bulk-qr-${index}`;
         staging.innerHTML = D.cardHtml({ ...item, photo: signedPhoto.signedUrl }, qrId);
@@ -663,6 +694,7 @@
         faces.forEach(face => sheets.push(`<section class=\"card-print-sheet\">${printableCardFace(face)}</section>`));
         staging.replaceChildren();
       }
+      if (generation !== adminAuthGeneration || !currentAdminId || currentAdminId !== requestedAdminId) { printWindow.close(); return; }
       const stylesUrl = new URL("../assets/styles.css?v=20261102d", location.href).href;
       printWindow.document.open();
       printWindow.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Badges IRGIB AFRICA</title><link rel="stylesheet" href="${stylesUrl}"><style>@page{size:A4 portrait;margin:0}*{box-sizing:border-box}html,body{margin:0!important;padding:0!important;width:210mm!important;min-width:210mm!important;background:#fff!important}.card-print-sheet{width:210mm;height:297mm;display:grid;place-items:center;overflow:hidden;break-after:page;page-break-after:always}.card-print-sheet:last-child{break-after:auto;page-break-after:auto}.card-print-sheet .card-v2{width:85.6mm!important;height:53.98mm!important;min-width:85.6mm!important;max-width:85.6mm!important;aspect-ratio:auto!important;margin:0!important;padding:2.2mm 2.4mm!important;border-radius:2mm!important;box-shadow:none!important;overflow:hidden!important;break-inside:avoid!important;page-break-inside:avoid!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}.card-print-sheet .card-v2-front{break-after:auto!important;page-break-after:auto!important}.card-print-sheet .card-v2.card-back{display:grid!important;break-before:auto!important;page-break-before:auto!important}.card-print-sheet img{print-color-adjust:exact;-webkit-print-color-adjust:exact}@media print{html,body{width:210mm!important;min-width:210mm!important}.card-print-sheet{height:297mm!important;break-after:page!important;page-break-after:always!important}.card-print-sheet:last-child{break-after:auto!important;page-break-after:auto!important}}.card-print-sheet .card-v2-qr{width:22cqw!important;height:22cqw!important;min-width:22cqw!important;min-height:22cqw!important;padding:.45cqw!important;background:#fff!important;overflow:hidden!important;display:grid!important;place-items:center!important}.card-print-sheet .card-v2-verification{overflow:hidden!important;align-content:end!important;justify-items:center!important}.card-print-sheet .card-v2-qr img{display:block!important;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain!important;background:#fff!important;filter:none!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}</style></head><body>${sheets.join("")}<script src="/assets/card-print.js"></script></body></html>`);
@@ -696,7 +728,56 @@
 
   let adminClient = null;
   let appInitialized = false;
+  function clearAdminWorkspace() {
+    adminAuthGeneration += 1;
+    if (adminRealtimeChannel && adminClient) {
+      const channel = adminRealtimeChannel;
+      adminRealtimeChannel = null;
+      void adminClient.removeChannel(channel).catch(() => {});
+    }
+    currentAdminId = "";
+    adminSite = null;
+    currentView = "dashboard";
+    reviewedId = "";
+    applicationsCache = [];
+    studentProfilesCache = [];
+    attendanceCache = [];
+    announcementsCache = [];
+    representativesCache = [];
+    siteContactsCache = [];
+    siteContactsAvailable = false;
+    selectedCardIds.clear();
+    authorityMarkUrl = "";
+    authorityMarkUntil = 0;
+    D.setAuthorityMarkUrl("");
+    D.applySiteContacts([]);
+    document.querySelectorAll("#admin-app .searchbox").forEach(input => { input.value = ""; });
+    document.querySelectorAll("#admin-app select").forEach(select => { select.selectedIndex = 0; });
+    document.querySelectorAll("#admin-app tbody").forEach(body => body.replaceChildren());
+    ["dashboard-stats", "today-attendance-summary", "pending-summary", "representative-manager", "announcement-admin-rows", "attendance-board", "program-grid", "site-grid", "admin-card-zone"].forEach(id => byId(id)?.replaceChildren());
+    ["request-count", "account-count", "student-count", "attendance-count", "group-count", "announcement-message"].forEach(id => { if (byId(id)) byId(id).textContent = ""; });
+    byId("attendance-title").textContent = "Appel du jour";
+    byId("announcement-form")?.reset();
+    byId("announcement-media-preview")?.replaceChildren();
+    byId("card-preview-panel").style.display = "none";
+    byId("card-preview-title").textContent = "Carte étudiante";
+    byId("card-select-visible").checked = false;
+    byId("card-selection-count").textContent = "0 badge sélectionné";
+    byId("download-selected-cards").disabled = true;
+    byId("review-modal").classList.remove("open");
+    byId("review-content").replaceChildren();
+    byId("review-actions").replaceChildren();
+    byId("admin-user-label").textContent = "Administration";
+    byId("admin-profile-mark").textContent = "A";
+    byId("admin-email").value = "";
+    byId("admin-password").value = "";
+    byId("breadcrumb").textContent = "Campus / Vue d’ensemble";
+    byId("toast").classList.remove("show");
+    clearTimeout(toastTimer);
+    return adminAuthGeneration;
+  }
   function showAdminGate(message = "", canRetrySession = false) {
+    clearAdminWorkspace();
     byId("admin-app").hidden = true;
     byId("admin-auth-screen").hidden = false;
     byId("admin-auth-message").textContent = message;
@@ -804,8 +885,10 @@
   }
   async function authorizeAdmin(session) {
     if (!session) { showAdminGate("Connectez-vous avec votre compte administrateur."); return false; }
+    const generation = clearAdminWorkspace();
     currentAdminId = session.user.id;
     const { data: siteMemberships, error: siteError } = await adminClient.from("admin_site_members").select("site").eq("user_id", session.user.id);
+    if (generation !== adminAuthGeneration || currentAdminId !== session.user.id) return false;
     if (siteError) { showAdminGate("Votre session est conservée, mais le site n’a pas pu être vérifié. Réessayez sans vous reconnecter.", true); return false; }
     if (siteMemberships?.length > 1) {
       await adminClient.auth.signOut();
@@ -815,6 +898,7 @@
     if (siteMemberships?.length === 1) adminSite = siteMemberships[0].site;
     else {
       const { data: globalMembership, error: globalError } = await adminClient.from("admin_members").select("user_id").eq("user_id", session.user.id).maybeSingle();
+      if (generation !== adminAuthGeneration || currentAdminId !== session.user.id) return false;
       if (globalError) { showAdminGate("Votre session est conservée, mais l’autorisation n’a pas pu être vérifiée. Réessayez sans vous reconnecter.", true); return false; }
       if (!globalMembership) {
         await adminClient.auth.signOut();
@@ -823,17 +907,19 @@
       }
       adminSite = null;
     }
-    try { await loadAdminData(); }
+    try { await loadAdminData(generation); }
     catch (error) {
+      if (generation !== adminAuthGeneration || currentAdminId !== session.user.id) return false;
       showAdminGate("Votre session est conservée, mais les données du campus ne sont pas disponibles. Réessayez sans vous reconnecter.", true);
       return false;
     }
+    if (generation !== adminAuthGeneration || currentAdminId !== session.user.id) return false;
     byId("admin-user-label").textContent = adminSite ? `${session.user.email || "Administration"} · ${siteName(adminSite)}` : (session.user.email || "Administration");
     byId("admin-profile-mark").textContent = (session.user.email || "A").trim().charAt(0).toUpperCase();
     byId("admin-auth-screen").hidden = true;
     byId("admin-app").hidden = false;
     initAdminApp();
-    adminClient.channel("irgib-admin-live")
+    adminRealtimeChannel = adminClient.channel("irgib-admin-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "badge_applications" }, () => { void refreshCurrent(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "student_profiles" }, () => { void refreshCurrent(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "attendance_records" }, () => { void refreshCurrent(); })

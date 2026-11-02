@@ -17,6 +17,7 @@
     { id: "PRK-CENTRE", city: "Parakou", zone: "04", points: [{ name: "Centre d’application", address: "Centre d’application", phone: "+229 01 97 80 06 71" }] },
     { id: "DJG-CENTRE", city: "Djougou", zone: "05", points: [{ name: "Centre d’application", address: "Centre d’application", phone: "+229 55 55 08 08" }] }
   ];
+  const defaultSitePoints = new Map(sites.map(site => [site.id, site.points.map(point => ({ ...point }))]));
   const levels = ["LP1", "LP2", "LP3", "M1", "M2"];
   const originCountries = "Afrique du Sud|Algérie|Angola|Bénin|Botswana|Burkina Faso|Burundi|Cabo Verde|Cameroun|Comores|Congo|Côte d’Ivoire|Djibouti|Égypte|Érythrée|Eswatini|Éthiopie|Gabon|Gambie|Ghana|Guinée|Guinée-Bissau|Guinée équatoriale|Kenya|Lesotho|Libéria|Libye|Madagascar|Malawi|Mali|Maroc|Maurice|Mauritanie|Mozambique|Namibie|Niger|Nigéria|Ouganda|République centrafricaine|République démocratique du Congo|Rwanda|Sao Tomé-et-Principe|Sénégal|Seychelles|Sierra Leone|Somalie|Soudan|Soudan du Sud|Tanzanie|Tchad|Togo|Tunisie|Zambie|Zimbabwe|Belgique|Canada|France|Royaume-Uni|États-Unis|Autre pays".split("|");
   const groupKey = (site, program, level) => `${site}-${program}-${level}`;
@@ -52,6 +53,7 @@
   };
 
   function applySiteContacts(rows) {
+    sites.forEach(site => { site.points = (defaultSitePoints.get(site.id) || []).map(point => ({ ...point })); });
     (rows || []).forEach(row => {
       const site = sites.find(item => item.id === row.site);
       if (!site) return;
