@@ -83,7 +83,6 @@
     if (error?.status === 429 || error?.code === "over_email_send_rate_limit" || /rate limit|too many requests|email rate limit|60 seconds/.test(message)) return "Trop de demandes rapprochées. Attendez environ une minute avant de demander un autre code.";
     if (/already registered|user already exists/.test(message)) return "Un compte utilise déjà cette adresse e-mail. Essayez de vous connecter.";
     if (/permission denied|row-level security|not authorized|unauthorized/.test(message)) return "Cette action n’est pas autorisée pour votre compte.";
-    if (/service unavailable|bad gateway|gateway timeout|\b(502|503|504)\b/.test(message)) return "Le service est momentanément indisponible. L’opération n’a pas pu aboutir. Réessayez dans quelques instants.";
     if (/network|failed to fetch|fetcherror|timeout/.test(message)) return "Connexion interrompue. Vérifiez votre connexion puis réessayez.";
     return fallback;
   };
