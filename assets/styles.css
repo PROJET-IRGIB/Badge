@@ -29,7 +29,7 @@
 .card-v2-header,.card-v2-main,.card-v2-footer,.card-v2-details,.card-v2-portrait,.card-v2-verification{min-width:0;min-height:0}
 .card-v2-header{display:flex;align-items:center;gap:2cqw;border-bottom:1px solid rgba(255,255,255,.22);padding-bottom:.4%}
 .card-v2-logo{width:11cqw;height:11cqw;object-fit:contain;border-radius:50%;background:#fff;padding:1px;flex:none}
-.card-v2-header .card-v2-national-seal{width:11cqw;height:11cqw;object-fit:contain;border-radius:0;background:transparent;padding:0}
+.card-v2-header .card-v2-national-seal{width:9.5cqw;height:9.5cqw;object-fit:contain;border-radius:50%;background:#fff;padding:.35cqw;flex:none}
 .card-v2-institution-logo{width:9.5cqw;height:9.5cqw;object-fit:contain;flex:none;border-radius:50%;background:#fff;padding:.35cqw}
 .card-v2-brand{display:grid;gap:.15cqw;min-width:0}
 .card-v2-header .card-v2-brand{flex:1}
