@@ -331,6 +331,7 @@
         message.textContent = friendlyError(error, "La publication n’a pas pu être enregistrée. Réessayez."); return;
       }
       form.reset();
+      byId("announcement-media-name").textContent = "Aucun fichier choisi";
       byId("announcement-media-preview").innerHTML = "";
       const push = await dispatchCampusPush({ kind: "announcement", id });
       message.textContent = push.error ? "Actualité publiée. Les étudiants connectés la verront; l’envoi en arrière-plan est momentanément indisponible." : push.data?.sent ? `Actualité publiée et notification envoyée à ${push.data.sent} appareil${push.data.sent === 1 ? "" : "s"}${push.data.failed ? ` · ${push.data.failed} échec(s)` : ""}.` : "Actualité publiée. Aucun appareil étudiant n’a encore activé les notifications.";
@@ -698,7 +699,7 @@
         staging.replaceChildren();
       }
       if (generation !== adminAuthGeneration || !currentAdminId || currentAdminId !== requestedAdminId) { printWindow.close(); return; }
-      const stylesUrl = new URL("../assets/styles.css?v=20261102l", location.href).href;
+      const stylesUrl = new URL("../assets/styles.css?v=20261102o", location.href).href;
       printWindow.document.open();
       printWindow.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Badges IRGIB AFRICA</title><link rel="stylesheet" href="${stylesUrl}"><style>@page{size:A4 portrait;margin:0}*{box-sizing:border-box}html,body{margin:0!important;padding:0!important;width:210mm!important;min-width:210mm!important;background:#fff!important}.card-print-sheet{width:210mm;height:297mm;display:grid;place-items:center;overflow:hidden;break-after:page;page-break-after:always}.card-print-sheet:last-child{break-after:auto;page-break-after:auto}.card-print-sheet .card-v2{width:85.6mm!important;height:53.98mm!important;min-width:85.6mm!important;max-width:85.6mm!important;aspect-ratio:auto!important;margin:0!important;padding:2.2mm 2.4mm!important;border-radius:2mm!important;box-shadow:none!important;overflow:hidden!important;break-inside:avoid!important;page-break-inside:avoid!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}.card-print-sheet .card-v2-front{break-after:auto!important;page-break-after:auto!important}.card-print-sheet .card-v2.card-back{display:grid!important;break-before:auto!important;page-break-before:auto!important}.card-print-sheet img{print-color-adjust:exact;-webkit-print-color-adjust:exact}@media print{html,body{width:210mm!important;min-width:210mm!important}.card-print-sheet{height:297mm!important;break-after:page!important;page-break-after:always!important}.card-print-sheet:last-child{break-after:auto!important;page-break-after:auto!important}}.card-print-sheet .card-v2-qr{width:22cqw!important;height:22cqw!important;min-width:22cqw!important;min-height:22cqw!important;padding:.45cqw!important;background:#fff!important;overflow:hidden!important;display:grid!important;place-items:center!important}.card-print-sheet .card-v2-verification{overflow:hidden!important;align-content:end!important;justify-items:center!important}.card-print-sheet .card-v2-qr img{display:block!important;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain!important;background:#fff!important;filter:none!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}</style></head><body>${sheets.join("")}<script src="/assets/card-print.js"></script></body></html>`);
       printWindow.document.close();
@@ -761,6 +762,7 @@
     ["request-count", "account-count", "student-count", "attendance-count", "group-count", "announcement-message"].forEach(id => { if (byId(id)) byId(id).textContent = ""; });
     byId("attendance-title").textContent = "Appel du jour";
     byId("announcement-form")?.reset();
+    byId("announcement-media-name").textContent = "Aucun fichier choisi";
     byId("announcement-media-preview")?.replaceChildren();
     byId("card-select-visible").checked = false;
     byId("card-selection-count").textContent = "0 badge sélectionné";
@@ -838,8 +840,10 @@
     byId("announcement-media").addEventListener("change", event => {
       const preview = byId("announcement-media-preview");
       const file = event.currentTarget.files?.[0];
-      if (!file) { preview.innerHTML = ""; return; }
-      if (file.size > 50 * 1024 * 1024) { event.currentTarget.value = ""; preview.textContent = "Fichier trop volumineux : 50 Mo maximum."; return; }
+      const fileName = byId("announcement-media-name");
+      if (!file) { fileName.textContent = "Aucun fichier choisi"; preview.innerHTML = ""; return; }
+      fileName.textContent = file.name;
+      if (file.size > 50 * 1024 * 1024) { event.currentTarget.value = ""; fileName.textContent = "Aucun fichier choisi"; preview.textContent = "Fichier trop volumineux : 50 Mo maximum."; return; }
       const url = URL.createObjectURL(file);
       preview.innerHTML = file.type.startsWith("video/") ? `<video class="news-media" src="${url}" controls muted playsinline></video>` : `<img class="news-media" src="${url}" alt="Aperçu de la pièce jointe">`;
     });
