@@ -465,6 +465,14 @@ body:has(#portal-screen[style*="display: block"])>.notice{max-width:1100px;margi
 .card-v2-back-block strong{color:#fff}
 .card-v2-back-footer{border-top-color:rgba(235,250,248,.3)}
 .card-v2-back-mark img{border-radius:50%;background:#fff}
+.card-v2.card-v2-star,.card-v2.card-v2-star.card-back{background:radial-gradient(circle at 86% 12%,rgba(255,216,240,.24),transparent 23%),radial-gradient(circle at 14% 90%,rgba(255,210,142,.18),transparent 25%),linear-gradient(122deg,#35142f 0%,#702252 48%,#b83e79 100%)!important;border:1.2px solid rgba(255,222,241,.88)!important;box-shadow:0 0 0 2px rgba(227,89,160,.2),0 16px 38px rgba(69,17,52,.28)}
+.card-v2.card-v2-star:before{border-color:rgba(255,224,244,.28);box-shadow:0 0 0 3.2cqw rgba(255,219,239,.06),0 0 0 7cqw rgba(255,219,239,.035)}
+.card-v2.card-v2-star:after{border-color:rgba(255,225,241,.2);background:rgba(255,173,217,.07)}
+.card-v2-star .card-v2-header,.card-v2-star .card-v2-footer,.card-v2-star .card-v2-back-head{border-color:rgba(255,226,242,.42)!important}
+.card-v2-star .card-v2-brand:after{content:"✦ ÉDITION STAR ✦";justify-self:start;display:inline-flex;align-items:center;margin-top:.32cqw;padding:.38cqw .9cqw;border:1px solid rgba(255,246,251,.72);border-radius:999px;background:linear-gradient(90deg,#ffe4f2,#fff0cf);color:#71234e;font:800 1.35cqw/1 Manrope,sans-serif;letter-spacing:.09em}
+.card-v2-star .card-v2-matricule{background:#fff0f7;color:#67224c}
+.card-v2-star .card-v2-portrait>img{border-color:#ffd7eb;box-shadow:0 0 0 .35cqw rgba(255,220,239,.14)}
+.card-v2-star .card-v2-back-watermark{opacity:.1;filter:grayscale(1) brightness(0) invert(1);mix-blend-mode:screen}
 .student-loading{display:grid;justify-items:center;gap:11px;min-height:270px;text-align:center;padding:40px 22px}
 .student-loading h1{margin:5px 0 0;font-size:24px}
 .student-loading .subhead{margin:0;font-size:13px}
