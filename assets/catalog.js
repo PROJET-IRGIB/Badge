@@ -12,10 +12,10 @@
   ];
   const sites = [
     { id: "COT-AKPAKPA", city: "Cotonou — Akpakpa", cardLabel: "Cotonou — Akpakpa", zone: "01", points: [{ name: "Akpakpa", address: "Campus Universitaire", phone: "+229 01 96 17 19 10" }] },
-    { id: "CAL-CENTRE", city: "Calavi", cardLabel: "Calavi (Arconville)", zone: "02", points: [{ name: "Centre d’application", address: "Centre d’application", phone: "+229 01 96 17 19 10" }] },
-    { id: "PNV-CENTRE", city: "Porto-Novo", cardLabel: "Porto-Novo (Cinquantenaire)", zone: "03", points: [{ name: "Centre d’application", address: "Centre d’application", phone: "+229 01 66 66 65 27" }] },
-    { id: "PRK-CENTRE", city: "Parakou", cardLabel: "Parakou (Gbira)", zone: "04", points: [{ name: "Centre d’application", address: "Centre d’application", phone: "+229 01 97 80 06 71" }] },
-    { id: "DJG-CENTRE", city: "Djougou", cardLabel: "Djougou (Taïfa)", zone: "05", points: [{ name: "Centre d’application", address: "Centre d’application", phone: "+229 55 55 08 08" }] }
+    { id: "CAL-CENTRE", city: "Calavi", cardLabel: "Calavi — Arconville", zone: "02", points: [{ name: "Centre d’application", address: "Centre d’application", phone: "+229 01 96 17 19 10" }] },
+    { id: "PNV-CENTRE", city: "Porto-Novo", cardLabel: "Porto-Novo — Cinquantenaire", zone: "03", points: [{ name: "Centre d’application", address: "Centre d’application", phone: "+229 01 66 66 65 27" }] },
+    { id: "PRK-CENTRE", city: "Parakou", cardLabel: "Parakou — Gbira", zone: "04", points: [{ name: "Centre d’application", address: "Centre d’application", phone: "+229 01 97 80 06 71" }] },
+    { id: "DJG-CENTRE", city: "Djougou", cardLabel: "Djougou — Taïfa", zone: "05", points: [{ name: "Centre d’application", address: "Centre d’application", phone: "+229 55 55 08 08" }] }
   ];
   const defaultSitePoints = new Map(sites.map(site => [site.id, site.points.map(point => ({ ...point }))]));
   const levels = ["LP1", "LP2", "LP3", "M1", "M2"];
