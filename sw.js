@@ -1,11 +1,11 @@
-const CACHE_NAME = "irgib-student-shell-v51";
+const CACHE_NAME = "irgib-student-shell-v52";
 const APP_SHELL = [
   "/etudiant/",
-  "/assets/styles.css?v=20261102h",
+  "/assets/styles.css?v=20261102j",
   "/assets/dialog.js?v=20261030a",
   "/assets/card-print.js",
   "/assets/portal-flow.js?v=20261028l",
-  "/assets/catalog.js?v=20261102h",
+  "/assets/catalog.js?v=20261102j",
   "/assets/pwa-install.js?v=20261024b",
   "/assets/password-visibility.js?v=1",
   "/etudiant/student.js?v=backend34",
