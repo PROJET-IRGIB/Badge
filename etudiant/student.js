@@ -137,6 +137,7 @@
   let representativeVerifySequence = 0;
   let representativeHasPin = false;
   let blockedAccountNotice = "";
+  let cardSuspensionNotice = "";
   let pendingAccountNotice = "";
   let renderedCardKey = "";
   let photoSignedUrl = "";
@@ -182,6 +183,10 @@
       const site = D.getSite(profile.site)?.city || "votre site";
       throw Object.assign(new Error(profile.banReason || `Votre compte a été banni par l’administration de ${site}.`), { name: "AccountBannedError" });
     }
+    if (profile.cardSuspendedAt) {
+      const site = D.getSite(profile.site)?.city || "votre site";
+      throw Object.assign(new Error(`Votre carte a été temporairement désactivée par l’administration de ${site}. L’accès à votre espace étudiant est suspendu. Contactez l’administration de votre site.`), { name: "CardSuspendedError" });
+    }
     if (profile.accountStatus === "rejected") {
       const site = D.getSite(profile.site)?.city || "votre site universitaire";
       throw Object.assign(new Error(`La demande de création de votre compte n’a pas été acceptée par l’administration de ${site}.${profile.accountRejectionReason ? ` Motif : ${profile.accountRejectionReason}.` : ""} Contactez l’administration de votre site.`), { name: "AccountRejectedError" });
@@ -215,7 +220,7 @@
     byId("signup-message").textContent = "";
   };
   const setScreen = screen => {
-    ["loading-screen", "auth-screen", "forgot-password-screen", "password-recovery-screen", "verify-screen", "portal-screen", "banned-screen", "account-pending-screen", "session-error-screen"].forEach(id => byId(id).style.display = id === screen ? "block" : "none");
+    ["loading-screen", "auth-screen", "forgot-password-screen", "password-recovery-screen", "verify-screen", "portal-screen", "banned-screen", "card-suspended-screen", "account-pending-screen", "session-error-screen"].forEach(id => byId(id).style.display = id === screen ? "block" : "none");
     byId("signout").style.display = screen === "portal-screen" ? "inline-flex" : "none";
     if (screen === "verify-screen") refreshOtpResendButton();
   };
@@ -224,6 +229,18 @@
     try { localStorage.setItem("irgib-banned-account-notice", blockedAccountNotice); } catch {}
     setScreen("banned-screen");
     byId("banned-account-message").textContent = blockedAccountNotice;
+    currentUser = null;
+    profile = null;
+    void db.auth.signOut();
+  }
+  function showCardSuspended(message) {
+    cardSuspensionNotice = message || "Votre carte a été temporairement désactivée par l’administration. L’accès à votre espace étudiant est suspendu. Contactez l’administration de votre site.";
+    stopCamera();
+    stopRepresentativeCamera();
+    if (representativeRefreshTimer) { clearInterval(representativeRefreshTimer); representativeRefreshTimer = 0; }
+    if (studentChannel) { void db.removeChannel(studentChannel); studentChannel = null; }
+    setScreen("card-suspended-screen");
+    byId("card-suspended-message").textContent = cardSuspensionNotice;
     currentUser = null;
     profile = null;
     void db.auth.signOut();
@@ -904,6 +921,7 @@
     catch (error) {
       if (passwordRecoveryMode) { setScreen("password-recovery-screen"); return; }
       if (error.name === "AccountBannedError") { showBlockedAccount(error.message); return; }
+      if (error.name === "CardSuspendedError") { showCardSuspended(error.message); return; }
       if (error.name === "AccountPendingError" || error.name === "AccountRejectedError") { await showPendingAccount(error.message, error.name === "AccountRejectedError"); return; }
       setScreen("session-error-screen");
       byId("session-error-message").textContent = friendlyError(error, "Votre session est conservée, mais l’espace n’a pas pu charger les données. Vérifiez la connexion et réessayez.");
@@ -921,6 +939,7 @@
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "student_profiles", filter: `user_id=eq.${currentUser.id}` }, payload => {
         if (payload.new?.banned_at) showBlockedAccount(payload.new.ban_reason || "Votre compte a été banni par l’administration de votre établissement.");
         else if (profile && Object.hasOwn(payload.new || {}, "card_suspended_at")) {
+          if (payload.new.card_suspended_at) { showCardSuspended("Votre carte a été temporairement désactivée par l’administration de votre site. L’accès à votre espace étudiant est suspendu. Contactez l’administration de votre site."); return; }
           profile.cardSuspendedAt = payload.new.card_suspended_at || null;
           renderMyCard();
           renderProfile();
@@ -1425,7 +1444,7 @@
     const printWindow = window.open("", "irgib-card-print", "popup,width=980,height=820");
     if (!printWindow) { byId("my-card-status").insertAdjacentHTML("beforeend", '<p class="form-message" role="status">Autorisez l’ouverture de la fenêtre d’impression pour créer le PDF.</p>'); return; }
     printWindow.opener = null;
-    const stylesUrl = new URL("../assets/styles.css?v=20261102o", location.href).href;
+    const stylesUrl = new URL("../assets/styles.css?v=20261102p", location.href).href;
     const sheets = faces.map(face => {
       const clone = face.cloneNode(true);
       clone.querySelectorAll(".card-v2-qr").forEach(qrHost => {
@@ -1465,6 +1484,11 @@
     setScreen("auth-screen");
     showAuthPage("login");
   });
+  byId("card-suspended-return-login").addEventListener("click", () => {
+    cardSuspensionNotice = "";
+    setScreen("auth-screen");
+    showAuthPage("login");
+  });
   byId("account-pending-return-login").addEventListener("click", () => {
     setScreen("loading-screen");
     void activatePortal();
@@ -1481,6 +1505,7 @@
     if (event === "SIGNED_OUT") {
       hideRepresentativeDailyQr(); representativeHasPin = false; currentUser = null; profile = null; application = null; attendanceRows = []; renderedCardKey = ""; photoSignedUrl = ""; photoSignedPath = ""; photoSignedUntil = 0;
       if (blockedAccountNotice) { setScreen("banned-screen"); byId("banned-account-message").textContent = blockedAccountNotice; }
+      else if (cardSuspensionNotice) { setScreen("card-suspended-screen"); byId("card-suspended-message").textContent = cardSuspensionNotice; }
       else if (pendingAccountNotice) { setScreen("account-pending-screen"); byId("account-pending-message").textContent = pendingAccountNotice; }
       else { setScreen("auth-screen"); showAuthPage("login"); }
     }

@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#12315a"><meta name="robots" content="noindex,nofollow"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <title>Espace étudiant · IRGIB AFRICA</title><link rel="manifest" href="/manifest.webmanifest?v=4"><link rel="icon" type="image/png" sizes="192x192" href="/assets/pwa-192-v4.png"><link rel="apple-touch-icon" href="/assets/pwa-192-v4.png"><link rel="stylesheet" href="../assets/styles.css?v=20261102o">
+  <title>Espace étudiant · IRGIB AFRICA</title><link rel="manifest" href="/manifest.webmanifest?v=4"><link rel="icon" type="image/png" sizes="192x192" href="/assets/pwa-192-v4.png"><link rel="apple-touch-icon" href="/assets/pwa-192-v4.png"><link rel="stylesheet" href="../assets/styles.css?v=20261102p">
 </head>
 <body>
   <canvas id="portal-flow" aria-hidden="true"></canvas>
@@ -15,6 +15,8 @@
     <section id="session-error-screen" class="panel auth-panel account-blocked-panel" style="display:none" role="alert"><div class="eyebrow">Session conservée</div><h1>Chargement momentanément indisponible</h1><p id="session-error-message" class="subhead">Votre session est conservée. Réessayez de charger votre espace.</p><button class="btn" id="retry-session" type="button">Réessayer</button></section>
 
     <section id="banned-screen" class="panel auth-panel account-blocked-panel" style="display:none" role="alert"><div class="eyebrow">Accès au compte suspendu</div><h1>Compte banni</h1><p id="banned-account-message" class="subhead">Votre compte a été banni par l’administration de votre établissement. Contactez l’administration de votre site.</p><button class="btn secondary" id="banned-return-login" type="button">Retour à la connexion</button></section>
+
+    <section id="card-suspended-screen" class="panel auth-panel account-blocked-panel" style="display:none" role="alert"><div class="eyebrow">Accès à l’espace étudiant suspendu</div><h1>Carte temporairement désactivée</h1><p id="card-suspended-message" class="subhead">L’administration a temporairement désactivé votre carte. L’accès à l’espace étudiant est suspendu. Contactez l’administration de votre site.</p><button class="btn secondary" id="card-suspended-return-login" type="button">Retour à la connexion</button></section>
 
     <section id="account-pending-screen" class="panel auth-panel account-blocked-panel" style="display:none" role="status" aria-live="polite"><div class="eyebrow">Vérification administrative</div><h1 id="account-pending-title">Confirmation en cours</h1><p id="account-pending-message" class="subhead">Votre compte est en cours de confirmation par l’administration de votre site. Réessayez plus tard.</p><div class="form-actions"><button class="btn secondary" id="account-pending-return-login" type="button">Actualiser mon statut</button><button class="btn danger" id="pending-signout" type="button">Se déconnecter</button></div></section>
 
