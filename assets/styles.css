@@ -63,12 +63,12 @@
 .card-v2-back:after{right:-10%;bottom:-34%;width:46%}
 .card-v2-back-head{display:grid;gap:.2cqw;justify-items:start;border:0;min-width:0}
 .card-v2-back-head strong{font:800 3.4cqw/1 Manrope,sans-serif;letter-spacing:.03em;color:#fff}
-.card-v2-back-body{display:grid;align-content:center;gap:1.6cqw;min-height:0;padding:1cqw 0 1.2cqw;overflow:hidden}.card-v2-back-points{display:grid;grid-template-columns:1fr 1fr;gap:1.4cqw;min-width:0}.card-v2-point{display:grid;align-content:start;gap:.12cqw;min-width:0}.card-v2-point small{font-size:1.45cqw;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#d5e0ea}.card-v2-point strong,.card-v2-point b{font-size:1.65cqw;font-weight:700;line-height:1.15;color:#fff;overflow-wrap:anywhere}.card-v2-point b{font-weight:800}
+.card-v2-back-body{display:grid;grid-template-rows:auto auto 1fr;align-content:stretch;gap:1.25cqw;min-height:0;padding:.8cqw 0 1cqw;overflow:hidden}.card-v2-back-copy{display:grid;gap:.75cqw}.card-v2-back-copy p{margin:0;font-size:1.55cqw;font-weight:650;line-height:1.2;color:#f4f7fb}.card-v2-authority-row{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;min-height:0}.card-v2-authority-row>strong{grid-column:3;text-align:center;font-size:1.55cqw;line-height:1.2;color:#fff}.card-v2-authority-row>strong span{font-size:1.35cqw;color:#d5e0ea}.card-v2-back-contacts{display:grid;grid-template-columns:1.7fr 1fr;align-content:end;gap:.8cqw 1.5cqw;min-height:0}.card-v2-back-contacts>div{display:grid;gap:.18cqw;min-width:0}.card-v2-back-contacts small{font-size:1.28cqw;font-weight:800;letter-spacing:.04em;color:#d5e0ea}.card-v2-back-contacts strong{font-size:1.42cqw;font-weight:700;line-height:1.16;color:#fff;overflow-wrap:anywhere}.card-v2-back-email{grid-column:1/-1}
 .card-v2-back-block{display:grid;gap:.25cqw;min-width:0}
 .card-v2-back-block small{font-size:1.45cqw;font-weight:600;line-height:1.15;color:#d5e0ea}
 .card-v2-back-block strong{font-size:1.85cqw;font-weight:700;line-height:1.15;color:#fff}
 .card-v2-back-block em{font-style:normal;font-size:1.5cqw;line-height:1.15;color:#d5e0ea}
-.card-v2-authority-mark{width:29cqw;height:20cqw;max-width:42%;object-fit:contain;justify-self:end;align-self:center;background:transparent;border-radius:0;padding:0;mix-blend-mode:multiply;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+.card-v2-authority-mark{grid-column:2;width:24cqw;height:14cqw;max-width:none;object-fit:contain;justify-self:center;align-self:center;background:transparent;border-radius:0;padding:0;mix-blend-mode:multiply;print-color-adjust:exact;-webkit-print-color-adjust:exact}
 .card-v2-back-footer{display:flex;align-items:center;justify-content:space-between;gap:2cqw;border-top:1px solid rgba(255,255,255,.28);padding-top:2%;font-size:1.7cqw;line-height:1.15;color:#e8eef5}
 .card-v2-back-footer em{display:block;font-style:normal;font-size:1.48cqw;line-height:1.15;color:#d5e0ea}
 .card-v2-back-mark{display:flex;align-items:center;gap:1.1cqw;flex:none;color:#fff;font:800 1.55cqw/1 Manrope,sans-serif;letter-spacing:.04em}
@@ -459,7 +459,7 @@ body:has(#portal-screen[style*="display: block"])>.notice{max-width:1100px;margi
 .card-v2:before{width:66%;aspect-ratio:1;right:-17%;top:-59%;border:1px solid rgba(221,247,243,.14);box-shadow:0 0 0 3.2cqw rgba(221,247,243,.035),0 0 0 7cqw rgba(221,247,243,.025)}
 .card-v2:after{width:44%;aspect-ratio:1;right:14%;bottom:-39%;border:1px solid rgba(207,238,234,.12);background:rgba(19,127,119,.12)}
 .card-v2-back-head{padding-bottom:2.1cqw;border-bottom:1px solid rgba(235,250,248,.25)}
-.card-v2-back-body{align-content:start;gap:2.1cqw;padding:3.3cqw 0 2.4cqw}
+.card-v2-back-body{align-content:stretch;gap:1.25cqw;padding:.8cqw 0 1cqw}
 .card-v2-back-block small{color:#d8efec}
 .card-v2-back-block strong{color:#fff}
 .card-v2-back-footer{border-top-color:rgba(235,250,248,.3)}
@@ -600,5 +600,5 @@ body:has(#portal-screen[style*="display: block"])>.footer{position:relative;z-in
 .btn.student-edit-action{background:#176b4d;border-color:#176b4d;color:#fff;white-space:nowrap}
 .btn.student-edit-action:hover{background:#11553d;border-color:#11553d}
 .btn.student-edit-action:focus-visible{outline:3px solid rgba(23,107,77,.28);outline-offset:2px}
-.card-v2-authority-placeholder{width:29cqw;height:20cqw;max-width:42%;justify-self:end;align-self:center}
+.card-v2-authority-placeholder{grid-column:2;width:24cqw;height:14cqw;justify-self:center;align-self:center}
 @media(max-width:600px){.student-edit-grid{grid-template-columns:1fr}.file-picker{align-items:flex-start;flex-direction:column}}
