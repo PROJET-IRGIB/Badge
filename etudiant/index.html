@@ -50,7 +50,7 @@
     <section id="forgot-password-screen" class="panel auth-panel recovery-panel" style="display:none" aria-labelledby="forgot-password-title">
       <div class="eyebrow">Récupération du compte</div><h1 id="forgot-password-title">Mot de passe oublié ?</h1><p class="subhead">Saisissez l’adresse e-mail associée à votre compte étudiant.</p>
       <form id="forgot-password-form"><div class="form-grid auth-single-column"><div class="field"><label for="recovery-email">Adresse e-mail</label><input id="recovery-email" type="email" required autocomplete="email"></div></div><div class="form-actions"><button class="btn" id="recovery-send" type="submit">Envoyer les instructions</button><span id="recovery-send-message" class="form-message" role="status" aria-live="polite"></span></div></form>
-      <form id="forgot-password-code-form" hidden><div class="form-grid auth-single-column"><div class="field"><label for="recovery-code">Code reçu par e-mail</label><input id="recovery-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="12" pattern="[0-9]{4,12}"></div></div><p class="field-help">Si le courriel contient un lien, ouvrez-le pour continuer. Vous pouvez aussi saisir le code ici.</p><div class="form-actions"><button class="btn" type="submit">Vérifier le code</button><span id="recovery-code-message" class="form-message" role="status" aria-live="polite"></span></div></form>
+      <form id="forgot-password-code-form" hidden><div class="form-grid auth-single-column"><div class="field"><label for="recovery-code">Code le plus récent reçu par e-mail</label><input id="recovery-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="12" pattern="[0-9]{4,12}"></div></div><p class="field-help">Si le courriel contient un lien, ouvrez-le pour continuer. Vous pouvez aussi saisir le code ici. Seul le dernier code envoyé reste valide.</p><div class="form-actions"><button class="btn" type="submit">Vérifier le code</button><button class="btn secondary" id="recovery-resend" type="button">Renvoyer les instructions</button><span id="recovery-code-message" class="form-message" role="status" aria-live="polite"></span></div></form>
       <button class="text-button recovery-back" id="recovery-back-login" type="button">Retour à la connexion</button>
     </section>
 
@@ -115,6 +115,6 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx" crossorigin="anonymous"></script>
   <script src="/assets/pwa-install.js?v=20261024b" defer></script>
-  <script src="/assets/bootstrap.js?v=backend3" data-entry="/etudiant/student.js?v=backend34" data-error-target="login-message"></script>
+  <script src="/assets/bootstrap.js?v=backend3" data-entry="/etudiant/student.js?v=backend35" data-error-target="login-message"></script>
 </body>
 </html>

@@ -9,6 +9,9 @@
   })();
   let passwordRecoveryMode = recoveryCallbackDetected;
   let recoveryEmail = "";
+  let recoveryResendAvailableAt = 0;
+  let recoveryResendTimer = 0;
+  let recoveryRequestBusy = false;
   const authStorageKey = `irgib-student-${projectRef}-auth`;
   const legacyAuthStorageKey = `sb-${projectRef}-auth-token`;
   try {
@@ -80,6 +83,7 @@
     if (error?.status === 429 || error?.code === "over_email_send_rate_limit" || /rate limit|too many requests|email rate limit|60 seconds/.test(message)) return "Trop de demandes rapprochées. Attendez environ une minute avant de demander un autre code.";
     if (/already registered|user already exists/.test(message)) return "Un compte utilise déjà cette adresse e-mail. Essayez de vous connecter.";
     if (/permission denied|row-level security|not authorized|unauthorized/.test(message)) return "Cette action n’est pas autorisée pour votre compte.";
+    if (/service unavailable|bad gateway|gateway timeout|\b(502|503|504)\b/.test(message)) return "Le service est momentanément indisponible. L’opération n’a pas pu aboutir. Réessayez dans quelques instants.";
     if (/network|failed to fetch|fetcherror|timeout/.test(message)) return "Connexion interrompue. Vérifiez votre connexion puis réessayez.";
     return fallback;
   };
@@ -1004,9 +1008,26 @@
   byId("forgot-password-form").addEventListener("submit", async event => {
     event.preventDefault();
     recoveryEmail = byId("recovery-email").value.trim().toLowerCase();
+    await sendRecoveryInstructions();
+  });
+  function updateRecoveryResendButton() {
+    const button = byId("recovery-resend");
+    if (!button) return;
+    const seconds = Math.max(0, Math.ceil((recoveryResendAvailableAt - Date.now()) / 1000));
+    button.disabled = recoveryRequestBusy || seconds > 0;
+    button.textContent = seconds ? `Renvoyer dans ${seconds}s` : "Renvoyer les instructions";
+    if (recoveryResendTimer) { clearInterval(recoveryResendTimer); recoveryResendTimer = 0; }
+    if (seconds) recoveryResendTimer = setInterval(updateRecoveryResendButton, 1000);
+  }
+  async function sendRecoveryInstructions() {
+    recoveryEmail = byId("recovery-email").value.trim().toLowerCase();
+    if (!recoveryEmail) { byId("recovery-email").focus(); return; }
     const button = byId("recovery-send");
+    recoveryRequestBusy = true;
     button.disabled = true;
+    byId("recovery-resend").disabled = true;
     byId("recovery-send-message").textContent = "Envoi en cours…";
+    byId("recovery-code-message").textContent = "";
     try {
       const redirectTo = new URL("/etudiant/", window.location.origin).href;
       const { error } = await db.auth.resetPasswordForEmail(recoveryEmail, { redirectTo });
@@ -1014,10 +1035,18 @@
       byId("recovery-send-message").textContent = "Si cette adresse correspond à un compte, un e-mail de récupération vient d’être envoyé.";
       byId("forgot-password-code-form").hidden = false;
       byId("recovery-code").focus();
+      recoveryResendAvailableAt = Date.now() + 60_000;
     } catch (error) {
-      byId("recovery-send-message").textContent = friendlyError(error, "L’e-mail de récupération n’a pas pu être envoyé. Réessayez dans un instant.");
-    } finally { button.disabled = false; }
-  });
+      const rateLimited = error?.status === 429 || error?.code === "over_email_send_rate_limit" || /rate limit|too many requests|email rate limit/i.test(String(error?.message || ""));
+      if (rateLimited) recoveryResendAvailableAt = Date.now() + 60_000;
+      byId("recovery-send-message").textContent = friendlyError(error, "Si cette adresse correspond à un compte, un e-mail de récupération sera envoyé. Vérifiez votre boîte et réessayez dans un instant.");
+    } finally {
+      recoveryRequestBusy = false;
+      button.disabled = false;
+      updateRecoveryResendButton();
+    }
+  }
+  byId("recovery-resend").addEventListener("click", () => void sendRecoveryInstructions());
   byId("forgot-password-code-form").addEventListener("submit", async event => {
     event.preventDefault();
     const token = byId("recovery-code").value.trim().replace(/\s/g, "");
@@ -1059,12 +1088,13 @@
       const { error } = await db.auth.updateUser({ password: nextPassword });
       if (error) throw error;
       passwordRecoveryMode = false;
-      await db.auth.signOut({ scope: "global" });
+      const { error: revokeError } = await db.auth.signOut({ scope: "global" });
+      if (revokeError) await db.auth.signOut();
       window.history.replaceState({}, document.title, window.location.pathname);
       byId("password-recovery-form").reset();
       setScreen("auth-screen");
       showAuthPage("login");
-      byId("login-message").textContent = "Mot de passe modifié. Connectez-vous avec votre nouveau mot de passe.";
+      byId("login-message").textContent = revokeError ? "Mot de passe modifié et session actuelle fermée. Certaines autres sessions n’ont pas pu être fermées automatiquement." : "Mot de passe modifié. Les autres sessions ont été fermées ; connectez-vous avec votre nouveau mot de passe.";
     } catch (error) {
       byId("password-recovery-message").textContent = friendlyError(error, "Le mot de passe n’a pas pu être modifié. Le lien de récupération a peut-être expiré.");
     } finally { button.disabled = false; }

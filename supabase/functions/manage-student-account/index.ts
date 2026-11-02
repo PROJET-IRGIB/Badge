@@ -27,13 +27,18 @@ async function listAllFiles(client: any, path: string): Promise<string[]> {
   return paths;
 }
 
-async function recordAccountAction(client: any, site: string, actorId: string, studentId: string, action: string) {
+async function recordAccountAction(client: any, site: string, actorId: string, actorEmail: string | undefined, studentId: string, action: string, subject: { first_name?: string; last_name?: string; email?: string }) {
   const { error } = await client.from("admin_action_log").insert({
     site,
     actor_id: actorId,
     subject_id: studentId,
     action,
-    details: { source: "student-account-management" },
+    details: {
+      source: "student-account-management",
+      actor_email: actorEmail || null,
+      student_name: [subject?.first_name, subject?.last_name].filter(Boolean).join(" ") || null,
+      student_email: subject?.email || null,
+    },
   });
   if (error) {
     console.error("Account action audit log could not be written");
@@ -71,7 +76,7 @@ Deno.serve(async req => {
   const serviceClient = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
   const { data: profile, error: profileError } = await serviceClient.from("student_profiles")
-    .select("user_id,site,first_name,last_name,banned_at").eq("user_id", body.studentId).maybeSingle();
+    .select("user_id,site,first_name,last_name,email,banned_at").eq("user_id", body.studentId).maybeSingle();
   if (profileError || !profile) return reply(404, { error: "Étudiant introuvable." });
 
   const { data: globalAdmin, error: globalError } = await serviceClient.from("admin_members")
@@ -97,7 +102,7 @@ Deno.serve(async req => {
       await serviceClient.from("student_profiles").update({ banned_at: null, banned_by: null, ban_reason: null }).eq("user_id", body.studentId);
       return reply(500, { error: "Le statut est enregistré mais la fermeture de l’accès Supabase a échoué. Réessayez." });
     }
-    const auditLogged = await recordAccountAction(serviceClient, profile.site, authData.user.id, body.studentId, "student_account_banned");
+    const auditLogged = await recordAccountAction(serviceClient, profile.site, authData.user.id, authData.user.email, body.studentId, "student_account_banned", profile);
     const { error: representativeError } = await serviceClient.from("class_representatives").delete().eq("user_id", body.studentId);
     if (representativeError) return reply(500, { error: "Le compte est banni, mais le rôle de responsable n’a pas pu être retiré. Réessayez." });
     await serviceClient.from("push_subscriptions").delete().eq("user_id", body.studentId);
@@ -115,7 +120,7 @@ Deno.serve(async req => {
       await serviceClient.auth.admin.updateUserById(body.studentId, { ban_duration: "876000h" });
       return reply(500, { error: "Le bannissement Auth a été levé, mais le statut du compte n’a pas pu être actualisé. Réessayez." });
     }
-    const auditLogged = await recordAccountAction(serviceClient, profile.site, authData.user.id, body.studentId, "student_account_unbanned");
+    const auditLogged = await recordAccountAction(serviceClient, profile.site, authData.user.id, authData.user.email, body.studentId, "student_account_unbanned", profile);
     return reply(200, { ok: true, action: "unban", auditLogged, auditWarning: !auditLogged });
   }
 
@@ -139,7 +144,7 @@ Deno.serve(async req => {
     if (removals.some(result => result.error)) return reply(500, { error: "Le compte est bloqué, mais le nettoyage de ses données est incomplet. Réessayez." });
     const { error: deleteError } = await serviceClient.auth.admin.deleteUser(body.studentId);
     if (deleteError) return reply(500, { error: "Le compte est bloqué, mais Supabase n’a pas pu supprimer l’utilisateur. Réessayez." });
-    const auditLogged = await recordAccountAction(serviceClient, profile.site, authData.user.id, body.studentId, "student_account_deleted");
+    const auditLogged = await recordAccountAction(serviceClient, profile.site, authData.user.id, authData.user.email, body.studentId, "student_account_deleted", profile);
     return reply(200, { ok: true, action: "delete", auditLogged, auditWarning: !auditLogged });
   } catch (error) {
     console.error("Account cleanup failed");

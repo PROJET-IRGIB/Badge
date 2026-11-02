@@ -16,6 +16,7 @@
   let applicationsCache = [];
   let studentProfilesCache = [];
   let attendanceCache = [];
+  let activityCache = [];
   let announcementsCache = [];
   let representativesCache = [];
   let siteContactsCache = [];
@@ -114,9 +115,36 @@
     currentView = view;
     document.querySelectorAll(".view").forEach(node => node.classList.toggle("active", node.id === `view-${view}`));
     document.querySelectorAll(".side-nav [data-view]").forEach(node => node.classList.toggle("active", node.dataset.view === view));
-    const labels = { dashboard: "Vue d’ensemble", requests: "Demandes de badge", accounts: "Comptes étudiants", students: "Étudiants", attendance: "Présences", groups: "Groupes", representatives: "Responsables de classe", announcements: "Actualités", cards: "Cartes" };
+    const labels = { dashboard: "Vue d’ensemble", requests: "Demandes de badge", accounts: "Comptes étudiants", students: "Étudiants", attendance: "Présences", groups: "Groupes", representatives: "Responsables de classe", announcements: "Actualités", cards: "Cartes", activity: "Journal des actions" };
     byId("breadcrumb").textContent = `Campus / ${labels[view]}`;
-    ({ dashboard: renderDashboard, requests: renderRequests, accounts: renderStudentAccounts, students: renderStudents, attendance: renderAttendance, groups: renderGroups, representatives: () => void loadRepresentatives(), announcements: () => void loadAnnouncements(), cards: renderCards })[view]?.();
+    ({ dashboard: renderDashboard, requests: renderRequests, accounts: renderStudentAccounts, students: renderStudents, attendance: renderAttendance, groups: renderGroups, representatives: () => void loadRepresentatives(), announcements: () => void loadAnnouncements(), cards: renderCards, activity: () => void loadActivity() })[view]?.();
+  }
+  const actionLabels = { student_account_decision: "Décision sur le compte", student_ban_change: "Changement de bannissement", student_card_suspension_change: "Changement de statut de carte", student_profile_edit: "Modification du dossier étudiant", badge_application_decision: "Décision sur le badge", student_account_banned: "Compte banni", student_account_unbanned: "Compte rétabli", student_account_deleted: "Compte supprimé" };
+  const fieldLabels = { account_status: "statut du compte", banned_at: "bannissement", card_suspended_at: "statut de la carte", first_name: "prénom", last_name: "nom", phone: "téléphone", sex: "sexe", program: "filière", level: "niveau", birth_date: "date de naissance", origin_group: "provenance", country_of_origin: "pays d’origine" };
+  function renderActivity() {
+    const query = (byId("activity-search").value || "").trim().toLowerCase();
+    const list = activityCache.filter(item => [item.actionLabel, item.studentName, item.actorLabel, item.detailsText, item.subjectId].join(" ").toLowerCase().includes(query));
+    byId("activity-count").textContent = `${list.length} action${list.length === 1 ? "" : "s"} affichée${list.length === 1 ? "" : "s"} · 300 dernières`;
+    byId("activity-rows").innerHTML = list.map(item => `<tr><td><time datetime="${esc(item.createdAt)}">${new Date(item.createdAt).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" })}</time></td><td><strong>${esc(item.actionLabel)}</strong></td><td>${esc(item.studentName || `Compte ${item.subjectId.slice(0, 8)}`)}</td><td>${esc(item.actorLabel)}</td><td>${esc(item.detailsText || "—")}</td></tr>`).join("") || `<tr><td colspan="5" class="table-empty">${query ? "Aucune action ne correspond à cette recherche." : "Aucune action enregistrée pour ce site."}</td></tr>`;
+  }
+  async function loadActivity() {
+    const generation = adminAuthGeneration;
+    byId("activity-rows").innerHTML = '<tr><td colspan="5" class="table-empty">Chargement du journal…</td></tr>';
+    const { data, error } = await adminClient.from("admin_action_log").select("id,site,actor_id,subject_id,action,details,created_at").order("created_at", { ascending: false }).limit(300);
+    if (generation !== adminAuthGeneration || !currentAdminId) return;
+    if (error) {
+      byId("activity-rows").innerHTML = '<tr><td colspan="5" class="table-empty">Le journal n’est pas disponible. Réessayez dans un instant.</td></tr>';
+      toast(friendlyError(error, "Le journal n’a pas pu être chargé. Vérifiez les autorisations Supabase puis réessayez."));
+      return;
+    }
+    activityCache = (data || []).filter(item => !adminSite || item.site === adminSite).map(item => {
+      const person = studentProfilesCache.find(profile => profile.studentId === item.subject_id);
+      const details = item.details && typeof item.details === "object" ? item.details : {};
+      const fields = Array.isArray(details.fields) ? details.fields.map(field => fieldLabels[field] || field).join(", ") : "";
+      const transition = details.from || details.to ? `Statut : ${details.from || "—"} → ${details.to || "—"}` : "";
+      return { ...item, studentName: person ? fullName(person) : (details.student_name || ""), actorLabel: item.actor_id === currentAdminId ? "Vous" : details.actor_email || (item.actor_id ? `Administrateur · ${item.actor_id.slice(0, 8)}` : "Administration"), actionLabel: actionLabels[item.action] || item.action, detailsText: [fields ? `Champs : ${fields}` : "", transition, details.source === "student-account-management" ? "Gestion du compte" : ""].filter(Boolean).join(" · "), subjectId: item.subject_id || "" };
+    });
+    renderActivity();
   }
   function renderStudentAccounts() {
     const query = (byId("account-search").value || "").trim().toLowerCase();
@@ -404,7 +432,7 @@
       toast(detail || friendlyError(error, "L’action n’a pas abouti. Vérifiez que la fonction de gestion est déployée et réessayez."));
       return;
     }
-    toast(action === "ban" ? `${fullName(person)} a été banni.` : action === "unban" ? `${fullName(person)} a été débanni et son accès est rétabli.` : `Le compte de ${fullName(person)} a été supprimé.`);
+    toast(data.auditWarning ? "Action effectuée, mais son entrée n’a pas pu être ajoutée au journal. Prévenez l’administration principale." : action === "ban" ? `${fullName(person)} a été banni.` : action === "unban" ? `${fullName(person)} a été débanni et son accès est rétabli.` : `Le compte de ${fullName(person)} a été supprimé.`);
     await refreshCurrent();
   }
   async function removeRepresentative(key) {
@@ -619,7 +647,7 @@
     try { await loadAdminData(generation); }
     catch (error) { if (generation === adminAuthGeneration && currentAdminId) toast(friendlyError(error, "Les informations ne sont pas disponibles pour le moment. Réessayez.")); return; }
     if (generation !== adminAuthGeneration || !currentAdminId) return;
-    renderDashboard(); if (currentView === "requests") renderRequests(); if (currentView === "accounts") renderStudentAccounts(); if (currentView === "students") renderStudents(); if (currentView === "attendance") renderAttendance(); if (currentView === "groups") renderGroups(); if (currentView === "representatives") await loadRepresentatives(); if (currentView === "announcements") await loadAnnouncements(); if (currentView === "cards") renderCards();
+    renderDashboard(); if (currentView === "requests") renderRequests(); if (currentView === "accounts") renderStudentAccounts(); if (currentView === "students") renderStudents(); if (currentView === "attendance") renderAttendance(); if (currentView === "groups") renderGroups(); if (currentView === "representatives") await loadRepresentatives(); if (currentView === "announcements") await loadAnnouncements(); if (currentView === "cards") renderCards(); if (currentView === "activity") await loadActivity();
   }
   function printableCardFace(face) {
     const clone = face.cloneNode(true);
@@ -745,6 +773,7 @@
     applicationsCache = [];
     studentProfilesCache = [];
     attendanceCache = [];
+    activityCache = [];
     announcementsCache = [];
     representativesCache = [];
     siteContactsCache = [];
@@ -759,6 +788,8 @@
     document.querySelectorAll("#admin-app tbody").forEach(body => body.replaceChildren());
     ["dashboard-stats", "today-attendance-summary", "pending-summary", "representative-manager", "announcement-admin-rows", "attendance-board", "program-grid", "site-grid"].forEach(id => byId(id)?.replaceChildren());
     ["request-count", "account-count", "student-count", "attendance-count", "group-count", "announcement-message"].forEach(id => { if (byId(id)) byId(id).textContent = ""; });
+    byId("activity-count").textContent = "";
+    byId("activity-rows").innerHTML = '<tr><td colspan="5" class="table-empty">Ouvrez cet onglet pour charger les actions.</td></tr>';
     byId("attendance-title").textContent = "Appel du jour";
     byId("announcement-form")?.reset();
     byId("announcement-media-preview")?.replaceChildren();
@@ -844,6 +875,8 @@
       preview.innerHTML = file.type.startsWith("video/") ? `<video class="news-media" src="${url}" controls muted playsinline></video>` : `<img class="news-media" src="${url}" alt="Aperçu de la pièce jointe">`;
     });
     byId("group-search").addEventListener("input", renderGroups);
+    byId("activity-search").addEventListener("input", renderActivity);
+    byId("refresh-activity").addEventListener("click", () => void loadActivity());
     document.addEventListener("click", event => {
       const target = event.target instanceof Element ? event.target : event.target?.parentElement;
       const announcementToggle = target?.closest("[data-announcement-toggle]");
@@ -927,6 +960,7 @@
       .on("postgres_changes", { event: "*", schema: "public", table: "class_representatives" }, () => { if (currentView === "representatives") void loadRepresentatives(); })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "campus_site_contacts" }, () => { void refreshCurrent(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "campus_announcements" }, () => { if (currentView === "announcements") void loadAnnouncements(); })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "admin_action_log" }, () => { if (currentView === "activity") void loadActivity(); })
       .subscribe();
     return true;
   }
