@@ -64,8 +64,8 @@
 .card-v2-back-block em{font-style:normal;font-size:1.5cqw;line-height:1.15;color:#d7eee8}
 .card-v2-back-footer{display:flex;align-items:center;justify-content:space-between;gap:2cqw;border-top:1px solid rgba(220,246,237,.45);padding-top:2%;font-size:1.7cqw;line-height:1.15;color:#e7f4f0}
 .card-v2-back-footer em{display:block;font-style:normal;font-size:1.48cqw;line-height:1.15;color:#d7eee8}
-.card-v2-back-mark{display:flex;align-items:center;gap:1.1cqw;flex:none;color:#fff;font:800 1.55cqw/1 Manrope,sans-serif;letter-spacing:.04em}
-.card-v2-back-mark img{width:8.2cqw;height:8.2cqw;object-fit:contain;border-radius:50%;background:#fff;padding:1px}
+.card-v2-seal{position:absolute;z-index:0;right:1%;top:50%;width:58%;transform:translateY(-50%);object-fit:contain;pointer-events:none}
+.card-v2-back-head,.card-v2-back-body,.card-v2-back-footer{position:relative;z-index:1}
 .card-v2 .qr-fallback{font-size:1.6cqw;color:#546b70;text-align:center}
 @media(max-width:700px){.card-v2{border-radius:8px}}
 @media print{.card-v2{width:85.60mm!important;height:53.98mm!important;max-width:none!important;aspect-ratio:auto!important;border-radius:0!important;box-shadow:none!important;print-color-adjust:exact;-webkit-print-color-adjust:exact;break-inside:avoid;page-break-inside:avoid}.card-v2.card-back{display:grid!important;break-before:page;page-break-before:always}}
