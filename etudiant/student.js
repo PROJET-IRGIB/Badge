@@ -1124,7 +1124,12 @@
     const draft = { firstName: String(values.get("firstName")).trim(), lastName: String(values.get("lastName")).trim(), email: String(values.get("email")).trim().toLowerCase(), phone: String(values.get("phone")).trim(), sex: String(values.get("sex")), originGroup: String(values.get("originGroup")), countryOfOrigin: String(values.get("countryOfOrigin")).trim(), program: String(values.get("program")), level: String(values.get("level")), site: String(values.get("site")) };
     if (password.length < 8 || !draft.phone || !draft.countryOfOrigin || !["francophone", "anglophone"].includes(draft.originGroup)) { byId("signup-message").textContent = "Renseignez le téléphone, le pays et l’origine francophone ou anglophone, puis vérifiez le mot de passe (8 caractères minimum)."; return; }
     if (!(await window.IRGIBDialog.confirm({ title: "Créer le compte étudiant", message: `Confirmer la création du compte pour ${draft.firstName} ${draft.lastName} (${draft.email}) ?`, confirmText: "Créer le compte" }))) return;
-    const button = event.currentTarget.querySelector('[type="submit"]'); button.disabled = true;
+    const button = event.currentTarget.querySelector('[type="submit"]');
+    const buttonLabel = button.textContent;
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    button.textContent = "Création du compte…";
+    byId("signup-message").textContent = "Création du compte en cours. Patientez pendant l’enregistrement et l’envoi du code.";
     try {
       const { data, error } = await db.auth.signUp({ email: draft.email, password, options: { data: { account_type: "student", first_name: draft.firstName, last_name: draft.lastName, phone: draft.phone, sex: draft.sex, origin_group: draft.originGroup, country_of_origin: draft.countryOfOrigin, program: draft.program, level: draft.level, site: draft.site } } });
       if (error) throw error;
@@ -1157,7 +1162,7 @@
         setScreen("verify-screen");
       } else byId("signup-message").textContent = friendlyError(error, "La création du compte a échoué. Vérifiez les informations puis réessayez.");
     }
-    finally { button.disabled = false; }
+    finally { button.disabled = false; button.removeAttribute("aria-busy"); button.textContent = buttonLabel; }
   });
   byId("verify-form").addEventListener("submit", async event => {
     event.preventDefault();
@@ -1165,8 +1170,12 @@
     if (!pendingSignupEmail) { byId("verify-message").textContent = "Recommencez l’inscription pour demander un nouveau code."; return; }
     if (!/^\d{6,8}$/.test(token)) { byId("verify-message").textContent = "Saisissez le code numérique reçu par e-mail."; return; }
     if (!(await window.IRGIBDialog.confirm({ title: "Confirmer le code", message: "Votre compte est déjà visible par l’administration de votre site. Confirmez ce code pour terminer la vérification de votre adresse e-mail.", confirmText: "Confirmer le code" }))) return;
-    const button = event.currentTarget.querySelector('[type="submit"]'); button.disabled = true;
-    byId("verify-message").textContent = "Vérification du code…";
+    const button = event.currentTarget.querySelector('[type="submit"]');
+    const buttonLabel = button.textContent;
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    button.textContent = "Vérification…";
+    byId("verify-message").textContent = "Vérification du code en cours. Patientez pendant la réponse du service.";
     try {
       if ("Notification" in window && Notification.permission === "default") {
         try { await Notification.requestPermission(); } catch { /* La confirmation de l’e-mail reste possible sans notifications. */ }
@@ -1181,7 +1190,7 @@
       await activatePortal();
     } catch (error) {
       byId("verify-message").textContent = /expired|invalid|token|otp/i.test(error.message || "") ? "Code incorrect ou expiré. Vérifiez le code reçu ou demandez-en un nouveau." : friendlyError(error, "La vérification a échoué. Réessayez.");
-    } finally { button.disabled = false; }
+    } finally { button.disabled = false; button.removeAttribute("aria-busy"); button.textContent = buttonLabel; }
   });
   byId("resend-code").addEventListener("click", async () => {
     if (!pendingSignupEmail) { byId("verify-message").textContent = "Recommencez l’inscription pour demander un nouveau code."; return; }

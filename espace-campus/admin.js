@@ -97,12 +97,12 @@
   const statusHtml = status => `<span class="status ${status === "approved" ? "active" : status === "rejected" ? "rejected" : "pending"}">${statusText(status)}</span>`;
   const photoCell = item => item.photo ? `<img class="table-photo" src="${esc(item.photo)}" alt="Photo de ${esc(fullName(item))}">` : `<span class="table-photo photo-empty">${item.photoPath ? "Photo" : "—"}</span>`;
 
-  function toast(message) {
+  function toast(message, options = {}) {
     const element = byId("toast");
     element.textContent = message;
     element.classList.add("show");
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => element.classList.remove("show"), 2800);
+    if (!options.persist) toastTimer = setTimeout(() => element.classList.remove("show"), 2800);
   }
   async function dispatchCampusPush(body) {
     try {
@@ -156,6 +156,7 @@
       reason = answer;
       if (!(await window.IRGIBDialog.confirm({ title: "Confirmer le refus", message: `Refuser le compte étudiant de ${fullName(person)} ?`, confirmText: "Refuser", danger: true }))) return;
     } else if (!(await window.IRGIBDialog.confirm({ title: "Confirmer le compte étudiant", message: `Confirmer que ${fullName(person)} est bien étudiant à ${siteName(person.site)} et autoriser son accès à l’espace étudiant ?`, confirmText: "Confirmer le compte" }))) return;
+    toast(approve ? "Confirmation du compte en cours…" : "Enregistrement du refus en cours…", { persist: true });
     const { error } = await adminClient.rpc("admin_decide_student_account", { p_student_id: studentId, p_approve: approve, p_reason: reason });
     if (error) { toast(friendlyError(error, `Le compte n’a pas pu être ${actionLabel}. Vérifiez la migration Supabase puis réessayez.`)); return; }
     if (approve) {
