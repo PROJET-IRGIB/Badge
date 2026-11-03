@@ -1200,7 +1200,6 @@
     const token = byId("verify-code").value.replace(/\s/g, "");
     if (!pendingSignupEmail) { byId("verify-message").textContent = "Recommencez l’inscription pour demander un nouveau code."; return; }
     if (!/^\d{6,8}$/.test(token)) { byId("verify-message").textContent = "Saisissez le code numérique reçu par e-mail."; return; }
-    if (!(await window.IRGIBDialog.confirm({ title: "Confirmer le code", message: "Votre compte est déjà visible par l’administration de votre site. Confirmez ce code pour terminer la vérification de votre adresse e-mail.", confirmText: "Confirmer le code" }))) return;
     const button = event.currentTarget.querySelector('[type="submit"]');
     const buttonLabel = button.textContent;
     button.disabled = true;
@@ -1208,13 +1207,13 @@
     button.textContent = "Vérification…";
     byId("verify-message").textContent = "Vérification du code en cours. Patientez pendant la réponse du service.";
     try {
-      if ("Notification" in window && Notification.permission === "default") {
-        try { await Notification.requestPermission(); } catch { /* La confirmation de l’e-mail reste possible sans notifications. */ }
-      }
       const { data, error } = await db.auth.verifyOtp({ email: pendingSignupEmail, token, type: "email" });
       if (error) throw error;
       if (!data.user) throw new Error("La confirmation a réussi mais le compte étudiant n’a pas été retourné. Connectez-vous pour continuer.");
       currentUser = data.user;
+      if ("Notification" in window && Notification.permission === "default") {
+        try { void Notification.requestPermission().catch(() => {}); } catch { /* L’accès au compte ne dépend pas des notifications. */ }
+      }
       clearPendingSignupEmail();
       byId("verify-form").reset();
       window.IRGIBDialog.notify("Adresse e-mail confirmée. Votre compte attend maintenant la validation de l’administration.");
