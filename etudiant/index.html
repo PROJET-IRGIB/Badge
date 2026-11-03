@@ -40,7 +40,7 @@
         <div class="field"><label for="signup-sex">Sexe</label><select id="signup-sex" name="sex" required><option value="">Choisir</option><option value="F">F</option><option value="M">M</option></select></div>
         <div class="field"><label for="signup-origin-group">Provenance</label><select id="signup-origin-group" name="originGroup" required><option value="">Choisir</option><option value="francophone">Francophone</option><option value="anglophone">Anglophone</option></select></div>
         <div class="field"><label for="signup-country-origin">Pays d’origine</label><input id="signup-country-origin" name="countryOfOrigin" list="signup-country-options" maxlength="80" autocomplete="country-name" required placeholder="Ex. Bénin"><datalist id="signup-country-options"></datalist></div>
-        <div class="field"><label for="signup-phone">Téléphone</label><input id="signup-phone" name="phone" inputmode="tel" placeholder="+229 01 …"></div>
+        <div class="field"><label for="signup-phone">Téléphone</label><input id="signup-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="30" required placeholder="+229 01 …"></div>
         <div class="field"><label for="signup-program">Filière</label><select id="signup-program" name="program" required></select></div>
         <div class="field"><label for="signup-level">Niveau d’étude</label><select id="signup-level" name="level" required></select></div>
         <div class="field"><label for="signup-site">Ville / site d’apprentissage</label><select id="signup-site" name="site" required></select></div>
@@ -117,6 +117,6 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx" crossorigin="anonymous"></script>
   <script src="/assets/pwa-install.js?v=20261024b" defer></script>
-  <script src="/assets/bootstrap.js?v=backend3" data-entry="/etudiant/student.js?v=backend37" data-error-target="login-message"></script>
+  <script src="/assets/bootstrap.js?v=backend3" data-entry="/etudiant/student.js?v=backend38" data-error-target="login-message"></script>
 </body>
 </html>

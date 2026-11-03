@@ -95,6 +95,17 @@
     if (/network|failed to fetch|fetcherror|timeout/.test(message)) return "Connexion interrompue. Vérifiez votre connexion puis réessayez.";
     return fallback;
   };
+  const signupErrorMessage = error => {
+    const message = String(error?.message || "").toLowerCase();
+    const code = String(error?.code || "");
+    if (/database error saving new user|error creating new user|trigger/i.test(message) || ["23502", "23503", "23514", "42703"].includes(code)) {
+      const reference = code || (error?.status ? `HTTP ${error.status}` : "Supabase Auth");
+      return `Supabase a refusé la création du profil avant l’envoi du code (réf. ${reference}). Vérifiez la migration du déclencheur de création étudiant; aucun nouvel essai d’envoi d’OTP ne corrigera ce blocage.`;
+    }
+    if (/invalid email|email address is invalid/.test(message)) return "Cette adresse e-mail n’est pas reconnue comme valide. Vérifiez-la puis réessayez.";
+    if (/password.*(weak|short)|weak password/.test(message)) return "Le mot de passe doit respecter les règles de sécurité du compte (au moins 8 caractères).";
+    return friendlyError(error, "Le compte n’a pas été créé. Vérifiez les informations et réessayez.");
+  };
   const initSelects = () => {
     const programOptions = D.programs.map(item => `<option value="${item.code}">${item.code} · ${esc(item.name)}</option>`).join("");
     const levelOptions = D.levels.map(level => `<option value="${level}">${level}</option>`).join("");
@@ -1129,9 +1140,11 @@
   byId("signup-form").addEventListener("submit", async event => {
     event.preventDefault();
     const values = new FormData(event.currentTarget);
-    const password = String(values.get("password"));
-    const draft = { firstName: String(values.get("firstName")).trim(), lastName: String(values.get("lastName")).trim(), email: String(values.get("email")).trim().toLowerCase(), phone: String(values.get("phone")).trim(), sex: String(values.get("sex")), originGroup: String(values.get("originGroup")), countryOfOrigin: String(values.get("countryOfOrigin")).trim(), program: String(values.get("program")), level: String(values.get("level")), site: String(values.get("site")) };
-    if (password.length < 8 || !draft.phone || !draft.countryOfOrigin || !["francophone", "anglophone"].includes(draft.originGroup)) { byId("signup-message").textContent = "Renseignez le téléphone, le pays et l’origine francophone ou anglophone, puis vérifiez le mot de passe (8 caractères minimum)."; return; }
+    const read = name => String(values.get(name) || "").trim();
+    const password = String(values.get("password") || "");
+    const draft = { firstName: read("firstName"), lastName: read("lastName"), email: read("email").toLowerCase(), phone: read("phone"), sex: read("sex"), originGroup: read("originGroup"), countryOfOrigin: read("countryOfOrigin"), program: read("program"), level: read("level"), site: read("site") };
+    const invalidField = !draft.firstName || !draft.lastName || !draft.email || !draft.phone || !draft.sex || !draft.originGroup || !draft.countryOfOrigin || !draft.program || !draft.level || !draft.site || password.length < 8 || !["francophone", "anglophone"].includes(draft.originGroup) || !D.programs.some(item => item.code === draft.program) || !D.levels.includes(draft.level) || !D.sites.some(item => item.id === draft.site);
+    if (invalidField) { byId("signup-message").textContent = "Complétez tous les champs obligatoires et vérifiez le mot de passe (8 caractères minimum)."; event.currentTarget.querySelector(":invalid")?.focus(); return; }
     if (!(await window.IRGIBDialog.confirm({ title: "Créer le compte étudiant", message: `Confirmer la création du compte pour ${draft.firstName} ${draft.lastName} (${draft.email}) ?`, confirmText: "Créer le compte" }))) return;
     const button = event.currentTarget.querySelector('[type="submit"]');
     const buttonLabel = button.textContent;
@@ -1148,10 +1161,23 @@
         savePendingSignupEmail(draft.email, existingAccountResponse ? 0 : 60);
         byId("verify-code").value = "";
         byId("verify-message").textContent = "";
-        byId("demo-code-note").textContent = existingAccountResponse
-          ? "Si cette adresse peut poursuivre l’inscription, un code de confirmation vient d’être demandé. Consultez votre boîte de réception et vos courriers indésirables, puis utilisez le code le plus récent."
-          : "Votre compte est déjà enregistré. L’administration de votre site le voit maintenant dans Comptes étudiants, avant même l’arrivée du code. Consultez votre boîte de réception et vos courriers indésirables, puis saisissez ici le dernier code reçu.";
         setScreen("verify-screen");
+        if (existingAccountResponse) {
+          byId("demo-code-note").textContent = "Cette adresse correspond peut-être à une inscription déjà commencée. Un nouveau code est demandé; si votre compte est déjà actif, retournez à la connexion.";
+          byId("verify-message").textContent = "Demande de renvoi du code en cours…";
+          try {
+            const { error: resendError } = await db.auth.resend({ type: "signup", email: draft.email });
+            if (resendError) throw resendError;
+            setOtpResendCooldown(60);
+            byId("verify-message").textContent = "Si l’inscription n’est pas encore confirmée, le code le plus récent vient d’être envoyé. Vérifiez aussi vos courriers indésirables.";
+          } catch (resendError) {
+            const limited = resendError?.status === 429 || resendError?.code === "over_email_send_rate_limit" || /rate limit|too many requests|email rate limit/i.test(String(resendError?.message || ""));
+            if (limited) setOtpResendCooldown(60);
+            byId("verify-message").textContent = friendlyError(resendError, limited ? "L’envoi est temporairement limité. Attendez une minute avant de renvoyer le code." : "Le code n’a pas pu être renvoyé. Vérifiez la connexion et réessayez.");
+          }
+        } else {
+          byId("demo-code-note").textContent = "Votre inscription est enregistrée. Consultez votre boîte de réception et vos courriers indésirables, puis saisissez le code reçu.";
+        }
       }
     } catch (error) {
       const errorMessage = String(error?.message || "");
@@ -1171,7 +1197,7 @@
         setScreen("verify-screen");
       } else byId("signup-message").textContent = error?.name === "AbortError" || error?.name === "TimeoutError"
         ? "Le serveur met trop de temps à répondre. Vérifiez votre connexion, puis réessayez. Si le code arrive entre-temps, utilisez le code le plus récent."
-        : friendlyError(error, "La création du compte a échoué. Vérifiez les informations puis réessayez.");
+        : signupErrorMessage(error);
     }
     finally { button.disabled = false; button.removeAttribute("aria-busy"); button.textContent = buttonLabel; }
   });
