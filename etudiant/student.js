@@ -1415,6 +1415,7 @@
     byId("request-message").textContent = "Confirmez l’envoi pour transmettre la demande à l’administration.";
     let photoPath = "";
     let requestSaved = false;
+    let requestStage = "confirmation";
     try {
       if (!(await window.IRGIBDialog.confirm({ title: "Envoyer la demande de badge", message: `Confirmer l’envoi de votre demande de badge pour ${firstName} ${lastName} ? Vérifiez les informations et la photo avant de continuer.`, confirmText: "Envoyer la demande" }))) {
         byId("request-message").textContent = "Envoi annulé.";
@@ -1422,17 +1423,20 @@
       }
       button.textContent = "Envoi de la demande…";
       byId("request-message").textContent = "Enregistrement de vos informations et de la photo en cours…";
+      requestStage = "mise à jour du profil";
       const details = { first_name: firstName, last_name: lastName, phone: String(values.get("phone")).trim(), sex: String(values.get("sex")), origin_group: String(values.get("originGroup")), country_of_origin: String(values.get("countryOfOrigin")).trim(), program: String(values.get("program")), level: String(values.get("level")), site: String(values.get("site")), birth_date: String(values.get("birthDate")) };
       if (!details.country_of_origin || !["francophone", "anglophone"].includes(details.origin_group)) throw new Error("Renseignez votre pays et votre origine francophone ou anglophone.");
       const { data: updatedProfile, error: profileError } = await db.rpc("student_update_profile", { p_first_name: details.first_name, p_last_name: details.last_name, p_phone: details.phone, p_sex: details.sex, p_program: details.program, p_level: details.level, p_site: details.site, p_birth_date: details.birth_date, p_origin_group: details.origin_group, p_country_of_origin: details.country_of_origin });
       if (profileError) throw profileError;
       profile = fromProfileRow(Array.isArray(updatedProfile) ? updatedProfile[0] : updatedProfile);
       if (!selectedPhotoBlob) throw new Error("La photo n’a pas pu être préparée. Choisissez une autre image.");
+      requestStage = "envoi de la photo";
       const photoMime = selectedPhotoBlob.type || "image/jpeg";
       const photoExtension = photoMime === "image/png" ? "png" : photoMime === "image/webp" ? "webp" : "jpg";
       photoPath = `${currentUser.id}/${crypto.randomUUID()}.${photoExtension}`;
       const { error: uploadError } = await db.storage.from("student-photos").upload(photoPath, selectedPhotoBlob, { contentType: photoMime, upsert: false });
       if (uploadError) throw uploadError;
+      requestStage = "enregistrement de la demande";
       const payload = { student_id: currentUser.id, ...details, email: profile.email, photo_path: photoPath };
       const { data: inserted, error: insertError } = await db.from("badge_applications").insert(payload).select("*").single();
       if (insertError) throw insertError;
@@ -1447,9 +1451,18 @@
       try { window.IRGIBDialog.notify("Votre demande de badge a été transmise à l’administration."); } catch {}
     } catch (error) {
       if (photoPath && !requestSaved) { try { await db.storage.from("student-photos").remove([photoPath]); } catch {} }
+      console.error("[IRGIB] Échec de la demande de badge", { stage: requestStage, code: error?.code, status: error?.status, message: error?.message, details: error?.details, hint: error?.hint });
+      const failureCode = String(error?.code || error?.statusCode || error?.status || "");
+      const failureText = String(error?.message || "").toLowerCase();
+      let failureMessage = friendlyError(error, `L’étape « ${requestStage} » a échoué${failureCode ? ` (réf. ${failureCode})` : ""}. Réessayez; si le problème persiste, transmettez cette référence à l’administration.`);
+      if (/pgrst202|could not find the function|schema cache/.test(failureText) || failureCode === "PGRST202") failureMessage = "Le service de demande de badge doit être mis à jour sur Supabase. Contactez l’administration.";
+      else if (failureCode === "42703" || /column .* does not exist/.test(failureText)) failureMessage = "La base de données doit être mise à jour pour recevoir cette demande. Contactez l’administration.";
+      else if (failureCode === "23505" || /duplicate key|already exists/.test(failureText)) failureMessage = "Une demande de badge existe déjà pour ce compte. Actualisez la page pour voir son statut.";
+      else if (failureCode === "42501" || /row-level security|permission denied|not authorized/.test(failureText)) failureMessage = "Votre compte n’est pas autorisé à envoyer cette demande. Vérifiez que l’administration a confirmé votre compte et que votre carte est active.";
+      else if (requestStage === "envoi de la photo" && /413|too large|payload too large|size limit/.test(`${failureCode} ${failureText}`)) failureMessage = "La photo dépasse la taille autorisée. Choisissez une image plus légère puis réessayez.";
       byId("request-message").textContent = requestSaved
         ? "Votre demande est enregistrée. Rechargez la page pour afficher son statut."
-        : friendlyError(error, "La demande n’a pas pu être enregistrée. Vérifiez votre connexion puis réessayez.");
+        : failureMessage;
     } finally { button.disabled = false; button.removeAttribute("aria-busy"); button.textContent = buttonLabel; }
   });
 
