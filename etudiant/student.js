@@ -23,7 +23,16 @@
       }
     }
   } catch { /* Session persistence is handled by Supabase when browser storage is available. */ }
-  const db = window.supabase.createClient(cfg.url, cfg.anonKey, { auth: { storageKey: authStorageKey, persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+  const db = window.supabase.createClient(cfg.url, cfg.anonKey, {
+    auth: { storageKey: authStorageKey, persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+    global: { fetch: (input, init = {}) => {
+      const url = typeof input === "string" ? input : input?.url || "";
+      if (!/\/auth\/v1\/(signup|resend)(\?|$)/.test(url)) return fetch(input, init);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(new DOMException("Délai dépassé", "TimeoutError")), 30000);
+      return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+    } }
+  });
   const PENDING_SIGNUP_KEY = "irgib-pending-signup-v1";
   const SESSION_PENDING_SIGNUP_KEY = "irgib-pending-signup-session-v1";
   try {
@@ -1129,7 +1138,7 @@
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
     button.textContent = "Création du compte…";
-    byId("signup-message").textContent = "Création du compte en cours. Patientez pendant l’enregistrement et l’envoi du code.";
+    byId("signup-message").textContent = "Création du compte et envoi du code en cours. Cette étape peut prendre quelques secondes.";
     try {
       const { data, error } = await db.auth.signUp({ email: draft.email, password, options: { data: { account_type: "student", first_name: draft.firstName, last_name: draft.lastName, phone: draft.phone, sex: draft.sex, origin_group: draft.originGroup, country_of_origin: draft.countryOfOrigin, program: draft.program, level: draft.level, site: draft.site } } });
       if (error) throw error;
@@ -1160,7 +1169,9 @@
         byId("demo-code-note").textContent = "Si cette adresse peut poursuivre l’inscription, un code de confirmation vient d’être demandé. Consultez votre boîte de réception et vos courriers indésirables, puis utilisez le code le plus récent.";
         byId("verify-message").textContent = "Vérifiez votre boîte de réception ou connectez-vous si votre compte est déjà actif.";
         setScreen("verify-screen");
-      } else byId("signup-message").textContent = friendlyError(error, "La création du compte a échoué. Vérifiez les informations puis réessayez.");
+      } else byId("signup-message").textContent = error?.name === "AbortError" || error?.name === "TimeoutError"
+        ? "Le serveur met trop de temps à répondre. Vérifiez votre connexion, puis réessayez. Si le code arrive entre-temps, utilisez le code le plus récent."
+        : friendlyError(error, "La création du compte a échoué. Vérifiez les informations puis réessayez.");
     }
     finally { button.disabled = false; button.removeAttribute("aria-busy"); button.textContent = buttonLabel; }
   });
