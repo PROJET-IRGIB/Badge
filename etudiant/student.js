@@ -1407,10 +1407,21 @@
     const lastName = String(values.get("lastName")).trim();
     const safeName = /^[\p{L}\p{M} .’'-]+$/u;
     if (!safeName.test(firstName) || !safeName.test(lastName)) { byId("request-message").textContent = "Vérifiez le nom et le prénom : lettres, espaces, apostrophe ou trait d’union uniquement."; return; }
-    if (!(await window.IRGIBDialog.confirm({ title: "Envoyer la demande de badge", message: `Confirmer l’envoi de votre demande de badge pour ${firstName} ${lastName} ? Vérifiez les informations et la photo avant de continuer.`, confirmText: "Envoyer la demande" }))) return;
-    const button = event.currentTarget.querySelector('[type="submit"]'); button.disabled = true;
+    const button = event.currentTarget.querySelector('[type="submit"]');
+    const buttonLabel = button.textContent;
+    button.disabled = true;
+    button.setAttribute("aria-busy", "true");
+    button.textContent = "Préparation de la demande…";
+    byId("request-message").textContent = "Confirmez l’envoi pour transmettre la demande à l’administration.";
     let photoPath = "";
+    let requestSaved = false;
     try {
+      if (!(await window.IRGIBDialog.confirm({ title: "Envoyer la demande de badge", message: `Confirmer l’envoi de votre demande de badge pour ${firstName} ${lastName} ? Vérifiez les informations et la photo avant de continuer.`, confirmText: "Envoyer la demande" }))) {
+        byId("request-message").textContent = "Envoi annulé.";
+        return;
+      }
+      button.textContent = "Envoi de la demande…";
+      byId("request-message").textContent = "Enregistrement de vos informations et de la photo en cours…";
       const details = { first_name: firstName, last_name: lastName, phone: String(values.get("phone")).trim(), sex: String(values.get("sex")), origin_group: String(values.get("originGroup")), country_of_origin: String(values.get("countryOfOrigin")).trim(), program: String(values.get("program")), level: String(values.get("level")), site: String(values.get("site")), birth_date: String(values.get("birthDate")) };
       if (!details.country_of_origin || !["francophone", "anglophone"].includes(details.origin_group)) throw new Error("Renseignez votre pays et votre origine francophone ou anglophone.");
       const { data: updatedProfile, error: profileError } = await db.rpc("student_update_profile", { p_first_name: details.first_name, p_last_name: details.last_name, p_phone: details.phone, p_sex: details.sex, p_program: details.program, p_level: details.level, p_site: details.site, p_birth_date: details.birth_date, p_origin_group: details.origin_group, p_country_of_origin: details.country_of_origin });
@@ -1425,6 +1436,7 @@
       const payload = { student_id: currentUser.id, ...details, email: profile.email, photo_path: photoPath };
       const { data: inserted, error: insertError } = await db.from("badge_applications").insert(payload).select("*").single();
       if (insertError) throw insertError;
+      requestSaved = true;
       application = fromApplicationRow(inserted);
       const { data: signed } = await db.storage.from("student-photos").createSignedUrl(photoPath, 600);
       application.photo = signed?.signedUrl || "";
@@ -1432,11 +1444,13 @@
       selectedPhotoPreviewUrl = ""; selectedPhotoBlob = null;
       applicationSummary(application); renderNotification(application); renderProfile(); renderMyCard(); renderAttendance();
       byId("request-status-box").innerHTML = `<span>Statut</span><strong>En attente · ${esc(application.temporaryMatricule)}</strong>`;
-      window.IRGIBDialog.notify("Votre demande de badge a été transmise à l’administration.");
+      try { window.IRGIBDialog.notify("Votre demande de badge a été transmise à l’administration."); } catch {}
     } catch (error) {
-      if (photoPath) await db.storage.from("student-photos").remove([photoPath]);
-      byId("request-message").textContent = friendlyError(error, "La demande n’a pas pu être enregistrée. Vérifiez votre connexion puis réessayez.");
-    } finally { button.disabled = false; }
+      if (photoPath && !requestSaved) { try { await db.storage.from("student-photos").remove([photoPath]); } catch {} }
+      byId("request-message").textContent = requestSaved
+        ? "Votre demande est enregistrée. Rechargez la page pour afficher son statut."
+        : friendlyError(error, "La demande n’a pas pu être enregistrée. Vérifiez votre connexion puis réessayez.");
+    } finally { button.disabled = false; button.removeAttribute("aria-busy"); button.textContent = buttonLabel; }
   });
 
   document.querySelectorAll(".student-tabs [data-student-view]").forEach(button => button.addEventListener("click", () => selectStudentView(button.dataset.studentView)));
