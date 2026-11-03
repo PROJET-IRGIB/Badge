@@ -24,14 +24,7 @@
     }
   } catch { /* Session persistence is handled by Supabase when browser storage is available. */ }
   const db = window.supabase.createClient(cfg.url, cfg.anonKey, {
-    auth: { storageKey: authStorageKey, persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
-    global: { fetch: (input, init = {}) => {
-      const url = typeof input === "string" ? input : input?.url || "";
-      if (!/\/auth\/v1\/(signup|resend)(\?|$)/.test(url)) return fetch(input, init);
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(new DOMException("Délai dépassé", "TimeoutError")), 30000);
-      return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
-    } }
+    auth: { storageKey: authStorageKey, persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
   });
   const PENDING_SIGNUP_KEY = "irgib-pending-signup-v1";
   const SESSION_PENDING_SIGNUP_KEY = "irgib-pending-signup-session-v1";
@@ -1146,18 +1139,14 @@
     const draft = { firstName: read("firstName"), lastName: read("lastName"), email: read("email").toLowerCase(), phone: read("phone"), sex: read("sex"), originGroup: read("originGroup"), countryOfOrigin: read("countryOfOrigin"), program: read("program"), level: read("level"), site: read("site") };
     const invalidField = !draft.firstName || !draft.lastName || !draft.email || !draft.phone || !draft.sex || !draft.originGroup || !draft.countryOfOrigin || !draft.program || !draft.level || !draft.site || password.length < 8 || !["francophone", "anglophone"].includes(draft.originGroup) || !D.programs.some(item => item.code === draft.program) || !D.levels.includes(draft.level) || !D.sites.some(item => item.id === draft.site);
     if (invalidField) { byId("signup-message").textContent = "Complétez tous les champs obligatoires et vérifiez le mot de passe (8 caractères minimum)."; event.currentTarget.querySelector(":invalid")?.focus(); return; }
+    if (!window.confirm(`Confirmer la création du compte étudiant pour ${draft.firstName} ${draft.lastName} (${draft.email}) ?`)) return;
     const button = event.currentTarget.querySelector('[type="submit"]');
     const buttonLabel = button.textContent;
     button.disabled = true;
     button.setAttribute("aria-busy", "true");
-    button.textContent = "Confirmation…";
-    byId("signup-message").textContent = "Confirmez la création du compte pour continuer.";
+    button.textContent = "Création du compte…";
+    byId("signup-message").textContent = "Création du compte et envoi du code en cours. Patientez quelques instants.";
     try {
-      if (!window.IRGIBDialog?.confirm) throw Object.assign(new Error("Confirmation indisponible"), { code: "confirmation_ui_unavailable" });
-      const confirmed = await window.IRGIBDialog.confirm({ title: "Créer le compte étudiant", message: `Confirmer la création du compte pour ${draft.firstName} ${draft.lastName} (${draft.email}) ?`, confirmText: "Créer le compte" });
-      if (!confirmed) { byId("signup-message").textContent = "Création annulée."; return; }
-      button.textContent = "Création du compte…";
-      byId("signup-message").textContent = "Création du compte et envoi du code en cours. Cette étape peut prendre quelques secondes.";
       const { data, error } = await db.auth.signUp({ email: draft.email, password, options: { data: { account_type: "student", first_name: draft.firstName, last_name: draft.lastName, phone: draft.phone, sex: draft.sex, origin_group: draft.originGroup, country_of_origin: draft.countryOfOrigin, program: draft.program, level: draft.level, site: draft.site } } });
       if (error) throw error;
       if (data.session) { clearPendingSignupEmail(); currentUser = data.user; byId("signup-form").reset(); await activatePortal(); }
