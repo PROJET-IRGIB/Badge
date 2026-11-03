@@ -1423,6 +1423,11 @@
       }
       button.textContent = "Envoi de la demande…";
       byId("request-message").textContent = "Enregistrement de vos informations et de la photo en cours…";
+      requestStage = "vérification de la session";
+      const { data: authData, error: authError } = await db.auth.getUser();
+      if (authError) throw authError;
+      const studentId = authData?.user?.id;
+      if (!studentId || studentId !== currentUser?.id) throw new Error("La session a changé. Rechargez la page, reconnectez-vous puis recommencez la demande.");
       requestStage = "mise à jour du profil";
       const details = { first_name: firstName, last_name: lastName, phone: String(values.get("phone")).trim(), sex: String(values.get("sex")), origin_group: String(values.get("originGroup")), country_of_origin: String(values.get("countryOfOrigin")).trim(), program: String(values.get("program")), level: String(values.get("level")), site: String(values.get("site")), birth_date: String(values.get("birthDate")) };
       if (!details.country_of_origin || !["francophone", "anglophone"].includes(details.origin_group)) throw new Error("Renseignez votre pays et votre origine francophone ou anglophone.");
@@ -1433,11 +1438,11 @@
       requestStage = "envoi de la photo";
       const photoMime = selectedPhotoBlob.type || "image/jpeg";
       const photoExtension = photoMime === "image/png" ? "png" : photoMime === "image/webp" ? "webp" : "jpg";
-      photoPath = `${currentUser.id}/${crypto.randomUUID()}.${photoExtension}`;
+      photoPath = `${studentId}/${crypto.randomUUID()}.${photoExtension}`;
       const { error: uploadError } = await db.storage.from("student-photos").upload(photoPath, selectedPhotoBlob, { contentType: photoMime, upsert: false });
       if (uploadError) throw uploadError;
       requestStage = "enregistrement de la demande";
-      const payload = { student_id: currentUser.id, ...details, email: profile.email, photo_path: photoPath };
+      const payload = { student_id: studentId, ...details, email: profile.email, photo_path: photoPath };
       const { data: inserted, error: insertError } = await db.from("badge_applications").insert(payload).select("*").single();
       if (insertError) throw insertError;
       requestSaved = true;
