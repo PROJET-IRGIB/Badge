@@ -1134,7 +1134,9 @@
         savePendingSignupEmail(draft.email, existingAccountResponse ? 0 : 60);
         byId("verify-code").value = "";
         byId("verify-message").textContent = "";
-        byId("demo-code-note").textContent = "Si cette adresse peut poursuivre l’inscription, un code de confirmation vient d’être demandé. Consultez votre boîte de réception et vos courriers indésirables, puis utilisez le code le plus récent.";
+        byId("demo-code-note").textContent = existingAccountResponse
+          ? "Si cette adresse peut poursuivre l’inscription, un code de confirmation vient d’être demandé. Consultez votre boîte de réception et vos courriers indésirables, puis utilisez le code le plus récent."
+          : "Votre compte est déjà enregistré. L’administration de votre site le voit maintenant dans Comptes étudiants, avant même l’arrivée du code. Consultez votre boîte de réception et vos courriers indésirables, puis saisissez ici le dernier code reçu.";
         setScreen("verify-screen");
       }
     } catch (error) {
@@ -1162,7 +1164,7 @@
     const token = byId("verify-code").value.replace(/\s/g, "");
     if (!pendingSignupEmail) { byId("verify-message").textContent = "Recommencez l’inscription pour demander un nouveau code."; return; }
     if (!/^\d{6,8}$/.test(token)) { byId("verify-message").textContent = "Saisissez le code numérique reçu par e-mail."; return; }
-    if (!(await window.IRGIBDialog.confirm({ title: "Transmettre le compte", message: "Confirmer ce code et transmettre votre compte à l’administration de votre site pour validation ?", confirmText: "Confirmer le code" }))) return;
+    if (!(await window.IRGIBDialog.confirm({ title: "Confirmer le code", message: "Votre compte est déjà visible par l’administration de votre site. Confirmez ce code pour terminer la vérification de votre adresse e-mail.", confirmText: "Confirmer le code" }))) return;
     const button = event.currentTarget.querySelector('[type="submit"]'); button.disabled = true;
     byId("verify-message").textContent = "Vérification du code…";
     try {

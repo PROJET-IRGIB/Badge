@@ -63,7 +63,7 @@
       profiles.push(...(data || []));
       if (!data || data.length < 500) break;
     }
-    studentProfilesCache = profiles.filter(row => row.email_verified_at && (!adminSite || row.site === adminSite)).map(row => ({ studentId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, originGroup: row.origin_group || "", countryOfOrigin: row.country_of_origin || "", program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, accountStatus: row.account_status || "pending", accountRejectionReason: row.account_rejection_reason || "", emailVerifiedAt: row.email_verified_at, accountReviewedAt: row.account_reviewed_at || null, bannedAt: row.banned_at || null, cardSuspendedAt: row.card_suspended_at || null }));
+    studentProfilesCache = profiles.filter(row => !adminSite || row.site === adminSite).map(row => ({ studentId: row.user_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, originGroup: row.origin_group || "", countryOfOrigin: row.country_of_origin || "", program: row.program, level: row.level, site: row.site, birthDate: row.birth_date, accountStatus: row.account_status || "pending", accountRejectionReason: row.account_rejection_reason || "", emailVerifiedAt: row.email_verified_at, accountReviewedAt: row.account_reviewed_at || null, createdAt: row.created_at || "", bannedAt: row.banned_at || null, cardSuspendedAt: row.card_suspended_at || null }));
     const countryByStudent = new Map(studentProfilesCache.map(person => [person.studentId, person.countryOfOrigin]));
     applicationsCache = applicationsCache.map(item => ({ ...item, countryOfOrigin: countryByStudent.get(item.studentId) || "" }));
     const records = [];
@@ -122,16 +122,19 @@
     const query = (byId("account-search").value || "").trim().toLowerCase();
     const status = byId("account-filter").value;
     const list = studentProfilesCache.filter(person => (status === "all"
-      || (status === "banned" ? Boolean(person.bannedAt) : status === "approved" ? person.accountStatus === "approved" && !person.bannedAt : person.accountStatus === status))
+      || (status === "email" ? person.accountStatus === "pending" && !person.emailVerifiedAt : status === "ready" ? person.accountStatus === "pending" && Boolean(person.emailVerifiedAt) : status === "banned" ? Boolean(person.bannedAt) : status === "approved" ? person.accountStatus === "approved" && !person.bannedAt : status === "pending" ? person.accountStatus === "pending" : person.accountStatus === status))
       && [fullName(person), person.email, programName(person.program), person.level, siteName(person.site), person.originGroup, person.countryOfOrigin].join(" ").toLowerCase().includes(query))
-      .sort((a, b) => (b.accountReviewedAt || "").localeCompare(a.accountReviewedAt || "") || fullName(a).localeCompare(fullName(b), "fr"));
+      .sort((a, b) => Number(b.accountStatus === "pending") - Number(a.accountStatus === "pending") || (b.createdAt || "").localeCompare(a.createdAt || "") || fullName(a).localeCompare(fullName(b), "fr"));
     byId("account-count").textContent = `${list.length} compte${list.length === 1 ? "" : "s"}`;
     byId("account-rows").innerHTML = list.map(person => {
-      const label = person.bannedAt ? "Banni" : person.accountStatus === "approved" ? "Confirmé" : person.accountStatus === "rejected" ? "Refusé" : "À confirmer";
+      const waitingEmail = person.accountStatus === "pending" && !person.emailVerifiedAt;
+      const label = person.bannedAt ? "Banni" : person.accountStatus === "approved" ? "Confirmé" : person.accountStatus === "rejected" ? "Refusé" : waitingEmail ? "E-mail en attente" : "À confirmer";
       const tone = person.bannedAt || person.accountStatus === "rejected" ? "rejected" : person.accountStatus === "approved" ? "active" : "pending";
       const reviewAction = person.accountStatus === "approved"
         ? `<span class="small muted">${person.bannedAt ? "Accès suspendu" : "Accès autorisé"}</span>`
-        : person.accountStatus === "pending"
+        : waitingEmail
+          ? `<span class="small muted">Visible dès l’inscription. La confirmation s’ouvre quand l’étudiant saisit le code reçu par e-mail.</span>`
+          : person.accountStatus === "pending"
           ? `<button class="btn sm" type="button" data-account-approve="${esc(person.studentId)}">Confirmer le compte</button><button class="btn danger sm" type="button" data-account-reject="${esc(person.studentId)}">Refuser</button>`
           : `<button class="btn sm" type="button" data-account-approve="${esc(person.studentId)}">Réexaminer</button>`;
       const accountActions = person.accountStatus === "approved"
@@ -170,11 +173,14 @@
     const list = applications();
     const pending = list.filter(item => item.status === "pending");
     const active = list.filter(item => item.status === "approved");
-    const rejected = list.filter(item => item.status === "rejected");
     const today = attendanceCache.filter(item => item.day === D.todayKey() && item.present);
-    byId("dashboard-stats").innerHTML = [["Demandes en attente", pending.length, "À vérifier par l’administration"], ["Cartes approuvées", active.length, "Matricules définitifs attribués"], ["Demandes rejetées", rejected.length, "Décisions enregistrées"], ["Présences aujourd’hui", today.length, D.todayKey()]].map(([label, value, note]) => `<article class="stat-card"><div class="stat-top"><span>${label}</span></div><div class="stat-value">${value}</div><div class="stat-note">${note}</div></article>`).join("");
+    const newAccounts = studentProfilesCache.filter(person => person.accountStatus === "pending" && !person.bannedAt).sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+    const awaitingEmail = newAccounts.filter(person => !person.emailVerifiedAt).length;
+    byId("dashboard-stats").innerHTML = [["Comptes à confirmer", newAccounts.length, awaitingEmail ? `${awaitingEmail} déjà inscrit${awaitingEmail === 1 ? "" : "s"}, code e-mail en attente` : "Visibles dès l’inscription"], ["Demandes en attente", pending.length, "Badges à vérifier"], ["Cartes approuvées", active.length, "Matricules définitifs attribués"], ["Présences aujourd’hui", today.length, D.todayKey()]].map(([label, value, note]) => `<article class="stat-card"><div class="stat-top"><span>${label}</span></div><div class="stat-value">${value}</div><div class="stat-note">${note}</div></article>`).join("");
     byId("today-attendance-summary").innerHTML = `<div class="attendance-count-big">${today.length}</div><p class="muted small">présence${today.length === 1 ? "" : "s"} validée${today.length === 1 ? "" : "s"} aujourd’hui</p>`;
-    byId("pending-summary").innerHTML = pending.slice(0, 3).map(item => `<button class="quick-item" data-review="${esc(item.id)}" style="width:100%;text-align:left;background:#fff"><span class="q-icon">${photoCell(item)}</span><span><strong>${esc(fullName(item))}</strong><span>${esc(item.temporaryMatricule)} · ${esc(siteName(item.site))}</span></span></button>`).join("") || `<div class="muted small">Aucune demande en attente.</div>`;
+    const accountItems = newAccounts.slice(0, 5).map(person => `<button class="quick-item" data-go="accounts" type="button" style="width:100%;text-align:left;background:#fff"><span class="q-icon">${esc(`${person.firstName?.[0] || ""}${person.lastName?.[0] || ""}`.toUpperCase() || "C")}</span><span><strong>${esc(fullName(person))}</strong><span>${person.emailVerifiedAt ? "Code confirmé · à valider" : "Inscrit · code e-mail en attente"} · ${esc(siteName(person.site))}</span></span></button>`).join("");
+    const badgeItems = pending.slice(0, 3).map(item => `<button class="quick-item" data-review="${esc(item.id)}" type="button" style="width:100%;text-align:left;background:#fff"><span class="q-icon">${photoCell(item)}</span><span><strong>${esc(fullName(item))}</strong><span>Demande de badge · ${esc(item.temporaryMatricule)} · ${esc(siteName(item.site))}</span></span></button>`).join("");
+    byId("pending-summary").innerHTML = `${accountItems}${badgeItems}` || `<div class="muted small">Aucun nouveau compte ni demande en attente.</div>`;
     byId("recent-rows").innerHTML = requestTableRows(list.slice(0, 5), true);
   }
   function renderRequests() {
@@ -804,7 +810,10 @@
     const studentHeading = document.querySelector("#view-students .table-tools h3");
     if (studentHeading) studentHeading.textContent = "Étudiants inscrits";
     document.querySelectorAll(".side-nav [data-view]").forEach(button => button.addEventListener("click", () => setView(button.dataset.view)));
-    document.querySelectorAll("[data-go]").forEach(button => button.addEventListener("click", () => setView(button.dataset.go)));
+    document.addEventListener("click", event => {
+      const go = event.target.closest("[data-go]");
+      if (go) setView(go.dataset.go);
+    });
     document.querySelectorAll("[data-close-review]").forEach(button => button.addEventListener("click", closeReview));
     byId("review-modal").addEventListener("click", event => { if (event.target === byId("review-modal")) closeReview(); });
     byId("request-search").addEventListener("input", renderRequests);
