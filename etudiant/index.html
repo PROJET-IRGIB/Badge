@@ -22,6 +22,7 @@
 
     <section id="auth-screen" class="panel auth-panel" style="display:none">
       <div class="eyebrow">Portail étudiant</div><h1 id="auth-title">Connexion</h1><p id="auth-intro" class="subhead">Connectez-vous avec l’adresse e-mail et le mot de passe utilisés lors de votre inscription.</p>
+      <p id="auth-service-message" class="form-message" role="alert" aria-live="assertive" hidden></p>
       <nav class="auth-switch" aria-label="Connexion ou inscription"><button id="show-login" class="active" type="button">Connexion</button><button id="show-signup" type="button">Inscription</button></nav>
       <section id="login-panel" class="auth-page">
         <form id="login-form"><div class="form-grid auth-single-column">
@@ -117,6 +118,6 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" integrity="sha384-b5Ya4Bq3qCyz39m2ISh+4DxjAIljdeFwK/BsXLuj9gugaNwAcj/ia15fxNZL9Nlx" crossorigin="anonymous"></script>
   <script src="/assets/pwa-install.js?v=20261024b" defer></script>
-  <script src="/assets/bootstrap.js?v=backend3" data-entry="/etudiant/student.js?v=backend38" data-error-target="login-message"></script>
+  <script src="/assets/bootstrap.js?v=backend4" data-entry="/etudiant/student.js?v=backend39" data-error-target="auth-service-message"></script>
 </body>
 </html>

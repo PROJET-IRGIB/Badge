@@ -4,7 +4,16 @@
   const target = loader?.dataset.errorTarget;
   const showError = message => {
     const node = target && document.getElementById(target);
-    if (node) node.textContent = message;
+    if (node) {
+      node.textContent = message;
+      node.hidden = false;
+      const authScreen = node.closest("#auth-screen");
+      if (authScreen) {
+        authScreen.style.display = "block";
+        const loading = document.getElementById("loading-screen");
+        if (loading) loading.style.display = "none";
+      }
+    }
   };
   fetch("/api/config", { headers: { Accept: "application/json" }, cache: "no-store" })
     .then(response => {
