@@ -86,6 +86,8 @@
     if (/already registered|user already exists/.test(message)) return "Un compte utilise déjà cette adresse e-mail. Essayez de vous connecter.";
     if (/permission denied|row-level security|not authorized|unauthorized/.test(message)) return "Cette action n’est pas autorisée pour votre compte.";
     if (/network|failed to fetch|fetcherror|timeout/.test(message)) return "Connexion interrompue. Vérifiez votre connexion puis réessayez.";
+    if (error?.code === "PGRST202" || /could not find the function|schema cache|function .* does not exist/.test(message)) return "Cette fonctionnalité n’est pas encore disponible. Réessayez plus tard ou contactez l’administration.";
+    if (/accessdenied|bucket|object not found|signed url/.test(message)) return "Le fichier n’est pas accessible pour le moment. Rechargez la page puis réessayez.";
     return fallback;
   };
   const signupErrorMessage = error => {
@@ -1473,8 +1475,8 @@
 
   document.querySelectorAll(".student-tabs [data-student-view]").forEach(button => button.addEventListener("click", () => selectStudentView(button.dataset.studentView)));
   window.addEventListener("hashchange", () => {
-    const view = location.hash === "#news" ? "news" : location.hash === "#card" ? "card" : "";
-    if (view && currentUser) selectStudentView(view);
+    const view = location.hash.replace(/^#/, "");
+    if (["news", "card", "attendance", "request", "profile"].includes(view) && currentUser) selectStudentView(view);
   });
   byId("start-scan").addEventListener("click", startCamera);
   byId("stop-scan").addEventListener("click", stopCamera);
@@ -1512,12 +1514,13 @@
   });
   byId("print-my-card").addEventListener("click", () => {
     if (profile?.cardSuspendedAt) { byId("my-card-status").insertAdjacentHTML("beforeend", '<p class="form-message" role="status">Cette carte est temporairement désactivée. Le PDF ne peut pas être téléchargé.</p>'); return; }
+    if (!authorityMarkUrl) { byId("my-card-status").insertAdjacentHTML("beforeend", '<p class="form-message" role="status">Le cachet officiel n’a pas pu être chargé. Rechargez la page avant de télécharger le badge.</p>'); return; }
     const faces = [...byId("student-card-zone").querySelectorAll(".card-v2")];
     if (faces.length !== 2) { byId("my-card-status").insertAdjacentHTML("beforeend", '<p class="form-message" role="status">La carte complète n’est pas prête. Rechargez la page puis réessayez.</p>'); return; }
     const printWindow = window.open("", "irgib-card-print", "popup,width=980,height=820");
     if (!printWindow) { byId("my-card-status").insertAdjacentHTML("beforeend", '<p class="form-message" role="status">Autorisez l’ouverture de la fenêtre d’impression pour créer le PDF.</p>'); return; }
     printWindow.opener = null;
-    const stylesUrl = new URL("../assets/styles.css?v=20261102p", location.href).href;
+    const stylesUrl = new URL("../assets/styles.css?v=20261104a", location.href).href;
     const sheets = faces.map(face => {
       const clone = face.cloneNode(true);
       clone.querySelectorAll(".card-v2-qr").forEach(qrHost => {

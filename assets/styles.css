@@ -614,5 +614,5 @@ body:has(#portal-screen[style*="display: block"])>.footer{position:relative;z-in
 .btn.student-edit-action{background:#176b4d;border-color:#176b4d;color:#fff;white-space:nowrap}
 .btn.student-edit-action:hover{background:#11553d;border-color:#11553d}
 .btn.student-edit-action:focus-visible{outline:3px solid rgba(23,107,77,.28);outline-offset:2px}
-.card-v2-authority-placeholder{width:23cqw;height:14cqw;align-self:center}
+.card-v2-authority-placeholder{width:23cqw;height:14cqw;align-self:center;display:grid;place-items:center;padding:1cqw;border:1px dashed rgba(255,255,255,.55);border-radius:1cqw;color:rgba(255,255,255,.82);font-size:1.5cqw;line-height:1.2;text-align:center;background:rgba(255,255,255,.06)}
 @media(max-width:600px){.student-edit-grid{grid-template-columns:1fr}.file-picker{align-items:flex-start;flex-direction:column}}

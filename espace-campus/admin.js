@@ -7,12 +7,16 @@
     const message = String(error?.message || "").toLowerCase();
     if (/permission denied|row-level security|not authorized|unauthorized/.test(message)) return "Votre compte ne dispose pas des droits nécessaires pour cette action.";
     if (/network|failed to fetch|fetcherror|timeout/.test(message)) return "Connexion interrompue. Vérifiez votre connexion puis réessayez.";
+    if (error?.code === "PGRST202" || /could not find the function|schema cache|function .* does not exist/.test(message)) return "Cette fonction n’est pas encore disponible. Vérifiez que la migration Supabase correspondante a été appliquée.";
+    if (/accessdenied|bucket|object not found|signed url/.test(message)) return "Le fichier n’est pas accessible. Vérifiez les autorisations de stockage Supabase puis réessayez.";
     return fallback;
   };
   const safeName = /^[\p{L}\p{M} .’'-]+$/u;
   let currentView = "dashboard";
   let reviewedId = "";
   let toastTimer;
+  let toastQueue = [];
+  let toastPersistent = false;
   let applicationsCache = [];
   let studentProfilesCache = [];
   let attendanceCache = [];
@@ -32,7 +36,7 @@
   const siteName = id => D.getSite(id).city;
   const programName = code => D.getProgram(code).shortName;
   const keyFor = item => D.groupKey(item.site, item.program, item.level);
-  const mapApplication = row => ({ id: row.id, studentId: row.student_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, birthDate: row.birth_date, program: row.program, level: row.level, site: row.site, status: row.status, temporaryMatricule: row.temporary_matricule, finalMatricule: row.final_matricule, photoPath: row.photo_path, photoFileName: row.photo_path.split("/").at(-1), rejectionReason: row.rejection_reason, submittedAt: row.submitted_at, approvedAt: row.decided_at });
+  const mapApplication = row => ({ id: row.id, studentId: row.student_id, firstName: row.first_name, lastName: row.last_name, email: row.email, phone: row.phone, sex: row.sex, birthDate: row.birth_date, program: row.program, level: row.level, site: row.site, status: row.status, temporaryMatricule: row.temporary_matricule, finalMatricule: row.final_matricule, photoPath: row.photo_path || "", photoFileName: String(row.photo_path || "").split("/").at(-1) || "", rejectionReason: row.rejection_reason, submittedAt: row.submitted_at, approvedAt: row.decided_at });
   function assertAdminSession(generation) {
     if (generation !== adminAuthGeneration || !currentAdminId) throw new Error("Administration session changed.");
   }
@@ -47,8 +51,9 @@
     }
     const rows = [];
     for (let from = 0; ; from += 500) {
-      const { data, error } = await adminClient.from("badge_applications").select("*")
-        .order("submitted_at", { ascending: false }).order("id", { ascending: false }).range(from, from + 499);
+      let query = adminClient.from("badge_applications").select("*");
+      if (adminSite) query = query.eq("site", adminSite);
+      const { data, error } = await query.order("submitted_at", { ascending: false }).order("id", { ascending: false }).range(from, from + 499);
       if (error) throw error;
       assertAdminSession(generation);
       rows.push(...(data || []));
@@ -57,7 +62,9 @@
     applicationsCache = rows.map(mapApplication).filter(item => !adminSite || item.site === adminSite);
     const profiles = [];
     for (let from = 0; ; from += 500) {
-      const { data, error } = await adminClient.from("student_profiles").select("*").order("created_at", { ascending: false }).range(from, from + 499);
+      let query = adminClient.from("student_profiles").select("*");
+      if (adminSite) query = query.eq("site", adminSite);
+      const { data, error } = await query.order("created_at", { ascending: false }).range(from, from + 499);
       if (error) throw error;
       assertAdminSession(generation);
       profiles.push(...(data || []));
@@ -68,10 +75,11 @@
     applicationsCache = applicationsCache.map(item => ({ ...item, countryOfOrigin: countryByStudent.get(item.studentId) || "" }));
     const records = [];
     for (let from = 0; ; from += 500) {
-      const { data, error } = await adminClient.from("attendance_records")
+      let query = adminClient.from("attendance_records")
         .select("status,attended_at,session_id,marked_by,student_profiles!inner(user_id,first_name,last_name,email,program,level,site,banned_at,card_suspended_at),attendance_sessions!inner(site,program,level,session_day,course_title)")
-        .eq("attendance_sessions.session_day", D.todayKey())
-        .order("attended_at", { ascending: false, nullsFirst: false }).order("id", { ascending: false }).range(from, from + 499);
+        .eq("attendance_sessions.session_day", D.todayKey());
+      if (adminSite) query = query.eq("attendance_sessions.site", adminSite);
+      const { data, error } = await query.order("attended_at", { ascending: false, nullsFirst: false }).order("id", { ascending: false }).range(from, from + 499);
       if (error) throw error;
       assertAdminSession(generation);
       records.push(...(data || []));
@@ -82,7 +90,9 @@
       const person = row.student_profiles; const app = byStudent.get(person.user_id); const actor = row.marked_by ? byStudent.get(row.marked_by) : null;
       return { studentId: person.user_id, markedBy: row.marked_by, markedByName: actor ? fullName(actor) : "Étudiant", createdAt: row.attended_at, day: row.attendance_sessions.session_day, sessionCode: row.session_id.slice(0, 8), courseTitle: row.attendance_sessions.course_title, present: row.status === "present", firstName: person.first_name, lastName: person.last_name, email: person.email, matricule: app?.finalMatricule || app?.temporaryMatricule || "", program: person.program, level: person.level, site: person.site };
     });
-    const { data: contacts, error: contactsError } = await adminClient.from("campus_site_contacts").select("site,contact_name,address,phone,updated_at");
+    let contactsQuery = adminClient.from("campus_site_contacts").select("site,contact_name,address,phone,updated_at");
+    if (adminSite) contactsQuery = contactsQuery.eq("site", adminSite);
+    const { data: contacts, error: contactsError } = await contactsQuery;
     assertAdminSession(generation);
     siteContactsAvailable = !contactsError;
     if (!contactsError) {
@@ -97,12 +107,20 @@
   const statusHtml = status => `<span class="status ${status === "approved" ? "active" : status === "rejected" ? "rejected" : "pending"}">${statusText(status)}</span>`;
   const photoCell = item => item.photo ? `<img class="table-photo" src="${esc(item.photo)}" alt="Photo de ${esc(fullName(item))}">` : `<span class="table-photo photo-empty">${item.photoPath ? "Photo" : "—"}</span>`;
 
-  function toast(message, options = {}) {
+  function showNextToast() {
     const element = byId("toast");
-    element.textContent = message;
+    const next = toastQueue.shift();
+    if (!next) { element.classList.remove("show"); toastPersistent = false; return; }
+    element.textContent = next.message;
     element.classList.add("show");
     clearTimeout(toastTimer);
-    if (!options.persist) toastTimer = setTimeout(() => element.classList.remove("show"), 2800);
+    toastPersistent = next.persist;
+    if (!next.persist) toastTimer = setTimeout(showNextToast, 2800);
+  }
+  function toast(message, options = {}) {
+    if (toastPersistent) { clearTimeout(toastTimer); byId("toast").classList.remove("show"); toastPersistent = false; }
+    toastQueue.push({ message, persist: Boolean(options.persist) });
+    if (!byId("toast").classList.contains("show")) showNextToast();
   }
   async function dispatchCampusPush(body) {
     try {
@@ -296,10 +314,16 @@
     const generation = adminAuthGeneration;
     const host = byId("announcement-admin-rows");
     host.innerHTML = `<div class="news-empty"><strong>Chargement…</strong></div>`;
-    const { data, error } = await adminClient.from("campus_announcements").select("id,title,body,site,published_by_site,status,published_at,expires_at,created_at,media_path,media_type").order("created_at", { ascending: false }).limit(50);
+    const data = [];
+    for (let from = 0; ; from += 500) {
+      const { data: page, error } = await adminClient.from("campus_announcements").select("id,title,body,site,published_by_site,status,published_at,expires_at,created_at,media_path,media_type").order("created_at", { ascending: false }).range(from, from + 499);
+      if (generation !== adminAuthGeneration || !currentAdminId) return;
+      if (error) { host.innerHTML = `<div class="notice">Les actualités ne sont pas disponibles pour le moment. Réessayez plus tard.</div>`; return; }
+      data.push(...(page || []));
+      if (!page || page.length < 500) break;
+    }
     if (generation !== adminAuthGeneration || !currentAdminId) return;
-    if (error) { host.innerHTML = `<div class="notice">Les actualités ne sont pas disponibles pour le moment. Réessayez plus tard.</div>`; return; }
-    announcementsCache = await signedAnnouncementRows((data || []).filter(item => !adminSite || !item.site || item.site === adminSite));
+    announcementsCache = await signedAnnouncementRows(data.filter(item => !adminSite || !item.site || item.site === adminSite));
     if (generation !== adminAuthGeneration || !currentAdminId) return;
     renderAnnouncements();
   }
@@ -350,18 +374,16 @@
     const generation = adminAuthGeneration;
     const host = byId("representative-manager");
     host.innerHTML = `<div class="news-empty"><strong>Chargement…</strong></div>`;
-    const { data, error } = await adminClient.from("class_representatives").select("site,program,level,user_id,assigned_at").order("site").order("program").order("level");
+    let query = adminClient.from("class_representatives").select("site,program,level,user_id,assigned_at");
+    if (adminSite) query = query.eq("site", adminSite);
+    const { data, error } = await query.order("site").order("program").order("level");
     if (generation !== adminAuthGeneration || !currentAdminId) return;
     if (error) { host.innerHTML = `<div class="notice">La liste des responsables n’est pas disponible pour le moment. Réessayez plus tard.</div>`; return; }
     representativesCache = (data || []).filter(item => !adminSite || item.site === adminSite);
     renderRepresentativeManager();
   }
   function renderRepresentativeManager() {
-    if (!adminSite) {
-      byId("representative-manager").innerHTML = `<div class="notice">L’affectation des responsables nécessite un compte administrateur associé à un site.</div>`;
-      return;
-    }
-    const site = adminSite;
+    const site = adminSite || byId("rep-site")?.value || D.sites[0].id;
     const program = byId("rep-program").value || D.programs[0].code;
     const level = byId("rep-level").value || D.levels[0];
     const assignments = representativesCache.filter(item => item.site === site && item.program === program && item.level === level);
@@ -374,7 +396,9 @@
       const key = `${site}|${program}|${level}|${assignment.user_id}`;
       return `<div class="representative-current"><div><small>Responsable</small><strong>${esc(current ? fullName(current) : "Compte affecté, étudiant non trouvé")}</strong><span>${esc(matricule)}</span></div><button class="btn secondary sm" type="button" data-rep-reset-pin="${esc(key)}">Réinitialiser son code QR</button><button class="btn danger sm" type="button" data-rep-remove="${esc(key)}">Retirer</button></div>`;
     }).join("");
-    byId("representative-manager").innerHTML = `<div class="representative-group-summary"><span class="news-tag">${esc(siteName(site))}</span><span class="news-tag">${esc(programName(program))}</span><span class="news-tag">${esc(level)}</span></div>${cards ? `<div class="representative-list">${cards}</div>` : `<div class="notice">Aucun responsable n’est encore désigné pour ce groupe.</div>`}<div class="representative-assign">${select}<button class="btn" type="button" data-rep-assign="${esc(`${site}|${program}|${level}`)}" ${candidates.length ? "" : "disabled"}>Ajouter un responsable</button></div>`;
+    const siteChoice = adminSite ? `<span class="news-tag">${esc(siteName(site))}</span>` : `<label class="rep-global-site">Site<select id="rep-site" aria-label="Site du groupe">${D.sites.map(item => `<option value="${esc(item.id)}"${item.id === site ? " selected" : ""}>${esc(item.city)}</option>`).join("")}</select></label>`;
+    byId("representative-manager").innerHTML = `<div class="representative-group-summary">${siteChoice}<span class="news-tag">${esc(programName(program))}</span><span class="news-tag">${esc(level)}</span></div>${cards ? `<div class="representative-list">${cards}</div>` : `<div class="notice">Aucun responsable n’est encore désigné pour ce groupe.</div>`}<div class="representative-assign">${select}<button class="btn" type="button" data-rep-assign="${esc(`${site}|${program}|${level}`)}" ${candidates.length ? "" : "disabled"}>Ajouter un responsable</button></div>`;
+    byId("rep-site")?.addEventListener("change", renderRepresentativeManager);
   }
   async function assignRepresentative(key) {
     const [site, program, level] = key.split("|");
@@ -659,6 +683,7 @@
     const requestedAdminId = currentAdminId;
     const selected = approved().filter(item => selectedCardIds.has(item.id));
     if (!selected.length) { toast("Sélectionnez au moins un badge actif."); return; }
+    if (!authorityMarkUrl) { toast("Le cachet officiel n’a pas pu être chargé. Rechargez la page avant de préparer les badges."); return; }
     if (!window.QRCode) { toast("Le générateur QR n’est pas chargé. Rechargez la page puis réessayez."); return; }
     const printWindow = window.open("", "irgib-admin-bulk-cards", "popup,width=980,height=820");
     if (!printWindow) { toast("Autorisez l’ouverture de la fenêtre d’impression pour préparer le PDF."); return; }
@@ -702,7 +727,7 @@
         staging.replaceChildren();
       }
       if (generation !== adminAuthGeneration || !currentAdminId || currentAdminId !== requestedAdminId) { printWindow.close(); return; }
-      const stylesUrl = new URL("../assets/styles.css?v=20261102p", location.href).href;
+      const stylesUrl = new URL("../assets/styles.css?v=20261104a", location.href).href;
       printWindow.document.open();
       printWindow.document.write(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Badges IRGIB AFRICA</title><link rel="stylesheet" href="${stylesUrl}"><style>@page{size:A4 portrait;margin:0}*{box-sizing:border-box}html,body{margin:0!important;padding:0!important;width:210mm!important;min-width:210mm!important;background:#fff!important}.card-print-sheet{width:210mm;height:297mm;display:grid;place-items:center;overflow:hidden;break-after:page;page-break-after:always}.card-print-sheet:last-child{break-after:auto;page-break-after:auto}.card-print-sheet .card-v2{width:85.6mm!important;height:53.98mm!important;min-width:85.6mm!important;max-width:85.6mm!important;aspect-ratio:auto!important;margin:0!important;padding:2.2mm 2.4mm!important;border-radius:2mm!important;box-shadow:none!important;overflow:hidden!important;break-inside:avoid!important;page-break-inside:avoid!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}.card-print-sheet .card-v2-front{break-after:auto!important;page-break-after:auto!important}.card-print-sheet .card-v2.card-back{display:grid!important;break-before:auto!important;page-break-before:auto!important}.card-print-sheet img{print-color-adjust:exact;-webkit-print-color-adjust:exact}@media print{html,body{width:210mm!important;min-width:210mm!important}.card-print-sheet{height:297mm!important;break-after:page!important;page-break-after:always!important}.card-print-sheet:last-child{break-after:auto!important;page-break-after:auto!important}}.card-print-sheet .card-v2-qr{width:22cqw!important;height:22cqw!important;min-width:22cqw!important;min-height:22cqw!important;padding:.45cqw!important;background:#fff!important;overflow:hidden!important;display:grid!important;place-items:center!important}.card-print-sheet .card-v2-verification{overflow:hidden!important;align-content:end!important;justify-items:center!important}.card-print-sheet .card-v2-qr img{display:block!important;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;object-fit:contain!important;background:#fff!important;filter:none!important;print-color-adjust:exact!important;-webkit-print-color-adjust:exact!important}</style></head><body>${sheets.join("")}<script src="/assets/card-print.js"></script></body></html>`);
       printWindow.document.close();
@@ -780,6 +805,8 @@
     byId("breadcrumb").textContent = "Campus / Vue d’ensemble";
     byId("toast").classList.remove("show");
     clearTimeout(toastTimer);
+    toastQueue = [];
+    toastPersistent = false;
     return adminAuthGeneration;
   }
   function showAdminGate(message = "", canRetrySession = false) {

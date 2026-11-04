@@ -29,5 +29,5 @@
       script.onerror = () => showError("Le module de l’espace n’a pas pu se charger. Rechargez la page.");
       document.body.append(script);
     })
-    .catch(() => showError("Le service est momentanément indisponible. Vérifiez votre connexion puis rechargez la page."));
+    .catch(() => showError("Le portail ne parvient pas à joindre le service de connexion. Vérifiez votre connexion puis rechargez la page. Si le problème persiste, réessayez plus tard."));
 })();
