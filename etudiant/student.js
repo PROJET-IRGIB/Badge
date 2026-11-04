@@ -939,6 +939,12 @@
       if (error.name === "AccountBannedError") { showBlockedAccount(error.message); return; }
       if (error.name === "CardSuspendedError") { showCardSuspended(error.message); return; }
       if (error.name === "AccountPendingError" || error.name === "AccountRejectedError") { await showPendingAccount(error.message, error.name === "AccountRejectedError"); return; }
+      const authCode = String(error?.code || "").toLowerCase();
+      const authMessage = String(error?.message || "").toLowerCase();
+      if (error?.status === 401 || ["pgrst301", "invalid_jwt", "invalid_grant", "refresh_token_not_found", "session_not_found"].includes(authCode) || /invalid jwt|jwt expired|refresh token.*(invalid|expired|not found)|session.*(expired|missing|not found)/.test(authMessage)) {
+        await leaveExpiredStudentSession();
+        return;
+      }
       setScreen("session-error-screen");
       byId("session-error-message").textContent = friendlyError(error, "Votre session est conservée, mais l’espace n’a pas pu charger les données. Vérifiez la connexion et réessayez.");
       return;
@@ -1005,6 +1011,24 @@
     else selectStudentView("card");
   }
 
+  async function leaveExpiredStudentSession() {
+    try { await db.auth.signOut({ scope: "local" }); } catch { /* L’écran de connexion reste accessible même si le serveur est injoignable. */ }
+    hideRepresentativeDailyQr();
+    if (studentChannel) void db.removeChannel(studentChannel).catch(() => {});
+    studentChannel = null;
+    currentUser = null;
+    profile = null;
+    application = null;
+    attendanceRows = [];
+    renderedCardKey = "";
+    photoSignedUrl = "";
+    photoSignedPath = "";
+    photoSignedUntil = 0;
+    setScreen("auth-screen");
+    showAuthPage("login");
+    byId("login-message").textContent = "Votre session a expiré. Connectez-vous à nouveau.";
+  }
+
   byId("show-login").addEventListener("click", () => showAuthPage("login"));
   byId("show-signup").addEventListener("click", () => showAuthPage("signup"));
   document.querySelectorAll("[data-open-signup]").forEach(button => button.addEventListener("click", () => showAuthPage("signup")));
@@ -1013,6 +1037,7 @@
     event.preventDefault();
     const email = byId("login-email").value.trim().toLowerCase();
     const password = byId("login-password").value;
+    byId("login-message").textContent = "";
     const button = event.currentTarget.querySelector('[type="submit"]'); button.disabled = true;
     try {
       const { data, error } = await db.auth.signInWithPassword({ email, password });
@@ -1022,7 +1047,21 @@
       await activatePortal();
     } catch (error) {
       if (/bann|ban|suspend/i.test(error?.message || "")) showBlockedAccount("Votre compte a été banni par l’administration de votre établissement. Contactez l’administration de votre site.");
-      else byId("login-message").textContent = "Connexion impossible. Vérifiez vos identifiants et confirmez votre e-mail.";
+      else {
+        const code = String(error?.code || "").toLowerCase();
+        const message = String(error?.message || "").toLowerCase();
+        if (code === "invalid_credentials" || /invalid login credentials|invalid credentials/.test(message)) {
+          try { await db.auth.signOut({ scope: "local" }); } catch { /* La connexion refusée reste affichée même hors réseau. */ }
+        }
+        currentUser = null;
+        setScreen("auth-screen");
+        showAuthPage("login");
+        byId("login-message").textContent = code === "email_not_confirmed" || /email not confirmed/.test(message)
+          ? "Confirmez votre adresse e-mail avant de vous connecter."
+          : code === "invalid_credentials" || /invalid login credentials|invalid credentials/.test(message)
+            ? "Adresse e-mail ou mot de passe incorrect."
+            : "Connexion impossible. Vérifiez vos identifiants et votre connexion, puis réessayez.";
+      }
     }
     finally { button.disabled = false; }
   });
@@ -1244,6 +1283,7 @@
   byId("back-to-signup").textContent = "Retour à l’inscription";
   byId("back-to-signup").addEventListener("click", () => { setScreen("auth-screen"); showAuthPage("signup"); });
   byId("retry-session").addEventListener("click", () => { setScreen("loading-screen"); void activatePortal(); });
+  byId("session-return-login").addEventListener("click", () => void leaveExpiredStudentSession());
   byId("password-open").addEventListener("click", () => {
     resetPasswordFlow(false);
     byId("current-password").focus();
