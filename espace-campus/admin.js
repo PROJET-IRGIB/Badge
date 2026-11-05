@@ -228,12 +228,11 @@
     const accountItems = newAccounts.slice(0, 5).map(person => `<button class="quick-item" data-go="accounts" type="button" style="width:100%;text-align:left;background:#fff"><span class="q-icon">${esc(`${person.firstName?.[0] || ""}${person.lastName?.[0] || ""}`.toUpperCase() || "C")}</span><span><strong>${esc(fullName(person))}</strong><span>Adresse vérifiée · à valider · ${esc(siteName(person.site))}</span></span></button>`).join("");
     const badgeItems = pending.slice(0, 3).map(item => `<button class="quick-item" data-review="${esc(item.id)}" type="button" style="width:100%;text-align:left;background:#fff"><span class="q-icon">${photoCell(item)}</span><span><strong>${esc(fullName(item))}</strong><span>Demande de badge · ${esc(item.temporaryMatricule)} · ${esc(siteName(item.site))}</span></span></button>`).join("");
     byId("pending-summary").innerHTML = `${accountItems}${badgeItems}` || `<div class="muted small">Aucun nouveau compte ni demande en attente.</div>`;
-    byId("recent-rows").innerHTML = requestTableRows(list.slice(0, 5), true);
+    byId("recent-rows").innerHTML = requestTableRows(pending.slice(0, 5), true);
   }
   function renderRequests() {
     const query = (byId("request-search").value || "").trim().toLowerCase();
-    const status = byId("request-filter").value;
-    const list = applications().filter(item => (status === "all" || item.status === status) && [fullName(item), item.email, item.temporaryMatricule, item.finalMatricule, programName(item.program), item.level, siteName(item.site)].join(" ").toLowerCase().includes(query)).sort((a, b) => (b.submittedAt || "").localeCompare(a.submittedAt || ""));
+    const list = applications().filter(item => item.status === "pending" && [fullName(item), item.email, item.temporaryMatricule, item.finalMatricule, programName(item.program), item.level, siteName(item.site)].join(" ").toLowerCase().includes(query)).sort((a, b) => (b.submittedAt || "").localeCompare(a.submittedAt || ""));
     byId("request-count").textContent = `${list.length} demande${list.length === 1 ? "" : "s"}`;
     byId("request-rows").innerHTML = requestTableRows(list);
   }
@@ -873,7 +872,6 @@
     document.querySelectorAll("[data-close-review]").forEach(button => button.addEventListener("click", closeReview));
     byId("review-modal").addEventListener("click", event => { if (event.target === byId("review-modal")) closeReview(); });
     byId("request-search").addEventListener("input", renderRequests);
-    byId("request-filter").addEventListener("change", renderRequests);
     byId("account-search").addEventListener("input", renderStudentAccounts);
     byId("account-filter").addEventListener("change", renderStudentAccounts);
     byId("student-search").addEventListener("input", renderStudents);
