@@ -27,19 +27,29 @@ async function listAllFiles(client: any, path: string): Promise<string[]> {
   return paths;
 }
 
-async function recordAccountAction(client: any, site: string, actorId: string, studentId: string, action: string) {
-  const { error } = await client.from("admin_action_log").insert({
-    site,
-    actor_id: actorId,
-    subject_id: studentId,
-    action,
-    details: { source: "student-account-management" },
-  });
-  if (error) {
+async function recordAccountAction(client: any, site: string, actorId: string, studentId: string, action: string, details: Record<string, unknown>) {
+  try {
+    const { error } = await client.from("admin_action_log").insert({
+      site,
+      actor_id: actorId,
+      subject_id: studentId,
+      action,
+      details: { source: "student-account-management", ...details },
+    });
+    if (error) {
+      console.error("Account action audit log could not be written");
+      return false;
+    }
+    return true;
+  } catch {
     console.error("Account action audit log could not be written");
     return false;
   }
-  return true;
+}
+
+async function actionFailure(client: any, site: string, actorId: string, studentId: string, action: string, step: string, message: string, status = 500, details: Record<string, unknown> = {}) {
+  const auditLogged = await recordAccountAction(client, site, actorId, studentId, action, { outcome: "failed", step, ...details });
+  return reply(status, { error: message, auditLogged, auditWarning: !auditLogged });
 }
 
 Deno.serve(async req => {
@@ -84,51 +94,58 @@ Deno.serve(async req => {
   const { data: allowed, error: accessError } = await userClient.rpc("is_admin_for_site", { p_site: profile.site });
   if (accessError || !allowed) return reply(403, { error: "Votre compte administrateur n’est pas autorisé sur le site de cet étudiant." });
 
+  try {
   if (body.action === "ban") {
+    const action = "student_account_banned";
     const bannedAt = new Date().toISOString();
     const reason = "Banni par l’administration de son établissement.";
     const { error: updateError } = await serviceClient.from("student_profiles").update({
       banned_at: bannedAt, banned_by: authData.user.id, ban_reason: reason,
     }).eq("user_id", body.studentId);
-    if (updateError) return reply(500, { error: "Le statut de bannissement n’a pas pu être enregistré." });
+    if (updateError) return await actionFailure(serviceClient, profile.site, authData.user.id, body.studentId, action, "profile_ban", "Le statut de bannissement n’a pas pu être enregistré.");
 
     const { error: banError } = await serviceClient.auth.admin.updateUserById(body.studentId, { ban_duration: "876000h" });
     if (banError) {
-      await serviceClient.from("student_profiles").update({ banned_at: null, banned_by: null, ban_reason: null }).eq("user_id", body.studentId);
-      return reply(500, { error: "Le statut est enregistré mais la fermeture de l’accès Supabase a échoué. Réessayez." });
+      const { error: rollbackError } = await serviceClient.from("student_profiles").update({ banned_at: null, banned_by: null, ban_reason: null }).eq("user_id", body.studentId);
+      return await actionFailure(serviceClient, profile.site, authData.user.id, body.studentId, action, "auth_ban", "Le statut est enregistré mais la fermeture de l’accès Supabase a échoué. Réessayez.", 500, { profileRollback: rollbackError ? "failed" : "completed" });
     }
-    const auditLogged = await recordAccountAction(serviceClient, profile.site, authData.user.id, body.studentId, "student_account_banned");
     const { error: representativeError } = await serviceClient.from("class_representatives").delete().eq("user_id", body.studentId);
-    if (representativeError) return reply(500, { error: "Le compte est banni, mais le rôle de responsable n’a pas pu être retiré. Réessayez." });
-    await serviceClient.from("push_subscriptions").delete().eq("user_id", body.studentId);
+    if (representativeError) return await actionFailure(serviceClient, profile.site, authData.user.id, body.studentId, action, "remove_representative", "Le compte est banni, mais le rôle de responsable n’a pas pu être retiré. Réessayez.", 500, { accountBan: "completed" });
+    const { error: pushError } = await serviceClient.from("push_subscriptions").delete().eq("user_id", body.studentId);
+    const auditLogged = await recordAccountAction(serviceClient, profile.site, authData.user.id, body.studentId, action, {
+      outcome: pushError ? "partial" : "completed",
+      ...(pushError ? { step: "remove_push_subscriptions", accountBan: "completed" } : {}),
+    });
     return reply(200, { ok: true, action: "ban", auditLogged, auditWarning: !auditLogged });
   }
 
   if (body.action === "unban") {
-    if (!profile.banned_at) return reply(409, { error: "Ce compte n’est pas actuellement banni." });
+    const action = "student_account_unbanned";
+    if (!profile.banned_at) return await actionFailure(serviceClient, profile.site, authData.user.id, body.studentId, action, "validate_status", "Ce compte n’est pas actuellement banni.", 409);
     const { error: unbanError } = await serviceClient.auth.admin.updateUserById(body.studentId, { ban_duration: "none" });
-    if (unbanError) return reply(500, { error: "Le bannissement Supabase n’a pas pu être levé." });
+    if (unbanError) return await actionFailure(serviceClient, profile.site, authData.user.id, body.studentId, action, "auth_unban", "Le bannissement Supabase n’a pas pu être levé.");
     const { error: profileError } = await serviceClient.from("student_profiles").update({
       banned_at: null, banned_by: null, ban_reason: null,
     }).eq("user_id", body.studentId);
     if (profileError) {
-      await serviceClient.auth.admin.updateUserById(body.studentId, { ban_duration: "876000h" });
-      return reply(500, { error: "Le bannissement Auth a été levé, mais le statut du compte n’a pas pu être actualisé. Réessayez." });
+      const { error: rollbackError } = await serviceClient.auth.admin.updateUserById(body.studentId, { ban_duration: "876000h" });
+      return await actionFailure(serviceClient, profile.site, authData.user.id, body.studentId, action, "profile_unban", "Le bannissement Auth a été levé, mais le statut du compte n’a pas pu être actualisé. Réessayez.", 500, { authRollback: rollbackError ? "failed" : "completed" });
     }
-    const auditLogged = await recordAccountAction(serviceClient, profile.site, authData.user.id, body.studentId, "student_account_unbanned");
+    const auditLogged = await recordAccountAction(serviceClient, profile.site, authData.user.id, body.studentId, action, { outcome: "completed" });
     return reply(200, { ok: true, action: "unban", auditLogged, auditWarning: !auditLogged });
   }
 
   // Revoke sign-in first, then remove personal records and owned photos. If a later
   // cleanup step fails, the account remains blocked and an administrator can retry.
+  const action = "student_account_deleted";
   const { error: banError } = await serviceClient.auth.admin.updateUserById(body.studentId, { ban_duration: "876000h" });
-  if (banError) return reply(500, { error: "La désactivation préalable du compte a échoué." });
-  await serviceClient.from("student_profiles").update({ banned_at: new Date().toISOString(), banned_by: authData.user.id, ban_reason: "Compte en cours de suppression." }).eq("user_id", body.studentId);
+  if (banError) return await actionFailure(serviceClient, profile.site, authData.user.id, body.studentId, action, "auth_ban", "La désactivation préalable du compte a échoué.");
+  const { error: blockError } = await serviceClient.from("student_profiles").update({ banned_at: new Date().toISOString(), banned_by: authData.user.id, ban_reason: "Compte en cours de suppression." }).eq("user_id", body.studentId);
   try {
     const files = await listAllFiles(serviceClient, body.studentId);
     if (files.length) {
       const { error } = await serviceClient.storage.from("student-photos").remove(files);
-      if (error) return reply(500, { error: "Le compte est bloqué, mais ses photos n’ont pas pu être supprimées." });
+      if (error) return await actionFailure(serviceClient, profile.site, authData.user.id, body.studentId, action, "remove_photos", "Le compte est bloqué, mais ses photos n’ont pas pu être supprimées.", 500, { accountBlocked: blockError ? "partial" : "completed" });
     }
     const removals = [
       await serviceClient.from("attendance_records").delete().eq("student_id", body.studentId),
@@ -136,13 +153,22 @@ Deno.serve(async req => {
       await serviceClient.from("class_representatives").delete().eq("user_id", body.studentId),
       await serviceClient.from("push_subscriptions").delete().eq("user_id", body.studentId),
     ];
-    if (removals.some(result => result.error)) return reply(500, { error: "Le compte est bloqué, mais le nettoyage de ses données est incomplet. Réessayez." });
+    if (removals.some(result => result.error)) return await actionFailure(serviceClient, profile.site, authData.user.id, body.studentId, action, "remove_records", "Le compte est bloqué, mais le nettoyage de ses données est incomplet. Réessayez.", 500, { accountBlocked: blockError ? "partial" : "completed" });
     const { error: deleteError } = await serviceClient.auth.admin.deleteUser(body.studentId);
-    if (deleteError) return reply(500, { error: "Le compte est bloqué, mais Supabase n’a pas pu supprimer l’utilisateur. Réessayez." });
-    const auditLogged = await recordAccountAction(serviceClient, profile.site, authData.user.id, body.studentId, "student_account_deleted");
+    if (deleteError) return await actionFailure(serviceClient, profile.site, authData.user.id, body.studentId, action, "delete_auth_user", "Le compte est bloqué, mais Supabase n’a pas pu supprimer l’utilisateur. Réessayez.", 500, { accountBlocked: blockError ? "partial" : "completed" });
+    const auditLogged = await recordAccountAction(serviceClient, profile.site, authData.user.id, body.studentId, action, { outcome: blockError ? "partial" : "completed", ...(blockError ? { step: "mark_profile_banned" } : {}) });
     return reply(200, { ok: true, action: "delete", auditLogged, auditWarning: !auditLogged });
   } catch (error) {
     console.error("Account cleanup failed");
-    return reply(500, { error: "Le compte est bloqué, mais le nettoyage n’a pas pu aboutir. Réessayez." });
+    return await actionFailure(serviceClient, profile.site, authData.user.id, body.studentId, action, "cleanup_exception", "Le compte est bloqué, mais le nettoyage n’a pas pu aboutir. Réessayez.", 500, { accountBlocked: blockError ? "partial" : "completed" });
+  }
+  } catch {
+    const action = body.action === "ban" ? "student_account_banned" : body.action === "unban" ? "student_account_unbanned" : "student_account_deleted";
+    const message = body.action === "ban"
+      ? "Le statut de bannissement n’a pas pu être enregistré."
+      : body.action === "unban"
+      ? "Le bannissement Supabase n’a pas pu être levé."
+      : "Le compte est bloqué, mais le nettoyage n’a pas pu aboutir. Réessayez.";
+    return await actionFailure(serviceClient, profile.site, authData.user.id, body.studentId, action, "unexpected_exception", message, 500, { outcome: "unknown_or_partial" });
   }
 });

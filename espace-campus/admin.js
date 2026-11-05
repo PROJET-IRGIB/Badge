@@ -2,6 +2,38 @@
   const D = window.IRGIB_DATA;
   const byId = id => document.getElementById(id);
   const esc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+  const ADMIN_LOGIN_LOCK_KEY = "irgib-admin-login-attempts-v1";
+  const ADMIN_LOGIN_MAX_FAILURES = 5;
+  const ADMIN_LOGIN_LOCK_MS = 15 * 60 * 1000;
+  let fallbackLoginFailures = 0;
+  let fallbackLoginLockedUntil = 0;
+  function adminLoginRateLimit() {
+    try {
+      const value = JSON.parse(localStorage.getItem(ADMIN_LOGIN_LOCK_KEY) || "null");
+      return {
+        failures: Math.max(fallbackLoginFailures, Number.isInteger(value?.failures) ? value.failures : 0),
+        lockedUntil: Math.max(fallbackLoginLockedUntil, Number.isFinite(value?.lockedUntil) ? value.lockedUntil : 0),
+      };
+    } catch { return { failures: fallbackLoginFailures, lockedUntil: fallbackLoginLockedUntil }; }
+  }
+  function recordAdminLoginFailure() {
+    const state = adminLoginRateLimit();
+    const failures = Math.min(ADMIN_LOGIN_MAX_FAILURES, Math.max(state.failures, fallbackLoginFailures) + 1);
+    const lockedUntil = failures >= ADMIN_LOGIN_MAX_FAILURES ? Date.now() + ADMIN_LOGIN_LOCK_MS : 0;
+    fallbackLoginFailures = failures;
+    fallbackLoginLockedUntil = lockedUntil;
+    try { localStorage.setItem(ADMIN_LOGIN_LOCK_KEY, JSON.stringify({ failures, lockedUntil })); } catch { /* The in-memory limiter remains active for this page. */ }
+    return { failures, lockedUntil };
+  }
+  function clearAdminLoginFailures() {
+    fallbackLoginFailures = 0;
+    fallbackLoginLockedUntil = 0;
+    try { localStorage.removeItem(ADMIN_LOGIN_LOCK_KEY); } catch { /* The in-memory limiter is also cleared. */ }
+  }
+  function adminLoginLockMessage(lockedUntil) {
+    const minutes = Math.max(1, Math.ceil((lockedUntil - Date.now()) / 60000));
+    return `Trop de tentatives de connexion. Réessayez dans ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+  }
   const fullName = item => `${item.firstName || ""} ${item.lastName || ""}`.trim();
   const friendlyError = (error, fallback) => {
     const message = String(error?.message || "").toLowerCase();
@@ -103,7 +135,7 @@
       D.applySiteContacts([]);
     }
   }
-  const statusText = status => ({ pending: "En attente", approved: "Approuvée", rejected: "Rejetée" }[status] || status);
+  const statusText = status => esc(({ pending: "En attente", approved: "Approuvée", rejected: "Rejetée" }[status] || status));
   const statusHtml = status => `<span class="status ${status === "approved" ? "active" : status === "rejected" ? "rejected" : "pending"}">${statusText(status)}</span>`;
   const photoCell = item => item.photo ? `<img class="table-photo" src="${esc(item.photo)}" alt="Photo de ${esc(fullName(item))}">` : `<span class="table-photo photo-empty">${item.photoPath ? "Photo" : "—"}</span>`;
 
@@ -1013,6 +1045,12 @@
   });
   byId("admin-login-form").addEventListener("submit", async event => {
     event.preventDefault();
+    const rateLimit = adminLoginRateLimit();
+    if (rateLimit.lockedUntil > Date.now()) {
+      byId("admin-auth-message").textContent = adminLoginLockMessage(rateLimit.lockedUntil);
+      return;
+    }
+    if (rateLimit.lockedUntil) clearAdminLoginFailures();
     const email = byId("admin-email").value.trim();
     const password = byId("admin-password").value;
     const button = byId("admin-login-submit");
@@ -1020,22 +1058,22 @@
     if (!adminClient) { byId("admin-auth-message").textContent = "Le service de connexion est momentanément indisponible. Rechargez la page puis réessayez."; return; }
     button.disabled = true;
     byId("admin-auth-message").textContent = "Vérification du compte…";
+    let authenticationRejected = false;
     try {
       const { data, error } = await adminClient.auth.signInWithPassword({ email, password });
-      if (error) throw error;
+      if (error) { authenticationRejected = true; throw error; }
+      clearAdminLoginFailures();
       const authorized = await authorizeAdmin(data.session);
       if (!authorized) byId("admin-password").value = "";
     } catch (error) {
-      const code = String(error?.code || "");
-      const message = String(error?.message || "").toLowerCase();
-      if (code === "email_not_confirmed" || message.includes("email not confirmed")) {
-        byId("admin-auth-message").textContent = "Confirmez votre adresse e-mail avant de vous connecter.";
-      } else if (code === "invalid_credentials" || message.includes("invalid login credentials")) {
-        byId("admin-auth-message").textContent = "Adresse e-mail ou mot de passe incorrect.";
-      } else if (code === "user_not_found" || message.includes("user not found")) {
-        byId("admin-auth-message").textContent = "Aucun compte ne correspond à cette adresse e-mail.";
+      if (authenticationRejected) {
+        byId("admin-password").value = "";
+        const state = recordAdminLoginFailure();
+        byId("admin-auth-message").textContent = state.lockedUntil > Date.now()
+          ? adminLoginLockMessage(state.lockedUntil)
+          : "Connexion refusée. Vérifiez vos identifiants et réessayez.";
       } else {
-        byId("admin-auth-message").textContent = friendlyError(error, "Connexion refusée. Vérifiez vos identifiants ou contactez l’administration principale.");
+        byId("admin-auth-message").textContent = friendlyError(error, "Connexion refusée. Vérifiez vos identifiants et réessayez.");
       }
     } finally { button.disabled = false; }
   });
