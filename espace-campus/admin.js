@@ -995,6 +995,7 @@
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "campus_site_contacts" }, () => { void refreshCurrent(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "campus_announcements" }, () => { if (currentView === "announcements") void loadAnnouncements(); })
       .subscribe();
+    window.IRGIBGuidedTour?.authenticated("admin", session.user.id, adminSite || "global");
     return true;
   }
   async function bootAdminAuth() {
@@ -1062,7 +1063,6 @@
       if (error) { authenticationRejected = true; throw error; }
       clearAdminLoginFailures();
       const authorized = await authorizeAdmin(data.session);
-      if (authorized) window.IRGIBGuidedTour?.authenticated("admin", data.session.user.id, adminSite || "global");
       if (!authorized) byId("admin-password").value = "";
     } catch (error) {
       if (authenticationRejected) {
