@@ -45,7 +45,7 @@
         <div class="field"><label for="signup-program">Filière</label><select id="signup-program" name="program" required></select></div>
         <div class="field"><label for="signup-level">Niveau d’étude</label><select id="signup-level" name="level" required></select></div>
         <div class="field"><label for="signup-site">Ville / site d’apprentissage</label><select id="signup-site" name="site" required></select></div>
-      </div><div class="form-actions"><button class="btn" type="submit">Continuer l’inscription</button><span id="signup-message" class="form-message" aria-live="polite"></span></div></form>
+      </div><fieldset class="signup-consents" aria-label="Accords obligatoires"><legend>Avant de continuer</legend><label class="signup-consent"><input id="signup-privacy-consent" name="privacyConsent" type="checkbox" value="accepted" required><span>J’ai lu et j’accepte la <a href="/confidentialite/" target="_blank" rel="noopener noreferrer">Politique de confidentialité</a>.</span></label><label class="signup-consent"><input id="signup-terms-consent" name="termsConsent" type="checkbox" value="accepted" required><span>J’ai lu et j’accepte les <a href="/conditions-utilisation/" target="_blank" rel="noopener noreferrer">Conditions d’utilisation</a>.</span></label><p>Les deux accords sont nécessaires pour créer un compte étudiant.</p></fieldset><div class="form-actions"><button class="btn" type="submit">Continuer l’inscription</button><span id="signup-message" class="form-message" aria-live="polite"></span></div></form>
       <p class="field-help auth-switch-hint">Vous avez déjà un compte ? <button class="text-button" type="button" data-open-login>Me connecter</button></p>
       </section>
     </section>

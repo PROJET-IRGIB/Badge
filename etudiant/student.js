@@ -1,6 +1,7 @@
 (() => {
   const D = window.IRGIB_DATA;
   const cfg = window.IRGIB_SUPABASE_CONFIG;
+  const LEGAL_DOCUMENT_VERSION = "2026-11-07-v1";
   const projectRef = new URL(cfg.url).hostname.split(".")[0];
   const recoveryCallbackDetected = (() => {
     const query = new URLSearchParams(window.location.search);
@@ -1179,6 +1180,13 @@
     const read = name => String(values.get(name) || "").trim();
     const password = String(values.get("password") || "");
     const draft = { firstName: read("firstName"), lastName: read("lastName"), email: read("email").toLowerCase(), phone: read("phone"), sex: read("sex"), originGroup: read("originGroup"), countryOfOrigin: read("countryOfOrigin"), program: read("program"), level: read("level"), site: read("site") };
+    const privacyAccepted = byId("signup-privacy-consent").checked;
+    const termsAccepted = byId("signup-terms-consent").checked;
+    if (!privacyAccepted || !termsAccepted) {
+      byId("signup-message").textContent = "Lisez et acceptez la politique de confidentialité et les conditions d’utilisation pour continuer.";
+      byId(!privacyAccepted ? "signup-privacy-consent" : "signup-terms-consent").focus();
+      return;
+    }
     const invalidField = !draft.firstName || !draft.lastName || !draft.email || !draft.phone || !draft.sex || !draft.originGroup || !draft.countryOfOrigin || !draft.program || !draft.level || !draft.site || password.length < 8 || !["francophone", "anglophone"].includes(draft.originGroup) || !D.programs.some(item => item.code === draft.program) || !D.levels.includes(draft.level) || !D.sites.some(item => item.id === draft.site);
     if (invalidField) { byId("signup-message").textContent = "Complétez tous les champs obligatoires et vérifiez le mot de passe (8 caractères minimum)."; event.currentTarget.querySelector(":invalid")?.focus(); return; }
     if (!window.confirm(`Confirmer la création du compte étudiant pour ${draft.firstName} ${draft.lastName} (${draft.email}) ?`)) return;
@@ -1189,7 +1197,7 @@
     button.textContent = "Création du compte…";
     byId("signup-message").textContent = "Création du compte et envoi du code en cours. Patientez quelques instants.";
     try {
-      const { data, error } = await db.auth.signUp({ email: draft.email, password, options: { data: { account_type: "student", first_name: draft.firstName, last_name: draft.lastName, phone: draft.phone, sex: draft.sex, origin_group: draft.originGroup, country_of_origin: draft.countryOfOrigin, program: draft.program, level: draft.level, site: draft.site } } });
+      const { data, error } = await db.auth.signUp({ email: draft.email, password, options: { data: { account_type: "student", first_name: draft.firstName, last_name: draft.lastName, phone: draft.phone, sex: draft.sex, origin_group: draft.originGroup, country_of_origin: draft.countryOfOrigin, program: draft.program, level: draft.level, site: draft.site, privacy_policy_version: LEGAL_DOCUMENT_VERSION, terms_of_use_version: LEGAL_DOCUMENT_VERSION } } });
       if (error) throw error;
       if (data.session) { clearPendingSignupEmail(); currentUser = data.user; window.IRGIBGuidedTour?.authenticated("student", currentUser?.id, currentUser?.user_metadata?.site); byId("signup-form").reset(); await activatePortal(); }
       else {
