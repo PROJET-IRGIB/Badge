@@ -1043,7 +1043,7 @@
       const { data, error } = await db.auth.signInWithPassword({ email, password });
       if (error) throw error;
       currentUser = data.user;
-      window.IRGIBGuidedTour?.authenticated("student");
+      window.IRGIBGuidedTour?.authenticated("student", currentUser?.id, currentUser?.user_metadata?.site);
       byId("login-form").reset();
       await activatePortal();
     } catch (error) {
@@ -1191,7 +1191,7 @@
     try {
       const { data, error } = await db.auth.signUp({ email: draft.email, password, options: { data: { account_type: "student", first_name: draft.firstName, last_name: draft.lastName, phone: draft.phone, sex: draft.sex, origin_group: draft.originGroup, country_of_origin: draft.countryOfOrigin, program: draft.program, level: draft.level, site: draft.site } } });
       if (error) throw error;
-      if (data.session) { clearPendingSignupEmail(); currentUser = data.user; window.IRGIBGuidedTour?.authenticated("student"); byId("signup-form").reset(); await activatePortal(); }
+      if (data.session) { clearPendingSignupEmail(); currentUser = data.user; window.IRGIBGuidedTour?.authenticated("student", currentUser?.id, currentUser?.user_metadata?.site); byId("signup-form").reset(); await activatePortal(); }
       else {
         const existingAccountResponse = Array.isArray(data.user?.identities) && data.user.identities.length === 0;
         savePendingSignupEmail(draft.email, existingAccountResponse ? 0 : 60);
@@ -1253,7 +1253,7 @@
       if (error) throw error;
       if (!data.user) throw new Error("La confirmation a réussi mais le compte étudiant n’a pas été retourné. Connectez-vous pour continuer.");
       currentUser = data.user;
-      window.IRGIBGuidedTour?.authenticated("student");
+      window.IRGIBGuidedTour?.authenticated("student", currentUser?.id, currentUser?.user_metadata?.site);
       if ("Notification" in window && Notification.permission === "default") {
         try { void Notification.requestPermission().catch(() => {}); } catch { /* L’accès au compte ne dépend pas des notifications. */ }
       }

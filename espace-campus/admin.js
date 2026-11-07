@@ -1062,7 +1062,7 @@
       if (error) { authenticationRejected = true; throw error; }
       clearAdminLoginFailures();
       const authorized = await authorizeAdmin(data.session);
-      if (authorized) window.IRGIBGuidedTour?.authenticated("admin");
+      if (authorized) window.IRGIBGuidedTour?.authenticated("admin", data.session.user.id, adminSite || "global");
       if (!authorized) byId("admin-password").value = "";
     } catch (error) {
       if (authenticationRejected) {

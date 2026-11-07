@@ -1,6 +1,7 @@
 (() => {
-  const KEYS = { student: "irgib-tour-student-v2", admin: "irgib-tour-admin-v2" };
-  const PENDING_KEYS = { student: "irgib-tour-student-pending-v2", admin: "irgib-tour-admin-pending-v2" };
+  const KEYS = { student: "irgib-tour-student-v3", admin: "irgib-tour-admin-v3" };
+  const pendingScope = { student: null, admin: null };
+  const activeStorageKey = { student: null, admin: null };
   const tours = {
     student: [
       { title: "Bienvenue dans votre espace", text: "Ce guide vous présente les outils essentiels. Utilisez Précédent et Suivant pour avancer, ou Quitter pour le fermer. Vous pourrez le relancer avec le bouton Guide.", target: ".topbar .brand" },
@@ -104,38 +105,40 @@
 
   function finish() {
     if (!current) return;
-    try { localStorage.setItem(KEYS[current.kind], "done"); } catch { /* Tour remains dismissible in this session. */ }
+    try { if (current.storageKey) localStorage.setItem(current.storageKey, "done"); } catch { /* Tour remains dismissible in this session. */ }
     if (overlay) overlay.hidden = true;
     current = null;
   }
 
-  function start(kind, force = false) {
+  function start(kind, force = false, storageKey = activeStorageKey[kind]) {
     if (!tours[kind]) return;
     if (!force) {
-      try { if (localStorage.getItem(KEYS[kind]) === "done") return; } catch { /* Continue without persistent storage. */ }
+      try { if (storageKey && localStorage.getItem(storageKey) === "done") return; } catch { /* Continue without persistent storage. */ }
     }
-    current = { kind, steps: tours[kind], index: 0, direction: 1 };
+    current = { kind, steps: tours[kind], index: 0, direction: 1, storageKey };
     showStep(0);
   }
 
-  function authenticated(kind) {
+  function authenticated(kind, userId, site) {
     if (!tours[kind]) return;
+    const scope = `${String(site || "global").trim().toLowerCase()}|${String(userId || "unknown").trim().toLowerCase()}`;
+    const storageKey = `${KEYS[kind]}:${encodeURIComponent(scope)}`;
+    activeStorageKey[kind] = storageKey;
     try {
-      if (localStorage.getItem(KEYS[kind]) === "done") return;
-      sessionStorage.setItem(PENDING_KEYS[kind], "1");
+      if (localStorage.getItem(storageKey) === "done") return;
     } catch { /* Une indisponibilité du stockage ne doit pas bloquer la connexion. */ }
+    pendingScope[kind] = storageKey;
     launchIfPending(kind);
   }
 
   function launchIfPending(kind) {
     const root = kind === "student" ? "#portal-screen" : "#admin-app";
     if (!visible($(root))) return false;
-    let pending = false;
-    try {
-      pending = sessionStorage.getItem(PENDING_KEYS[kind]) === "1";
-      if (pending) sessionStorage.removeItem(PENDING_KEYS[kind]);
-    } catch { /* La visite peut toujours être lancée depuis son bouton. */ }
-    if (pending) start(kind);
+    const storageKey = pendingScope[kind];
+    if (storageKey) {
+      pendingScope[kind] = null;
+      start(kind, false, storageKey);
+    }
     return true;
   }
 
@@ -148,7 +151,7 @@
     button.className = "btn secondary sm guided-tour-launch";
     button.textContent = "Guide de visite";
     button.setAttribute("aria-label", "Lancer ou relancer le guide de visite");
-    button.addEventListener("click", () => start(kind, true));
+    button.addEventListener("click", () => start(kind, true, activeStorageKey[kind]));
     const host = kind === "student" ? $(".top-actions") : $(".admin-top .profile");
     host?.prepend(button);
   }
