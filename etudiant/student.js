@@ -148,6 +148,7 @@
   let representativeRefreshTimer = 0;
   let representativeRefreshInFlight = false;
   let representativeAssigned = false;
+  let representativeSelfCheckinInFlight = false;
   let representativeLastScanTime = 0;
   let representativeLastQr = "";
   let representativeBadgeVerified = false;
@@ -467,6 +468,14 @@
     const date = D.todayKey();
     return attendanceRows.filter(item => item.day === date);
   }
+  function updateRepresentativeSelfCheckinButton(rows = todayAttendance()) {
+    const button = byId("rep-mark-own-attendance");
+    if (!button) return;
+    const person = getApplication() || profile;
+    const alreadyPresent = rows.some(item => item.status === "present" && item.site === person?.site && item.program === person?.program && item.level === person?.level);
+    button.disabled = representativeSelfCheckinInFlight || !representativeAssigned || !person || alreadyPresent;
+    button.textContent = alreadyPresent ? "Présence déjà marquée" : "Marquer ma présence";
+  }
   function renderAttendance() {
     const app = getApplication();
     byId("today-label").textContent = D.todayKey();
@@ -474,6 +483,7 @@
     byId("my-attendance-rows").innerHTML = rows.length ? rows.map(item => `<tr><td>${item.createdAt ? new Date(item.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—"}</td><td>${esc(item.courseTitle)}</td><td>${esc(D.getProgram(item.program).shortName)} · ${esc(item.level)}</td><td>${esc(D.getSite(item.site).city)}</td><td>${item.status === "present" ? (item.markedBy ? "Responsable de classe" : "Moi") : "—"}</td><td><span class="status ${item.status === "present" ? "active" : "absent"}">${item.status === "present" ? "Présent" : "Absent"}</span></td></tr>`).join("") : `<tr><td colspan="6" class="table-empty">Aucune séance créée pour votre groupe aujourd’hui.</td></tr>`;
     const person = app || profile;
     const alreadyPresent = rows.some(item => item.status === "present" && item.site === person?.site && item.program === person?.program && item.level === person?.level);
+    updateRepresentativeSelfCheckinButton(rows);
     if (scannedSession && scannedSessionInfo) showAttendancePreview(scannedSession, scannedSessionInfo, app);
     byId("start-scan").disabled = alreadyPresent;
     if (alreadyPresent) {
@@ -596,6 +606,7 @@
       }
       representativeAssigned = true;
       panel.hidden = false;
+      updateRepresentativeSelfCheckinButton();
       const { data: hasPin, error: pinError } = await db.rpc("representative_daily_qr_pin_status");
       if (!pinError) representativeHasPin = Boolean(hasPin);
       byId("rep-pin-label").textContent = representativeHasPin ? "Code secret à 4 chiffres" : "Créer votre code secret à 4 chiffres";
@@ -1383,6 +1394,36 @@
     byId("rep-attendance-message").dataset.state = "";
     await startRepresentativeCamera();
     event.currentTarget.disabled = !selectedRepresentativeStudent;
+  });
+  byId("rep-mark-own-attendance").addEventListener("click", async event => {
+    const button = event.currentTarget;
+    if (button.disabled || !representativeAssigned || representativeSelfCheckinInFlight) return;
+    const message = byId("rep-own-attendance-message");
+    if (!(await window.IRGIBDialog.confirm({ title: "Marquer ma présence", message: "Confirmer votre présence à la séance du jour de votre groupe ? Vous n’avez pas besoin d’un second appareil pour cette action.", confirmText: "Marquer ma présence" }))) return;
+    representativeSelfCheckinInFlight = true;
+    button.disabled = true;
+    message.dataset.state = "";
+    message.textContent = "Vérification de votre groupe et enregistrement…";
+    try {
+      const { error } = await db.rpc("representative_mark_own_attendance");
+      if (error) throw error;
+      message.dataset.state = "success";
+      message.textContent = "Votre présence est enregistrée pour la séance du jour.";
+      window.IRGIBDialog.notify("Votre présence est enregistrée.");
+      try {
+        await loadStudentData();
+        renderAttendance();
+        await loadRepresentativeGroupmates();
+      } catch {
+        message.textContent = "Votre présence est enregistrée. La liste sera actualisée au prochain chargement.";
+      }
+    } catch (error) {
+      message.dataset.state = "error";
+      message.textContent = friendlyError(error, "La présence n’a pas pu être enregistrée. Vérifiez que la séance de votre groupe est active, puis réessayez.");
+    } finally {
+      representativeSelfCheckinInFlight = false;
+      updateRepresentativeSelfCheckinButton();
+    }
   });
   byId("rep-confirm-attendance").addEventListener("click", () => void markSelectedClassmateAttendance());
   byId("rep-rescan-badge").addEventListener("click", () => {
