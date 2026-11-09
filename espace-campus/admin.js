@@ -298,8 +298,8 @@
             const rows = atLevel.filter(item => item.program === programCode && item.site === siteId).sort((a, b) => fullName(a).localeCompare(fullName(b), "fr"));
             const here = rows.filter(item => item.present).length;
             const body = rows.map(item => {
-              const isClosed = item.isDaily && Date.now() >= new Date(item.endsAt).getTime();
-              const correction = isClosed ? `<button class="btn secondary sm" type="button" data-attendance-correct="${esc(item.sessionId)}" data-attendance-student="${esc(item.studentId)}" data-attendance-status="${item.present ? "absent" : "present"}">Marquer ${item.present ? "absent" : "présent"}</button>` : "";
+              const isClosed = Date.now() >= new Date(item.endsAt).getTime();
+              const correction = `<button class="btn secondary sm" type="button" data-attendance-correct="${esc(item.sessionId)}" data-attendance-student="${esc(item.studentId)}" data-attendance-status="${item.present ? "absent" : "present"}"${isClosed ? "" : " disabled title=\"Disponible après la clôture du cours\""}>Modifier la présence</button>`;
               return `<tr><td><strong>${esc(fullName(item))}</strong><span class="sub">${esc(item.email)}</span></td><td>${esc(item.matricule || "—")}</td><td>${item.present && item.createdAt ? new Date(item.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—"}</td><td>${item.present ? esc(item.markedByName || "Étudiant") : "—"}</td><td><span class="status ${item.present ? "active" : "absent"}">${item.present ? "Présent" : "Absent"}</span></td><td>${correction}</td></tr>`;
             }).join("");
             const sessionLabels = [...new Set(rows.map(item => `${item.courseTitle} · ${new Date(item.endsAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`))].join(" / ");

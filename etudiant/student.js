@@ -114,7 +114,6 @@
     ["signup-country-options", "request-country-options"].forEach(id => byId(id).innerHTML = countryOptions);
   };
   initSelects();
-  if (byId("rep-course-day")) byId("rep-course-day").value = D.todayKey();
   refreshOtpResendButton();
 
   let profile = null;
@@ -1478,24 +1477,21 @@
   });
   byId("rep-save-schedule").addEventListener("click", async () => {
     const button = byId("rep-save-schedule");
-    const date = byId("rep-course-day").value || D.todayKey();
     const times = [byId("rep-course-time-1").value, byId("rep-course-time-2").value].filter(Boolean);
-    const message = byId("rep-schedule-message");
-    if (!times.length) { message.textContent = "Saisissez au moins une heure de cours."; return; }
-    button.disabled = true; message.textContent = "Enregistrement des horaires…";
+    if (!times.length) { window.IRGIBDialog.notify("Choisissez l’heure du premier cours."); return; }
+    button.disabled = true;
     try {
-      const { data, error } = await db.rpc("representative_set_daily_course_schedule", { p_day: date, p_times: times });
+      const { data, error } = await db.rpc("representative_set_today_course_schedule", { p_times: times });
       if (error) throw error;
-      representativeSessions = (data || []).map(row => ({ ...row, session_day: date }));
-      const futureSchedule = date !== D.todayKey();
-      byId("rep-course-session").innerHTML = `<option value="">Choisir un cours</option>${representativeSessions.map(row => `<option value="${esc(row.session_id)}"${futureSchedule ? " disabled" : ""}>${esc(row.course_title)} · clôture ${new Date(row.starts_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Porto-Novo" })}</option>`).join("")}`;
+      representativeSessions = (data || []).map(row => ({ ...row, session_day: D.todayKey() }));
+      byId("rep-course-session").innerHTML = `<option value="">Choisir un cours</option>${representativeSessions.map(row => `<option value="${esc(row.session_id)}">${esc(row.course_title)} · ${new Date(row.starts_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Porto-Novo" })}</option>`).join("")}`;
       selectedRepresentativeSessionId = "";
       selectedRepresentativeStudent = null;
       representativeGroupmates = [];
       renderRepresentativeGroupmates();
-      byId("rep-schedule-message").textContent = futureSchedule ? "Horaires enregistrés. Les QR seront disponibles le jour prévu." : "Horaires enregistrés. Les absences du groupe sont préparées pour chaque cours.";
+      window.IRGIBDialog.notify("Horaires du jour enregistrés.");
     } catch (error) {
-      message.textContent = friendlyError(error, "Les horaires n’ont pas pu être enregistrés. Vérifiez les heures et réessayez.");
+      window.IRGIBDialog.notify(friendlyError(error, "Les horaires n’ont pas pu être enregistrés. Réessayez."));
     } finally { button.disabled = false; }
   });
   byId("rep-course-session").addEventListener("change", async event => {
