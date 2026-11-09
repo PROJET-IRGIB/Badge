@@ -114,6 +114,7 @@
     ["signup-country-options", "request-country-options"].forEach(id => byId(id).innerHTML = countryOptions);
   };
   initSelects();
+  if (byId("rep-course-day")) byId("rep-course-day").value = D.todayKey();
   refreshOtpResendButton();
 
   let profile = null;
@@ -154,6 +155,9 @@
   let representativeBadgeVerified = false;
   let representativeVerifySequence = 0;
   let representativeHasPin = false;
+  let representativeSessions = [];
+  let selectedRepresentativeSessionId = "";
+  let representativeQrExpiryTimers = [];
   let blockedAccountNotice = "";
   let cardSuspensionNotice = "";
   let pendingAccountNotice = "";
@@ -222,9 +226,9 @@
     application = fromApplicationRow(apps?.[0]);
     await attachPhotoUrl(application);
     await loadAuthorityMark();
-    const { data: records, error: attendanceError } = await db.from("attendance_records").select("status,attended_at,session_id,marked_by,attendance_sessions!inner(site,program,level,session_day,course_title)").eq("student_id", currentUser.id).order("attended_at", { ascending: false, nullsFirst: false });
+    const { data: records, error: attendanceError } = await db.from("attendance_records").select("status,attended_at,session_id,marked_by,attendance_sessions!inner(site,program,level,session_day,course_title,course_slot,ends_at)").eq("student_id", currentUser.id).order("attended_at", { ascending: false, nullsFirst: false });
     if (attendanceError) throw attendanceError;
-    attendanceRows = (records || []).map(row => ({ sessionId: row.session_id, markedBy: row.marked_by, createdAt: row.attended_at, sessionCode: row.session_id.slice(0, 8), courseTitle: row.attendance_sessions.course_title || "Séance du jour", status: row.status, site: row.attendance_sessions.site, program: row.attendance_sessions.program, level: row.attendance_sessions.level, day: row.attendance_sessions.session_day }));
+    attendanceRows = (records || []).map(row => ({ sessionId: row.session_id, markedBy: row.marked_by, createdAt: row.attended_at, sessionCode: row.session_id.slice(0, 8), courseTitle: row.attendance_sessions.course_title || "Séance du jour", courseSlot: row.attendance_sessions.course_slot || 1, endsAt: row.attendance_sessions.ends_at, status: row.status, site: row.attendance_sessions.site, program: row.attendance_sessions.program, level: row.attendance_sessions.level, day: row.attendance_sessions.session_day }));
   }
   const showAuthPage = page => {
     const login = page === "login";
@@ -472,9 +476,11 @@
     const button = byId("rep-mark-own-attendance");
     if (!button) return;
     const person = getApplication() || profile;
-    const alreadyPresent = rows.some(item => item.status === "present" && item.site === person?.site && item.program === person?.program && item.level === person?.level);
-    button.disabled = representativeSelfCheckinInFlight || !representativeAssigned || !person || alreadyPresent;
-    button.textContent = alreadyPresent ? "Présence déjà marquée" : "Marquer ma présence";
+    const alreadyPresent = rows.some(item => item.sessionId === selectedRepresentativeSessionId && item.status === "present");
+    const selectedSession = representativeSessions.find(item => item.session_id === selectedRepresentativeSessionId);
+    const closed = selectedSession?.starts_at && Date.now() >= new Date(selectedSession.starts_at).getTime();
+    button.disabled = representativeSelfCheckinInFlight || !representativeAssigned || !person || !selectedRepresentativeSessionId || alreadyPresent || closed;
+    button.textContent = alreadyPresent ? "Présence déjà marquée" : closed ? "Pointage clôturé" : "Marquer ma présence";
   }
   function renderAttendance() {
     const app = getApplication();
@@ -482,14 +488,9 @@
     const rows = todayAttendance();
     byId("my-attendance-rows").innerHTML = rows.length ? rows.map(item => `<tr><td>${item.createdAt ? new Date(item.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—"}</td><td>${esc(item.courseTitle)}</td><td>${esc(D.getProgram(item.program).shortName)} · ${esc(item.level)}</td><td>${esc(D.getSite(item.site).city)}</td><td>${item.status === "present" ? (item.markedBy ? "Responsable de classe" : "Moi") : "—"}</td><td><span class="status ${item.status === "present" ? "active" : "absent"}">${item.status === "present" ? "Présent" : "Absent"}</span></td></tr>`).join("") : `<tr><td colspan="6" class="table-empty">Aucune séance créée pour votre groupe aujourd’hui.</td></tr>`;
     const person = app || profile;
-    const alreadyPresent = rows.some(item => item.status === "present" && item.site === person?.site && item.program === person?.program && item.level === person?.level);
     updateRepresentativeSelfCheckinButton(rows);
     if (scannedSession && scannedSessionInfo) showAttendancePreview(scannedSession, scannedSessionInfo, app);
-    byId("start-scan").disabled = alreadyPresent;
-    if (alreadyPresent) {
-      byId("attendance-message").textContent = "Votre présence du jour est déjà enregistrée. Le QR ne peut être validé qu’une fois.";
-      byId("submit-attendance").disabled = true;
-    }
+    byId("start-scan").disabled = false;
   }
   function renderAnnouncements() {
     const node = byId("news-list");
@@ -614,7 +615,9 @@
       byId("rep-pin-submit").disabled = Boolean(pinError);
       byId("rep-pin-message").textContent = pinError ? "Le code du jour n’est pas disponible pour le moment. Réessayez plus tard." : "";
       if (!representativeGroupmates.length) byId("rep-absent-list").innerHTML = `<p class="muted small">Chargement de la liste des absents…</p>`;
-      const { data, error } = await db.rpc("list_representative_groupmates");
+      const sessionId = selectedRepresentativeSessionId || byId("rep-course-session")?.value;
+      if (!sessionId) { byId("rep-absent-list").innerHTML = `<p class="muted small">Choisissez un cours pour afficher les absents.</p>`; return; }
+      const { data, error } = await db.rpc("list_representative_groupmates", { p_session_id: sessionId });
       if (error) { byId("rep-absent-list").innerHTML = `<p class="form-message">Impossible de charger les absents. Réessayez dans un instant.</p>`; return; }
       representativeGroupmates = data || [];
       if (!representativeGroupmates.some(row => row.student_id === selectedRepresentativeStudent?.student_id)) selectedRepresentativeStudent = null;
@@ -632,6 +635,8 @@
   function hideRepresentativeDailyQr() {
     const result = byId("rep-daily-qr-result");
     if (!result) return;
+    representativeQrExpiryTimers.forEach(timer => window.clearTimeout(timer));
+    representativeQrExpiryTimers = [];
     result.hidden = true;
     byId("rep-daily-qr-image").replaceChildren();
     byId("rep-daily-pin").value = "";
@@ -656,13 +661,38 @@
       const { data, error } = await db.functions.invoke("representative-daily-qr", { body: { pin } });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      if (!data?.token) throw new Error("Le QR du jour est indisponible.");
+      if (!Array.isArray(data?.sessions) || !data.sessions.length) throw new Error("Aucun QR n’est disponible. Configurez d’abord les horaires de cours avant leur heure de début.");
       const host = byId("rep-daily-qr-image");
       host.replaceChildren();
       if (!window.QRCode) throw new Error("Le générateur QR n’est pas chargé. Rechargez puis réessayez.");
-      new QRCode(host, { text: data.token, width: 240, height: 240, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+      representativeSessions = data.sessions;
+      const options = representativeSessions.map(session => `<option value="${esc(session.session_id)}">${esc(session.course_title)} · ${new Date(`${data.sessions[0].session_day}T12:00:00`).toLocaleDateString("fr-FR", { dateStyle: "long", timeZone: "Africa/Porto-Novo" })} · clôture ${new Date(session.starts_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Porto-Novo" })}</option>`).join("");
+      byId("rep-course-session").innerHTML = `<option value="">Choisir un cours</option>${options}`;
+      representativeSessions.forEach(session => {
+        const card = document.createElement("article");
+        card.className = "rep-course-qr-card";
+        card.dataset.sessionId = session.session_id;
+        const heading = document.createElement("strong"); heading.textContent = `${session.course_title} · clôture ${new Date(session.starts_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Porto-Novo" })}`;
+        const image = document.createElement("div"); image.className = "rep-course-qr";
+        const button = document.createElement("button"); button.type = "button"; button.className = "btn secondary sm"; button.textContent = "Gérer ce cours"; button.dataset.repSession = session.session_id;
+        new QRCode(image, { text: session.token, width: 200, height: 200, colorDark: "#102a39", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
+        card.append(heading, image, button); host.append(card);
+        const wait = Math.max(0, new Date(session.starts_at).getTime() - Date.now());
+        representativeQrExpiryTimers.push(window.setTimeout(() => {
+          image.replaceChildren();
+          const closed = document.createElement("span"); closed.className = "small muted"; closed.textContent = "Pointage clôturé pour ce cours."; image.append(closed);
+          button.disabled = true; button.textContent = "Cours clôturé";
+          const option = [...byId("rep-course-session").options].find(item => item.value === session.session_id);
+          if (option) option.disabled = true;
+          if (selectedRepresentativeSessionId === session.session_id) {
+            selectedRepresentativeStudent = null; representativeGroupmates = [];
+            renderRepresentativeGroupmates(); updateRepresentativeSelfCheckinButton();
+            byId("rep-attendance-message").textContent = "Le pointage de ce cours est clôturé. Seule l’administration peut corriger les présences.";
+          }
+        }, wait));
+      });
       byId("rep-daily-qr-title").textContent = `${data.program} · ${data.level} · ${D.getSite(data.site).city}`;
-      byId("rep-daily-qr-date").textContent = `${data.course_title} · ${new Date(`${data.session_day}T12:00:00`).toLocaleDateString("fr-FR", { dateStyle: "long", timeZone: "Africa/Porto-Novo" })} · valable jusqu’à minuit`;
+      byId("rep-daily-qr-date").textContent = "Chaque QR se ferme automatiquement à l’heure de début du cours correspondant.";
       byId("rep-daily-qr-result").hidden = false;
       message.textContent = "QR révélé. Masquez-le en quittant cette page ou après le pointage.";
       byId("rep-daily-pin").value = "";
@@ -675,7 +705,11 @@
   function renderRepresentativeGroupmates() {
     const list = byId("rep-absent-list");
     const button = byId("rep-mark-attendance");
-    button.disabled = !selectedRepresentativeStudent;
+    button.disabled = !selectedRepresentativeStudent || !selectedRepresentativeSessionId;
+    if (!selectedRepresentativeSessionId) {
+      list.innerHTML = `<p class="muted small">Choisissez un cours pour afficher les absents de cet appel.</p>`;
+      return;
+    }
     if (!representativeGroupmates.length) {
       list.innerHTML = `<div class="notice">Aucun étudiant absent à confirmer dans votre groupe pour aujourd’hui.</div>`;
       return;
@@ -706,7 +740,7 @@
     const startedAt = performance.now();
     let error = null;
     try {
-      const result = await db.rpc("verify_classmate_badge", { p_student_id: selectedRepresentativeStudent.student_id, p_scanned_qr: representativeLastQr });
+      const result = await db.rpc("verify_classmate_badge", { p_student_id: selectedRepresentativeStudent.student_id, p_scanned_qr: representativeLastQr, p_session_id: selectedRepresentativeSessionId });
       error = result.error || (result.data?.ok === false ? new Error(result.data.message || "QR non valide") : null);
     } catch (rpcError) { error = rpcError; }
     await new Promise(resolve => window.setTimeout(resolve, Math.max(0, 950 - (performance.now() - startedAt))));
@@ -737,7 +771,7 @@
     button.disabled = true;
     byId("rep-attendance-message").textContent = "Enregistrement de la présence…";
     try {
-      const { error } = await db.rpc("mark_classmate_attendance", { p_student_id: current.student_id, p_scanned_qr: representativeLastQr });
+      const { error } = await db.rpc("mark_classmate_attendance", { p_student_id: current.student_id, p_scanned_qr: representativeLastQr, p_session_id: selectedRepresentativeSessionId });
       if (error) throw error;
       stopRepresentativeCamera();
       selectedRepresentativeStudent = null;
@@ -873,11 +907,6 @@
   }
   async function startCamera() {
     byId("attendance-message").textContent = "";
-    if (todayAttendance().some(item => item.status === "present" && item.site === (application || profile)?.site && item.program === (application || profile)?.program && item.level === (application || profile)?.level)) {
-      byId("attendance-message").textContent = "Votre présence du jour est déjà enregistrée.";
-      renderAttendance();
-      return;
-    }
     if (!navigator.mediaDevices?.getUserMedia) {
       byId("attendance-message").textContent = window.isSecureContext
         ? "Ce navigateur ne permet pas d’ouvrir la caméra. Essayez un navigateur récent et autorisez l’accès à la caméra."
@@ -1384,6 +1413,7 @@
     } catch { /* Signing out must still work when push is unavailable. */ }
     await db.auth.signOut();
     currentUser = null; profile = null; application = null; attendanceRows = [];
+    representativeSessions = []; selectedRepresentativeSessionId = ""; representativeGroupmates = []; selectedRepresentativeStudent = null;
     profile = null;
     setScreen("auth-screen");
     showAuthPage("login");
@@ -1397,18 +1427,19 @@
   });
   byId("rep-mark-own-attendance").addEventListener("click", async event => {
     const button = event.currentTarget;
-    if (button.disabled || !representativeAssigned || representativeSelfCheckinInFlight) return;
+    if (button.disabled || !representativeAssigned || representativeSelfCheckinInFlight || !selectedRepresentativeSessionId) return;
     const message = byId("rep-own-attendance-message");
-    if (!(await window.IRGIBDialog.confirm({ title: "Marquer ma présence", message: "Confirmer votre présence à la séance du jour de votre groupe ? Vous n’avez pas besoin d’un second appareil pour cette action.", confirmText: "Marquer ma présence" }))) return;
+    const session = representativeSessions.find(item => item.session_id === selectedRepresentativeSessionId);
+    if (!(await window.IRGIBDialog.confirm({ title: "Marquer ma présence", message: `Confirmer votre présence pour ${session?.course_title || "ce cours"} ? Vous n’avez pas besoin d’un second appareil pour cette action.`, confirmText: "Marquer ma présence" }))) return;
     representativeSelfCheckinInFlight = true;
     button.disabled = true;
     message.dataset.state = "";
     message.textContent = "Vérification de votre groupe et enregistrement…";
     try {
-      const { error } = await db.rpc("representative_mark_own_attendance");
+      const { error } = await db.rpc("representative_mark_own_attendance", { p_session_id: selectedRepresentativeSessionId });
       if (error) throw error;
       message.dataset.state = "success";
-      message.textContent = "Votre présence est enregistrée pour la séance du jour.";
+      message.textContent = `Votre présence est enregistrée pour ${session?.course_title || "ce cours"}.`;
       window.IRGIBDialog.notify("Votre présence est enregistrée.");
       try {
         await loadStudentData();
@@ -1444,6 +1475,46 @@
   byId("rep-hide-daily-qr").addEventListener("click", () => {
     hideRepresentativeDailyQr();
     byId("rep-pin-message").textContent = "QR masqué. Saisissez votre code secret pour le révéler de nouveau.";
+  });
+  byId("rep-save-schedule").addEventListener("click", async () => {
+    const button = byId("rep-save-schedule");
+    const date = byId("rep-course-day").value || D.todayKey();
+    const times = [byId("rep-course-time-1").value, byId("rep-course-time-2").value].filter(Boolean);
+    const message = byId("rep-schedule-message");
+    if (!times.length) { message.textContent = "Saisissez au moins une heure de cours."; return; }
+    button.disabled = true; message.textContent = "Enregistrement des horaires…";
+    try {
+      const { data, error } = await db.rpc("representative_set_daily_course_schedule", { p_day: date, p_times: times });
+      if (error) throw error;
+      representativeSessions = (data || []).map(row => ({ ...row, session_day: date }));
+      const futureSchedule = date !== D.todayKey();
+      byId("rep-course-session").innerHTML = `<option value="">Choisir un cours</option>${representativeSessions.map(row => `<option value="${esc(row.session_id)}"${futureSchedule ? " disabled" : ""}>${esc(row.course_title)} · clôture ${new Date(row.starts_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Porto-Novo" })}</option>`).join("")}`;
+      selectedRepresentativeSessionId = "";
+      selectedRepresentativeStudent = null;
+      representativeGroupmates = [];
+      renderRepresentativeGroupmates();
+      byId("rep-schedule-message").textContent = futureSchedule ? "Horaires enregistrés. Les QR seront disponibles le jour prévu." : "Horaires enregistrés. Les absences du groupe sont préparées pour chaque cours.";
+    } catch (error) {
+      message.textContent = friendlyError(error, "Les horaires n’ont pas pu être enregistrés. Vérifiez les heures et réessayez.");
+    } finally { button.disabled = false; }
+  });
+  byId("rep-course-session").addEventListener("change", async event => {
+    selectedRepresentativeSessionId = event.currentTarget.value;
+    selectedRepresentativeStudent = null;
+    representativeGroupmates = [];
+    updateRepresentativeSelfCheckinButton();
+    if (selectedRepresentativeSessionId) await loadRepresentativeGroupmates();
+    else { representativeGroupmates = []; renderRepresentativeGroupmates(); }
+  });
+  byId("rep-daily-qr-image").addEventListener("click", async event => {
+    const button = event.target.closest("[data-rep-session]");
+    if (!button) return;
+    selectedRepresentativeSessionId = button.dataset.repSession;
+    byId("rep-course-session").value = selectedRepresentativeSessionId;
+    selectedRepresentativeStudent = null;
+    updateRepresentativeSelfCheckinButton();
+    await loadRepresentativeGroupmates();
+    byId("rep-absent-list").scrollIntoView({ behavior: "smooth", block: "nearest" });
   });
   document.addEventListener("visibilitychange", () => { if (document.hidden) hideRepresentativeDailyQr(); });
   window.addEventListener("pagehide", hideRepresentativeDailyQr);

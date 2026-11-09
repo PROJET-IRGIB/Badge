@@ -108,7 +108,7 @@
     const records = [];
     for (let from = 0; ; from += 500) {
       let query = adminClient.from("attendance_records")
-        .select("status,attended_at,session_id,marked_by,student_profiles!inner(user_id,first_name,last_name,email,program,level,site,banned_at,card_suspended_at),attendance_sessions!inner(site,program,level,session_day,course_title)")
+        .select("status,attended_at,session_id,marked_by,student_profiles!inner(user_id,first_name,last_name,email,program,level,site,banned_at,card_suspended_at),attendance_sessions!inner(site,program,level,session_day,course_title,course_slot,ends_at,is_daily)")
         .eq("attendance_sessions.session_day", D.todayKey());
       if (adminSite) query = query.eq("attendance_sessions.site", adminSite);
       const { data, error } = await query.order("attended_at", { ascending: false, nullsFirst: false }).order("id", { ascending: false }).range(from, from + 499);
@@ -120,7 +120,7 @@
     const byStudent = new Map(applicationsCache.map(item => [item.studentId, item]));
     attendanceCache = (records || []).filter(row => !row.student_profiles.banned_at && !row.student_profiles.card_suspended_at && (!adminSite || row.attendance_sessions.site === adminSite)).map(row => {
       const person = row.student_profiles; const app = byStudent.get(person.user_id); const actor = row.marked_by ? byStudent.get(row.marked_by) : null;
-      return { studentId: person.user_id, markedBy: row.marked_by, markedByName: actor ? fullName(actor) : "Étudiant", createdAt: row.attended_at, day: row.attendance_sessions.session_day, sessionCode: row.session_id.slice(0, 8), courseTitle: row.attendance_sessions.course_title, present: row.status === "present", firstName: person.first_name, lastName: person.last_name, email: person.email, matricule: app?.finalMatricule || app?.temporaryMatricule || "", program: person.program, level: person.level, site: person.site };
+      return { studentId: person.user_id, markedBy: row.marked_by, markedByName: actor ? fullName(actor) : "Étudiant", createdAt: row.attended_at, day: row.attendance_sessions.session_day, sessionId: row.session_id, sessionCode: row.session_id.slice(0, 8), courseSlot: row.attendance_sessions.course_slot || 1, endsAt: row.attendance_sessions.ends_at, isDaily: Boolean(row.attendance_sessions.is_daily), courseTitle: row.attendance_sessions.course_title, present: row.status === "present", firstName: person.first_name, lastName: person.last_name, email: person.email, matricule: app?.finalMatricule || app?.temporaryMatricule || "", program: person.program, level: person.level, site: person.site };
     });
     let contactsQuery = adminClient.from("campus_site_contacts").select("site,contact_name,address,phone,updated_at");
     if (adminSite) contactsQuery = contactsQuery.eq("site", adminSite);
@@ -265,7 +265,13 @@
     const program = byId("attendance-program").value;
     const level = byId("attendance-level").value;
     const status = byId("attendance-status").value;
+    const sessionFilter = byId("attendance-session-filter");
+    const selectedSession = sessionFilter.value;
+    const sessions = [...new Map(attendanceRoster().map(item => [item.sessionId, item])).values()].sort((a, b) => a.courseSlot - b.courseSlot || a.courseTitle.localeCompare(b.courseTitle, "fr"));
+    sessionFilter.innerHTML = `<option value="">Tous les cours</option>${sessions.map(item => `<option value="${esc(item.sessionId)}">${esc(siteName(item.site))} · ${esc(programName(item.program))} ${esc(item.level)} · ${esc(item.courseTitle)} · ${new Date(item.endsAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</option>`).join("")}`;
+    if (selectedSession && sessions.some(item => item.sessionId === selectedSession)) sessionFilter.value = selectedSession;
     const people = attendanceRoster().filter(item => {
+      if (sessionFilter.value && item.sessionId !== sessionFilter.value) return false;
       if (site && item.site !== site) return false;
       if (program && item.program !== program) return false;
       if (level && item.level !== level) return false;
@@ -291,8 +297,13 @@
           sites.forEach(siteId => {
             const rows = atLevel.filter(item => item.program === programCode && item.site === siteId).sort((a, b) => fullName(a).localeCompare(fullName(b), "fr"));
             const here = rows.filter(item => item.present).length;
-            const body = rows.map(item => `<tr><td><strong>${esc(fullName(item))}</strong><span class="sub">${esc(item.email)}</span></td><td>${esc(item.matricule || "—")}</td><td>${item.present && item.createdAt ? new Date(item.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—"}</td><td>${item.present ? esc(item.markedByName || "Étudiant") : "—"}</td><td><span class="status ${item.present ? "active" : "absent"}">${item.present ? "Présent" : "Absent"}</span></td></tr>`).join("");
-            blocks.push(`<section class="roll-section"><header><strong>${esc(programName(programCode))}</strong><span>${esc(siteName(siteId))}</span><span>${here} / ${rows.length}</span></header><div class="table-scroll"><table><thead><tr><th>Étudiant</th><th>Matricule</th><th>Heure</th><th>Saisi par</th><th>Statut</th></tr></thead><tbody>${body}</tbody></table></div></section>`);
+            const body = rows.map(item => {
+              const isClosed = item.isDaily && Date.now() >= new Date(item.endsAt).getTime();
+              const correction = isClosed ? `<button class="btn secondary sm" type="button" data-attendance-correct="${esc(item.sessionId)}" data-attendance-student="${esc(item.studentId)}" data-attendance-status="${item.present ? "absent" : "present"}">Marquer ${item.present ? "absent" : "présent"}</button>` : "";
+              return `<tr><td><strong>${esc(fullName(item))}</strong><span class="sub">${esc(item.email)}</span></td><td>${esc(item.matricule || "—")}</td><td>${item.present && item.createdAt ? new Date(item.createdAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) : "—"}</td><td>${item.present ? esc(item.markedByName || "Étudiant") : "—"}</td><td><span class="status ${item.present ? "active" : "absent"}">${item.present ? "Présent" : "Absent"}</span></td><td>${correction}</td></tr>`;
+            }).join("");
+            const sessionLabels = [...new Set(rows.map(item => `${item.courseTitle} · ${new Date(item.endsAt).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`))].join(" / ");
+            blocks.push(`<section class="roll-section"><header><strong>${esc(programName(programCode))}</strong><span>${esc(siteName(siteId))}</span><span>${esc(sessionLabels)}</span><span>${here} / ${rows.length}</span></header><div class="table-scroll"><table><thead><tr><th>Étudiant</th><th>Matricule</th><th>Heure</th><th>Saisi par</th><th>Statut</th><th>Correction admin</th></tr></thead><tbody>${body}</tbody></table></div></section>`);
           });
         });
       });
@@ -877,7 +888,18 @@
     byId("student-search").addEventListener("input", renderStudents);
     ["student-program-filter", "student-level-filter"].forEach(id => byId(id).addEventListener("change", renderStudents));
     byId("attendance-search").addEventListener("input", renderAttendance);
-    ["attendance-program", "attendance-level", "attendance-status"].forEach(id => byId(id).addEventListener("change", renderAttendance));
+    ["attendance-session-filter", "attendance-program", "attendance-level", "attendance-status"].forEach(id => byId(id).addEventListener("change", renderAttendance));
+    byId("attendance-board").addEventListener("click", async event => {
+      const button = event.target.closest("[data-attendance-correct]");
+      if (!button) return;
+      const nextStatus = button.dataset.attendanceStatus;
+      if (!(await window.IRGIBDialog.confirm({ title: "Corriger la présence", message: `Enregistrer cet étudiant comme ${nextStatus === "present" ? "présent" : "absent"} pour ce cours ?`, confirmText: "Enregistrer", danger: nextStatus === "absent" }))) return;
+      button.disabled = true;
+      const { error } = await adminClient.rpc("admin_set_attendance_status", { p_session_id: button.dataset.attendanceCorrect, p_student_id: button.dataset.attendanceStudent, p_status: nextStatus });
+      if (error) { toast(friendlyError(error, "La présence n’a pas pu être corrigée.")); button.disabled = false; return; }
+      toast("Présence corrigée.");
+      await refreshCurrent();
+    });
     byId("card-search").addEventListener("input", renderCards);
     byId("card-rows").addEventListener("change", event => {
       const input = event.target.closest("[data-card-select]");
